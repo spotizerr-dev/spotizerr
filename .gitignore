@@ -3,4 +3,8 @@
 /venv
 /downloads/
 /creds/
-Test.py
+/Test.py
+/prgs/
+/flask_server.log
+routes/__pycache__/
+routes/utils/__pycache__/
