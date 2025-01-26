@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from routes.utils.search import search  # Renamed import
+from routes.utils.search import search  # Corrected import
 
 search_bp = Blueprint('search', __name__)
 
@@ -8,7 +8,7 @@ def handle_search():
     try:
         # Get query parameters
         query = request.args.get('q', '')
-        search_type = request.args.get('type', 'track')
+        search_type = request.args.get('search_type', '')
         limit = int(request.args.get('limit', 10))
 
         # Validate parameters
@@ -19,10 +19,10 @@ def handle_search():
         if search_type not in valid_types:
             return jsonify({'error': 'Invalid search type'}), 400
 
-        # Perform the search
+        # Perform the search with corrected parameter name
         raw_results = search(
             query=query,
-            search_type=search_type,
+            search_type=search_type,  # Fixed parameter name
             limit=limit
         )
         

@@ -1,0 +1,272 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: #121212;
+    color: #ffffff;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.search-header {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 30px;
+    position: sticky;
+    top: 0;
+    background-color: #121212;
+    padding: 20px 0;
+    z-index: 100;
+}
+
+.search-input {
+    flex: 1;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 25px;
+    background: #2a2a2a;
+    color: white;
+    font-size: 16px;
+}
+
+.search-type {
+    padding: 12px 15px;
+    background: #2a2a2a;
+    border: none;
+    border-radius: 25px;
+    color: white;
+    cursor: pointer;
+}
+
+.search-button {
+    padding: 12px 30px;
+    background-color: #1DB954;
+    border: none;
+    border-radius: 25px;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.search-button:hover {
+    background-color: #1ed760;
+}
+
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.result-card {
+    background: #181818;
+    padding: 15px;
+    border-radius: 8px;
+    transition: background-color 0.3s;
+    cursor: pointer;
+}
+
+.result-card:hover {
+    background-color: #282828;
+}
+
+.album-art {
+    width: 100%;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.track-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.track-artist {
+    color: #b3b3b3;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.track-details {
+    color: #b3b3b3;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.duration {
+    background: #2a2a2a;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.loading {
+    text-align: center;
+    padding: 50px;
+    font-size: 18px;
+    color: #1DB954;
+}
+
+.error {
+    color: #ff5555;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Add to your CSS file */
+.settings-icon {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 1000;
+    transition: transform 0.3s;
+}
+
+.settings-icon:hover {
+    transform: rotate(90deg);
+}
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: -350px;
+    width: 350px;
+    height: 100vh;
+    background: #181818;
+    padding: 20px;
+    transition: left 0.3s;
+    z-index: 1001;
+    overflow-y: auto;
+    color: #ffffff;
+}
+
+.sidebar.active {
+    left: 0;
+}
+
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.service-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.tab-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    background: #2a2a2a;
+    color: #ffffff;
+    cursor: pointer;
+}
+
+.tab-button.active {
+    background: #1DB954;
+}
+
+.credentials-list {
+    margin-bottom: 20px;
+}
+
+.credential-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: #2a2a2a;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.credential-actions button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.edit-btn {
+    background: #1DB954;
+    color: white;
+}
+
+.delete-btn {
+    background: #ff5555;
+    color: white;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+    border: none;
+    background: #2a2a2a;
+    color: white;
+}
+
+.save-btn {
+    background: #1DB954;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    width: 100%;
+}
+
+.deezer-field {
+    display: none;
+}
+
+.service-tabs {
+    margin-bottom: 20px;
+}
+
+.service-tabs button.active {
+    background: #1DB954;
+}

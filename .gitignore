@@ -8,3 +8,5 @@
 /flask_server.log
 routes/__pycache__/
 routes/utils/__pycache__/
+
+test.sh

@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, send_from_directory, render_template
 from flask_cors import CORS
 from routes.search import search_bp
 from routes.credentials import credentials_bp
@@ -6,8 +6,8 @@ from routes.album import album_bp
 from routes.track import track_bp
 from routes.playlist import playlist_bp
 import logging
-from datetime import datetime
 import time
+from pathlib import Path
 
 def create_app():
     app = Flask(__name__)
@@ -33,7 +33,16 @@ def create_app():
     app.register_blueprint(credentials_bp, url_prefix='/api/credentials')
     app.register_blueprint(album_bp, url_prefix='/api/album')
     app.register_blueprint(track_bp, url_prefix='/api/track') 
-    app.register_blueprint(playlist_bp, url_prefix='/api/playlist') 
+    app.register_blueprint(playlist_bp, url_prefix='/api/playlist')
+
+    # Serve frontend
+    @app.route('/')
+    def serve_index():
+        return render_template('index.html')
+
+    @app.route('/static/<path:path>')
+    def serve_static(path):
+        return send_from_directory('static', path)
 
     # Add request logging middleware
     @app.before_request
