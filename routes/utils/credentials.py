@@ -2,23 +2,54 @@ import json
 from pathlib import Path
 import shutil
 
-def get_credentials():
+def get_credential(service, name):
     """
-    Retrieves all existing credential names for Spotify and Deezer.
+    Retrieves existing credential contents by name.
     
+    Args:
+        service (str): 'spotify' or 'deezer'
+        name (str): Custom name of the credential to retrieve
+        
     Returns:
-        dict: A dictionary with 'spotify' and 'deezer' keys containing lists of credential names.
+        dict: Credential data as dictionary
+        
+    Raises:
+        FileNotFoundError: If the credential doesn't exist
+        ValueError: For invalid service name
     """
-    creds = {'spotify': [], 'deezer': []}
-    base_dir = Path('./creds')
+    if service not in ['spotify', 'deezer']:
+        raise ValueError("Service must be 'spotify' or 'deezer'")
     
-    for service in ['spotify', 'deezer']:
-        service_dir = base_dir / service
-        if service_dir.exists() and service_dir.is_dir():
-            # Get all directory names under the service directory
-            creds[service] = [entry.name for entry in service_dir.iterdir() if entry.is_dir()]
+    creds_dir = Path('./creds') / service / name
+    file_path = creds_dir / 'credentials.json'
     
-    return creds
+    if not file_path.exists():
+        raise FileNotFoundError(f"Credential '{name}' not found for {service}")
+    
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+def list_credentials(service):
+    """
+    Lists all available credential names for a service
+    
+    Args:
+        service (str): 'spotify' or 'deezer'
+        
+    Returns:
+        list: Array of credential names
+        
+    Raises:
+        ValueError: For invalid service name
+    """
+    if service not in ['spotify', 'deezer']:
+        raise ValueError("Service must be 'spotify' or 'deezer'")
+    
+    service_dir = Path('./creds') / service
+    if not service_dir.exists():
+        return []
+    
+    return [d.name for d in service_dir.iterdir() if d.is_dir()]
 
 
 def create_credential(service, name, data):
