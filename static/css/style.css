@@ -270,3 +270,726 @@ body {
 .service-tabs button.active {
     background: #1DB954;
 }
+/* Add to style.css */
+.config-bar {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #181818;
+    padding: 15px;
+    border-radius: 8px;
+    z-index: 1000;
+}
+
+.config-item {
+    margin-bottom: 10px;
+}
+
+.config-item label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+}
+
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #1DB954;
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.queue-btn {
+    background: #1DB954;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+}
+
+.sidebar.right {
+    right: -350px;
+    left: auto;
+}
+
+.sidebar.right.active {
+    right: 0;
+}
+
+.queue-item {
+    background: #2a2a2a;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 5px;
+}
+
+.queue-item .log {
+    font-family: monospace;
+    font-size: 12px;
+    color: #b3b3b3;
+    margin-top: 5px;
+}
+/* Add these styles to your existing CSS */
+
+/* Download Queue styles */
+#downloadQueue {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 350px;
+    background: #181818;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transform: translateX(120%);
+    transition: transform 0.3s ease;
+    z-index: 1002;
+}
+
+#downloadQueue.active {
+    transform: translateX(0);
+}
+
+.queue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.queue-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.queue-close {
+    background: none;
+    border: none;
+    color: #b3b3b3;
+    cursor: pointer;
+    padding: 5px;
+}
+
+#queueItems {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.queue-item {
+    background: #2a2a2a;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    transition: transform 0.2s ease;
+}
+
+.queue-item:hover {
+    transform: translateX(5px);
+}
+
+.queue-item .title {
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-item .type {
+    font-size: 12px;
+    color: #1DB954;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.queue-item .log {
+    font-size: 13px;
+    color: #b3b3b3;
+    line-height: 1.4;
+    font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* Status message colors */
+.log--success { color: #1DB954 !important; }
+.log--error { color: #ff5555 !important; }
+.log--warning { color: #ffaa00 !important; }
+.log--info { color: #4a90e2 !important; }
+
+/* Progress animation */
+@keyframes progress-pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+
+.progress-indicator {
+    display: inline-block;
+    margin-left: 8px;
+    animation: progress-pulse 1.5s infinite;
+}
+
+/* Enhanced loading states */
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top-color: #1DB954;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Timeout warning */
+.timeout-warning {
+    position: relative;
+    padding-left: 24px;
+}
+
+.timeout-warning::before {
+    content: "⚠️";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* Form enhancements */
+#credentialForm {
+    margin-top: 20px;
+}
+
+#credentialName {
+    margin-bottom: 15px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+
+    .search-header {
+        flex-direction: column;
+    }
+
+    .search-input,
+    .search-type,
+    .search-button {
+        width: 100%;
+    }
+
+    #downloadQueue {
+        width: 90%;
+        right: 5%;
+        top: 70px;
+    }
+
+    .sidebar {
+        width: 100%;
+        left: -100%;
+    }
+
+    .sidebar.active {
+        left: 0;
+    }
+}
+
+/* Status bar animations */
+.status-bar {
+    height: 3px;
+    background: #1DB954;
+    width: 0;
+    transition: width 0.3s ease;
+    margin-top: 8px;
+}
+
+/* Error traceback styling */
+.traceback {
+    background: #2a2a2a;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #ff5555;
+    margin-top: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Queue item states */
+.queue-item--complete {
+    border-left: 4px solid #1DB954;
+}
+
+.queue-item--error {
+    border-left: 4px solid #ff5555;
+}
+
+.queue-item--processing {
+    border-left: 4px solid #4a90e2;
+}
+
+/* Progress percentage styling */
+.progress-percent {
+    float: right;
+    font-weight: bold;
+    color: #1DB954;
+}
+
+/* Hover tooltip for long messages */
+.queue-item .log {
+    position: relative;
+}
+
+/* Download button styling */
+.download-btn {
+    background-color: #1DB954;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+}
+
+.download-btn:hover {
+    background-color: #1ed760;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3);
+}
+
+.download-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.download-btn::before {
+    content: "↓";
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* Select dropdown styling */
+#spotifyAccountSelect,
+#deezerAccountSelect {
+    background: #2a2a2a;
+    color: white;
+    border: 1px solid #404040;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 14px;
+    width: 100%;
+    margin: 5px 0 15px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    transition: border-color 0.3s ease;
+}
+
+#spotifyAccountSelect:focus,
+#deezerAccountSelect:focus {
+    outline: none;
+    border-color: #1DB954;
+    box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
+}
+
+/* Style the dropdown options */
+#spotifyAccountSelect option,
+#deezerAccountSelect option {
+    background: #181818;
+    color: white;
+    padding: 10px;
+}
+
+/* Hover state for options (limited browser support) */
+#spotifyAccountSelect option:hover,
+#deezerAccountSelect option:hover {
+    background: #1DB954;
+}
+
+/* Disabled state styling */
+#spotifyAccountSelect:disabled,
+#deezerAccountSelect:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #spotifyAccountSelect,
+    #deezerAccountSelect {
+        font-size: 16px;
+        padding: 12px 20px;
+    }
+    
+    .download-btn {
+        padding: 10px 20px;
+        font-size: 16px;
+    }
+}
+
+/* Add queue icon styling */
+.queue-icon {
+    position: fixed;
+    top: 20px;
+    right: 70px; /* Adjust based on settings icon position */
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5em;
+    cursor: pointer;
+    z-index: 1000;
+  }
+  
+  .queue-icon:hover {
+    color: #1DB954;
+  }
+  
+  /* Keep the existing queue sidebar styles */
+  #downloadQueue {
+    /* existing styles */
+    right: -350px;
+    transition: right 0.3s;
+  }
+  
+  #downloadQueue.active {
+    right: 0;
+  }
+
+  /* Mobile-First Enhancements */
+@media screen and (max-width: 768px) {
+    /* Viewport-friendly base sizing */
+    html {
+        font-size: 14px;
+    }
+
+    /* Container adjustments */
+    .container {
+        padding: 10px;
+        max-width: 100%;
+    }
+
+    /* Stack search elements vertically */
+    .search-header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 15px 0;
+        position: relative;
+        top: auto;
+    }
+
+    /* Improve touch targets */
+    .search-input,
+    .search-type,
+    .search-button {
+        width: 100%;
+        padding: 15px 20px;
+        font-size: 1rem;
+    }
+
+    /* Adjust grid layout for smaller screens */
+    .results-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+    }
+
+    /* Optimize card content spacing */
+    .result-card {
+        padding: 12px;
+    }
+
+    .track-title {
+        font-size: 14px;
+    }
+
+    .track-artist {
+        font-size: 12px;
+    }
+
+    /* Mobile-friendly sidebar */
+    .sidebar {
+        width: 100%;
+        left: -100%;
+    }
+
+    .sidebar.active {
+        left: 0;
+    }
+
+    /* Queue positioning adjustments */
+    #downloadQueue {
+        width: 95%;
+        right: 2.5%;
+        top: 60px;
+    }
+
+    /* Icon positioning */
+    .settings-icon {
+        top: 15px;
+        left: 15px;
+    }
+
+    .queue-icon {
+        top: 15px;
+        right: 15px;
+    }
+
+    /* Form element adjustments */
+    .form-group input,
+    .form-group textarea {
+        padding: 12px;
+    }
+}
+
+/* Additional Mobile Optimizations */
+@media screen and (max-width: 480px) {
+    /* Further reduce grid item size */
+    .results-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /* Increase body text contrast */
+    body {
+        font-size: 16px;
+    }
+
+    /* Enhance tap target sizing */
+    button,
+    .result-card {
+        min-height: 48px;
+    }
+
+    /* Prevent text overflow */
+    .track-title,
+    .track-artist {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+}
+
+/* Input element mobile optimization */
+input,
+select,
+textarea {
+    font-size: 16px !important; /* Prevent iOS zoom */
+}
+
+/* Touch interaction improvements */
+button {
+    touch-action: manipulation;
+}
+
+.result-card {
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent layout shift on scrollbar appearance */
+html {
+    overflow-y: scroll;
+}
+
+/* Modified Button Positioning */
+.settings-icon {
+    position: static; /* Remove fixed positioning */
+    order: -1; /* Move to start of flex container */
+    margin-right: 15px;
+    font-size: 22px;
+}
+
+.queue-icon {
+    position: static; /* Remove fixed positioning */
+    order: 2; /* Place after search button */
+    margin-left: 15px;
+    font-size: 22px;
+}
+
+/* Updated Search Header */
+.search-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 30px;
+    position: sticky;
+    top: 0;
+    background-color: #121212;
+    padding: 20px 0;
+    z-index: 100;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .search-header {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 15px 0;
+    }
+
+    .settings-icon,
+    .queue-icon {
+        margin: 0;
+        order: 0; /* Reset order for mobile */
+        font-size: 24px;
+    }
+
+    .search-input,
+    .search-type {
+        order: 1;
+        width: 100%;
+    }
+
+    .search-button {
+        order: 2;
+        width: 100%;
+    }
+
+    .queue-icon {
+        order: 3;
+        margin-left: auto;
+    }
+}
+
+/* Existing queue icon styles remain the same */
+.queue-icon:hover {
+    color: #1DB954;
+}
+
+/* Updated Sidebar Animations */
+.sidebar {
+    position: fixed;
+    top: 0;
+    width: 350px;
+    height: 100vh;
+    background: #181818;
+    padding: 20px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1001;
+    overflow-y: auto;
+    box-shadow: 0 0 15px rgba(0,0,0,0.3);
+}
+
+/* Settings Sidebar Specific */
+#settingsSidebar {
+    left: -350px;
+}
+
+#settingsSidebar.active {
+    left: 0;
+    box-shadow: 20px 0 30px rgba(0,0,0,0.4);
+}
+
+/* Download Queue Specific */
+#downloadQueue {
+    right: -350px;
+    left: auto;
+}
+
+#downloadQueue.active {
+    right: 0;
+    box-shadow: -20px 0 30px rgba(0,0,0,0.4);
+}
+
+/* Enhanced Transition Effects */
+.sidebar {
+    transition: 
+        left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.3s ease;
+}
+
+/* Queue Item Animations */
+.queue-item {
+    transition: 
+        transform 0.2s ease,
+        opacity 0.3s ease,
+        background-color 0.3s ease;
+    opacity: 1;
+}
+
+.queue-item:not(.active):hover {
+    transform: translateX(5px);
+    background-color: #333;
+}
+
+.queue-item.entering {
+    opacity: 0;
+    transform: translateX(20px);
+}
+
+.queue-item.exiting {
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+/* Mobile Responsiveness Adjustments */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 100%;
+        box-shadow: none;
+    }
+    
+    #settingsSidebar {
+        left: -100%;
+    }
+    
+    #downloadQueue {
+        right: -100%;
+    }
+    
+    .sidebar.active {
+        box-shadow: 0 0 30px rgba(0,0,0,0.4);
+    }
+}

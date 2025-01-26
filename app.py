@@ -5,6 +5,7 @@ from routes.credentials import credentials_bp
 from routes.album import album_bp
 from routes.track import track_bp
 from routes.playlist import playlist_bp
+from routes.prgs import prgs_bp
 import logging
 import time
 from pathlib import Path
@@ -34,6 +35,7 @@ def create_app():
     app.register_blueprint(album_bp, url_prefix='/api/album')
     app.register_blueprint(track_bp, url_prefix='/api/track') 
     app.register_blueprint(playlist_bp, url_prefix='/api/playlist')
+    app.register_blueprint(prgs_bp, url_prefix='/api/prgs')  
 
     # Serve frontend
     @app.route('/')

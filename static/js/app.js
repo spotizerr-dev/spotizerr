@@ -1,10 +1,3 @@
-function logRequest(method, url, body = null) {
-    console.log(`Sending ${method} request to: ${url}`);
-    if (body) {
-        console.log('Request payload:', body);
-    }
-}
-
 const serviceConfig = {
     spotify: {
         fields: [
@@ -32,14 +25,20 @@ const serviceConfig = {
 
 let currentService = 'spotify';
 let currentCredential = null;
+let downloadQueue = {};
+let prgInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+    
     const searchButton = document.getElementById('searchButton');
     const searchInput = document.getElementById('searchInput');
     const settingsIcon = document.getElementById('settingsIcon');
     const sidebar = document.getElementById('settingsSidebar');
     const closeSidebar = document.getElementById('closeSidebar');
     const serviceTabs = document.querySelectorAll('.tab-button');
+
+    // Initialize configuration
+    initConfig();
 
     // Search functionality
     searchButton.addEventListener('click', performSearch);
@@ -71,7 +70,92 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('credentialForm').addEventListener('submit', handleCredentialSubmit);
 });
 
-// Search functions remain the same
+async function initConfig() {
+    loadConfig();
+    console.log(loadConfig())
+    await updateAccountSelectors();
+    
+    // Event listeners
+    document.getElementById('fallbackToggle').addEventListener('change', () => {
+        saveConfig();
+        updateAccountSelectors();
+    });
+    
+    const accountSelects = ['spotifyAccountSelect', 'deezerAccountSelect'];
+    accountSelects.forEach(id => {
+        document.getElementById(id).addEventListener('change', () => {
+            saveConfig();
+            updateAccountSelectors();
+        });
+    });
+}
+
+async function updateAccountSelectors() {
+    try {
+        // Get current saved configuration
+        const saved = JSON.parse(localStorage.getItem('activeConfig')) || {};
+        
+        // Fetch available credentials
+        const [spotifyResponse, deezerResponse] = await Promise.all([
+            fetch('/api/credentials/spotify'),
+            fetch('/api/credentials/deezer')
+        ]);
+        
+        const spotifyAccounts = await spotifyResponse.json();
+        const deezerAccounts = await deezerResponse.json();
+
+        // Update Spotify selector
+        const spotifySelect = document.getElementById('spotifyAccountSelect');
+        const isValidSpotify = spotifyAccounts.includes(saved.spotify);
+        spotifySelect.innerHTML = spotifyAccounts.map(a => 
+            `<option value="${a}" ${a === saved.spotify ? 'selected' : ''}>${a}</option>`
+        ).join('');
+        
+        // Validate/correct Spotify selection
+        if (!isValidSpotify && spotifyAccounts.length > 0) {
+            spotifySelect.value = spotifyAccounts[0];
+            saved.spotify = spotifyAccounts[0];
+            localStorage.setItem('activeConfig', JSON.stringify(saved));
+        }
+
+        // Update Deezer selector
+        const deezerSelect = document.getElementById('deezerAccountSelect');
+        const isValidDeezer = deezerAccounts.includes(saved.deezer);
+        deezerSelect.innerHTML = deezerAccounts.map(a => 
+            `<option value="${a}" ${a === saved.deezer ? 'selected' : ''}>${a}</option>`
+        ).join('');
+
+        // Validate/correct Deezer selection
+        if (!isValidDeezer && deezerAccounts.length > 0) {
+            deezerSelect.value = deezerAccounts[0];
+            saved.deezer = deezerAccounts[0];
+            localStorage.setItem('activeConfig', JSON.stringify(saved));
+        }
+
+        // Handle empty states
+        [spotifySelect, deezerSelect].forEach((select, index) => {
+            const accounts = index === 0 ? spotifyAccounts : deezerAccounts;
+            if (accounts.length === 0) {
+                select.innerHTML = '<option value="">No accounts available</option>';
+                select.value = '';
+            }
+        });
+
+    } catch (error) {
+        console.error('Error updating account selectors:', error);
+    }
+}
+
+
+function toggleDownloadQueue() {
+    const queueSidebar = document.getElementById('downloadQueue');
+    queueSidebar.classList.toggle('active');
+    
+    // Update button state
+    const queueIcon = document.getElementById('queueIcon');
+    queueIcon.textContent = queueSidebar.classList.contains('active') ? '📭' : '📥';
+}
+
 function performSearch() {
     const query = document.getElementById('searchInput').value.trim();
     const searchType = document.getElementById('searchType').value;
@@ -90,17 +174,29 @@ function performSearch() {
             if (data.error) throw new Error(data.error);
             const items = data.data[`${searchType}s`]?.items;
             
-            resultsContainer.innerHTML = items?.length 
-                ? items.map(item => createResultCard(item, searchType)).join('')
-                : '<div class="error">No results found</div>';
+            if (!items || !items.length) {
+                resultsContainer.innerHTML = '<div class="error">No results found</div>';
+                return;
+            }
+            
+            resultsContainer.innerHTML = items.map(item => createResultCard(item, searchType)).join('');
+            
+            const cards = resultsContainer.querySelectorAll('.result-card');
+            cards.forEach((card, index) => {
+                // Add download handler
+                card.querySelector('.download-btn').addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const url = e.target.dataset.url;
+                    const type = e.target.dataset.type;
+                    startDownload(url, type, items[index]);
+                    card.remove();
+                });
+            });
         })
         .catch(error => showError(error.message));
 }
 
 function createResultCard(item, type) {
-    const card = document.createElement('div');
-    card.className = 'result-card';
-    
     let imageUrl, title, subtitle, details;
     
     switch(type) {
@@ -133,17 +229,185 @@ function createResultCard(item, type) {
             break;
     }
 
-    card.innerHTML = `
-        <img src="${imageUrl}" class="album-art" alt="${type} cover">
-        <div class="track-title">${title}</div>
-        <div class="track-artist">${subtitle}</div>
-        <div class="track-details">${details}</div>
+    return `
+        <div class="result-card" data-id="${item.id}">
+            <img src="${imageUrl}" class="album-art" alt="${type} cover">
+            <div class="track-title">${title}</div>
+            <div class="track-artist">${subtitle}</div>
+            <div class="track-details">${details}</div>
+            <button class="download-btn" 
+                    data-url="${item.external_urls.spotify}" 
+                    data-type="${type}">
+                Download
+            </button>
+        </div>
     `;
-    card.addEventListener('click', () => window.open(item.external_urls.spotify, '_blank'));
-    return card;
 }
 
-// Credential management functions
+async function startDownload(url, type, item) {
+    const fallbackEnabled = document.getElementById('fallbackToggle').checked;
+    const spotifyAccount = document.getElementById('spotifyAccountSelect').value;
+    const deezerAccount = document.getElementById('deezerAccountSelect').value;
+    
+    let apiUrl = `/api/${type}/download?service=spotify&url=${encodeURIComponent(url)}`;
+    
+    if (fallbackEnabled) {
+        apiUrl += `&main=${deezerAccount}&fallback=${spotifyAccount}`;
+    } else {
+        apiUrl += `&main=${spotifyAccount}`;
+    }
+
+    try {
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+        
+        addToQueue(item, type, data.prg_file);
+        startMonitoringQueue();
+    } catch (error) {
+        showError('Download failed: ' + error.message);
+    }
+}
+
+function addToQueue(item, type, prgFile) {
+    const queueId = Date.now().toString();
+    downloadQueue[queueId] = {
+        item,
+        type,
+        prgFile,
+        element: createQueueItem(item, type, prgFile),
+        lastLineCount: 0,
+        lastUpdated: Date.now(),
+        hasEnded: false
+    };
+    document.getElementById('queueItems').appendChild(downloadQueue[queueId].element);
+}
+
+
+function createQueueItem(item, type, prgFile) {
+    const div = document.createElement('div');
+    div.className = 'queue-item';
+    div.innerHTML = `
+        <div class="title">${item.name}</div>
+        <div class="type">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+        <div class="log" id="log-${prgFile}">Initializing download...</div>
+    `;
+    return div;
+}
+
+function startMonitoringQueue() {
+    if (!prgInterval) {
+        prgInterval = setInterval(async () => {
+            const queueEntries = Object.entries(downloadQueue);
+            if (queueEntries.length === 0) {
+                clearInterval(prgInterval);
+                prgInterval = null;
+                return;
+            }
+
+            let activeEntries = 0;
+
+            for (const [id, entry] of queueEntries) {
+                if (entry.hasEnded) continue;
+                activeEntries++;
+
+                try {
+                    const response = await fetch(`/api/prgs/${entry.prgFile}`);
+                    const log = await response.text();
+                    const lines = log.split('\n').filter(line => line.trim() !== '');
+                    const logElement = document.getElementById(`log-${entry.prgFile}`);
+
+                    // Process new lines
+                    if (lines.length > entry.lastLineCount) {
+                        const newLines = lines.slice(entry.lastLineCount);
+                        entry.lastLineCount = lines.length;
+                        entry.lastUpdated = Date.now();
+
+                        for (const line of newLines) {
+                            try {
+                                const data = JSON.parse(line);
+
+                                // Store status in queue entry
+                                if (data.status === 'error' || data.status === 'complete') {
+                                    entry.status = data.status;
+                                }
+
+                                // Handle error status with retry button
+                                if (data.status === 'error') {
+                                    logElement.innerHTML = `
+                                        <span class="error-status">${getStatusMessage(data)}</span>
+                                        <button class="retry-btn">Retry</button>
+                                        <button class="close-btn">×</button>
+                                    `;
+                                    
+                                    // Retry handler
+                                    logElement.querySelector('.retry-btn').addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        startDownload(entry.item.external_urls.spotify, entry.type, entry.item);
+                                        delete downloadQueue[id];
+                                        entry.element.remove();
+                                    });
+                                
+                                    // Close handler
+                                    logElement.querySelector('.close-btn').addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        delete downloadQueue[id];
+                                        entry.element.remove();
+                                    });
+                                
+                                    entry.element.classList.add('failed');
+                                    entry.hasEnded = true;
+                                } else {
+                                    logElement.textContent = getStatusMessage(data);
+                                }
+
+                                // Handle terminal statuses
+                                if (data.status === 'error' || data.status === 'complete') {
+                                    entry.hasEnded = true;
+                                    entry.status = data.status;
+                                    if (data.status === 'error' && data.traceback) {
+                                        console.error('Server error:', data.traceback);
+                                    }
+                                    break;
+                                }
+                            } catch (e) {
+                                console.error('Invalid PRG line:', line);
+                            }
+                        }
+                    }
+
+                    // Handle timeout
+                    if (Date.now() - entry.lastUpdated > 180000) {
+                        logElement.textContent = 'Download timed out (3 minutes inactivity)';
+                        entry.hasEnded = true;
+                        entry.status = 'timeout';
+                    }
+
+                    // Cleanup completed entries only
+                    if (entry.hasEnded && entry.status === 'complete') {
+                        setTimeout(() => {
+                            delete downloadQueue[id];
+                            entry.element.remove();
+                        }, 5000);
+                    }
+                    
+                } catch (error) {
+                    console.error('Status check failed:', error);
+                    entry.hasEnded = true;
+                    entry.status = 'error';
+                    document.getElementById(`log-${entry.prgFile}`).textContent = 'Status check error';
+                }
+            }
+
+            // Stop interval if no active entries
+            if (activeEntries === 0) {
+                clearInterval(prgInterval);
+                prgInterval = null;
+            }
+        }, 2000);
+    }
+}
+
+
 async function loadCredentials(service) {
     try {
         const response = await fetch(`/api/credentials/${service}`);
@@ -160,7 +424,7 @@ function renderCredentialsList(service, credentials) {
             <span>${name}</span>
             <div class="credential-actions">
                 <button class="edit-btn" data-name="${name}" data-service="${service}">Edit</button>
-                <button class="delete-btn" data-name="${name}">Delete</button>
+                <button class="delete-btn" data-name="${name}" data-service="${service}">Delete</button>
             </div>
         </div>
     `).join('');
@@ -168,10 +432,35 @@ function renderCredentialsList(service, credentials) {
     list.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             try {
-                await fetch(`/api/credentials/${service}/${e.target.dataset.name}`, { method: 'DELETE' });
+                const service = e.target.dataset.service;
+                const name = e.target.dataset.name;
+                
+                if (!service || !name) {
+                    throw new Error('Missing credential information');
+                }
+
+                const response = await fetch(`/api/credentials/${service}/${name}`, { 
+                    method: 'DELETE' 
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to delete credential');
+                }
+
+                // Update active account if deleted credential was selected
+                const accountSelect = document.getElementById(`${service}AccountSelect`);
+                if (accountSelect.value === name) {
+                    accountSelect.value = '';
+                    saveConfig();
+                }
+
+                // Refresh UI
                 loadCredentials(service);
+                await updateAccountSelectors();
+
             } catch (error) {
                 showSidebarError(error.message);
+                console.error('Delete error:', error);
             }
         });
     });
@@ -182,9 +471,11 @@ function renderCredentialsList(service, credentials) {
             const name = e.target.dataset.name;
             
             try {
+                // Switch to correct service tab
                 document.querySelector(`[data-service="${service}"]`).click();
                 await new Promise(resolve => setTimeout(resolve, 50));
                 
+                // Load credential data
                 const response = await fetch(`/api/credentials/${service}/${name}`);
                 const data = await response.json();
                 
@@ -227,21 +518,16 @@ async function handleCredentialSubmit(e) {
     const name = nameInput.value.trim();
     
     try {
-        // Validate name exists for new credentials
         if (!currentCredential && !name) {
             throw new Error('Credential name is required');
         }
 
-        // Collect form data
         const formData = {};
         serviceConfig[service].fields.forEach(field => {
             formData[field.id] = document.getElementById(field.id).value.trim();
         });
 
-        // Validate using service config
         const data = serviceConfig[service].validator(formData);
-
-        // Use currentCredential for updates, name for new entries
         const endpointName = currentCredential || name;
         const method = currentCredential ? 'PUT' : 'POST';
         
@@ -256,8 +542,12 @@ async function handleCredentialSubmit(e) {
             throw new Error(errorData.error || 'Failed to save credentials');
         }
 
+        // Refresh and persist after credential changes
+        await updateAccountSelectors();
+        saveConfig();
         loadCredentials(service);
         resetForm();
+        
     } catch (error) {
         showSidebarError(error.message);
         console.error('Submission error:', error);
@@ -289,4 +579,51 @@ function showSidebarError(message) {
     const errorDiv = document.getElementById('sidebarError');
     errorDiv.textContent = message;
     setTimeout(() => errorDiv.textContent = '', 3000);
+}
+
+function getStatusMessage(data) {
+    switch (data.status) {
+        case 'downloading':
+            return `Downloading ${data.song || 'track'} by ${data.artist || 'artist'}...`;
+        case 'progress':
+            if (data.type === 'album') {
+                return `Processing track ${data.current_track}/${data.total_tracks} (${data.percentage.toFixed(1)}%): ${data.song}`;
+            } else {
+                return `${data.percentage.toFixed(1)}% complete`;
+            }
+        case 'done':
+            return `Finished: ${data.song} by ${data.artist}`;
+        case 'initializing':
+            return `Initializing ${data.type} download for ${data.album || data.artist}...`;
+        case 'error':
+            return `Error: ${data.message || 'Unknown error'}`;
+        case 'complete':
+            return 'Download completed successfully';
+        default:
+            return data.status;
+    }
+}
+
+function saveConfig() {
+    const config = {
+        spotify: document.getElementById('spotifyAccountSelect').value,
+        deezer: document.getElementById('deezerAccountSelect').value,
+        fallback: document.getElementById('fallbackToggle').checked
+    };
+    localStorage.setItem('activeConfig', JSON.stringify(config));
+}
+
+
+function loadConfig() {
+    const saved = JSON.parse(localStorage.getItem('activeConfig')) || {};
+    
+    // Set values only if they exist in the DOM
+    const spotifySelect = document.getElementById('spotifyAccountSelect');
+    const deezerSelect = document.getElementById('deezerAccountSelect');
+    
+    if (spotifySelect) spotifySelect.value = saved.spotify || '';
+    if (deezerSelect) deezerSelect.value = saved.deezer || '';
+    
+    const fallbackToggle = document.getElementById('fallbackToggle');
+    if (fallbackToggle) fallbackToggle.checked = !!saved.fallback;
 }

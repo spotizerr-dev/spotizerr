@@ -7,17 +7,41 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <button id="settingsIcon" class="settings-icon">⚙️</button>
     <div id="settingsSidebar" class="sidebar">
         <div class="sidebar-header">
-            <h2>Credentials Management</h2>
+            <h2>Settings</h2>
             <button id="closeSidebar" class="close-btn">&times;</button>
         </div>
+        
+        <!-- Account Configuration Section -->
+        <div class="account-config">
+            <div class="config-item">
+                <label>Active Spotify Account:</label>
+                <select id="spotifyAccountSelect"></select>
+            </div>
+            <div class="config-item">
+                <label>Active Deezer Account:</label>
+                <select id="deezerAccountSelect"></select>
+            </div>
+            <div class="config-item">
+                <label>Download Fallback:</label>
+                <label class="switch">
+                    <input type="checkbox" id="fallbackToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Service Tabs -->
         <div class="service-tabs">
             <button class="tab-button active" data-service="spotify">Spotify</button>
             <button class="tab-button" data-service="deezer">Deezer</button>
         </div>
+
+        <!-- Credentials List -->
         <div class="credentials-list"></div>
+
+        <!-- Credentials Form -->
         <div class="credentials-form">
             <h3>Add/Edit Credential</h3>
             <form id="credentialForm">
@@ -31,8 +55,10 @@
         </div>
         <div id="sidebarError" class="error"></div>
     </div>
+
     <div class="container">
         <div class="search-header">
+            <button id="settingsIcon" class="settings-icon">⚙️</button>
             <input type="text" class="search-input" placeholder="Search tracks, albums, or playlists..." id="searchInput">
             <select class="search-type" id="searchType">
                 <option value="track">Tracks</option>
@@ -40,8 +66,18 @@
                 <option value="playlist">Playlists</option>
             </select>
             <button class="search-button" id="searchButton">Search</button>
+            <button id="queueIcon" class="queue-icon" onclick="toggleDownloadQueue()">📥</button>
         </div>
         <div id="resultsContainer" class="results-grid"></div>
+    </div>
+
+    <!-- Download Queue Sidebar -->
+    <div id="downloadQueue" class="sidebar right">
+        <div class="sidebar-header">
+            <h2>Download Queue</h2>
+            <button class="close-btn" onclick="toggleDownloadQueue()">&times;</button>
+        </div>
+        <div id="queueItems"></div>
     </div>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>

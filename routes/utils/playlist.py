@@ -29,7 +29,7 @@ def download_playlist(service, url, main, fallback=None):
                         recursive_quality=True,
                         recursive_download=False,
                         not_interface=False,
-                        make_zip=True,
+                        make_zip=False,
                         method_save=1
                     )
                 except Exception as e:
