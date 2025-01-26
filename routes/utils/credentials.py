@@ -2,6 +2,25 @@ import json
 from pathlib import Path
 import shutil
 
+def get_credentials():
+    """
+    Retrieves all existing credential names for Spotify and Deezer.
+    
+    Returns:
+        dict: A dictionary with 'spotify' and 'deezer' keys containing lists of credential names.
+    """
+    creds = {'spotify': [], 'deezer': []}
+    base_dir = Path('./creds')
+    
+    for service in ['spotify', 'deezer']:
+        service_dir = base_dir / service
+        if service_dir.exists() and service_dir.is_dir():
+            # Get all directory names under the service directory
+            creds[service] = [entry.name for entry in service_dir.iterdir() if entry.is_dir()]
+    
+    return creds
+
+
 def create_credential(service, name, data):
     """
     Creates a new credential file for the specified service.
