@@ -27,8 +27,6 @@ def download_track(service, url, main, fallback=None):
                         method_save=1
                     )
                 except Exception as e:
-                    # Fallback to Spotify credentials if Deezer fails
-                    print(f"Failed to download via Deezer fallback: {e}. Trying Spotify fallback.")
                     spo_creds_dir = os.path.join('./creds/spotify', fallback)
                     spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
                     spo = SpoLogin(credentials_path=spo_creds_path)

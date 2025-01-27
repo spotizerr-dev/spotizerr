@@ -6,4 +6,4 @@ services:
             - ./downloads:/app/downloads
         ports:
             - 7171:7171
-        image: spotizerr
+        image: cooldockerizer93/spotizerr
