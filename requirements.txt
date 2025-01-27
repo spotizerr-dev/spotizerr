@@ -4,7 +4,7 @@ blinker==1.9.0
 certifi==2024.12.14
 charset-normalizer==3.4.1
 click==8.1.8
-deezspot @ git+https://github.com/Xoconoch/deezspot-fork-again@dae20a0b8ed2bcbaa29d04b2ca78fe24385bb35d
+deezspot @ git+https://github.com/Xoconoch/deezspot-fork-again
 defusedxml==0.7.1
 fastapi==0.115.7
 Flask==3.1.0
