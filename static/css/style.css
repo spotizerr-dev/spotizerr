@@ -1072,3 +1072,63 @@ html {
 .queue-icon:hover img {
   opacity: 0.8;
 }
+
+/* Global Scrollbar Styles */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #181818;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2a2a2a;
+    border-radius: 4px;
+    border: 2px solid #181818;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #3a3a3a;
+}
+
+/* Firefox Support */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a2a #181818;
+}
+
+/* Sidebar Specific Scrollbars */
+.sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    border-width: 1px;
+}
+
+/* Queue Items Scrollbar */
+#queueItems::-webkit-scrollbar {
+    width: 6px;
+}
+
+#queueItems::-webkit-scrollbar-thumb {
+    background: #3a3a3a;
+}
+
+/* Results Container Scrollbar */
+.results-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+/* Smooth Scroll Behavior */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Scrollbar Corner */
+::-webkit-scrollbar-corner {
+    background: #121212;
+}

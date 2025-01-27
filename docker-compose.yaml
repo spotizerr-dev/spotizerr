@@ -1,0 +1,9 @@
+name: spotizerr
+services:
+    spotizerr:
+        volumes:
+            - ./creds:/app/creds
+            - ./downloads:/app/downloads
+        ports:
+            - 7171:7171
+        image: spotizerr
