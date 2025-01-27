@@ -48,9 +48,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Settings functionality
     settingsIcon.addEventListener('click', () => {
-        sidebar.classList.add('active');
-        loadCredentials(currentService);
-        updateFormFields();
+        if (sidebar.classList.contains('active')) {
+            // Collapse sidebar if already expanded
+            sidebar.classList.remove('active');
+            resetForm();
+        } else {
+            // Expand sidebar and load credentials
+            sidebar.classList.add('active');
+            loadCredentials(currentService);
+            updateFormFields();
+        }
     });
 
     closeSidebar.addEventListener('click', () => {
@@ -151,10 +158,6 @@ async function updateAccountSelectors() {
 function toggleDownloadQueue() {
     const queueSidebar = document.getElementById('downloadQueue');
     queueSidebar.classList.toggle('active');
-    
-    // Update button state
-    const queueIcon = document.getElementById('queueIcon');
-    queueIcon.textContent = queueSidebar.classList.contains('active') ? '📭' : '📥';
 }
 
 function performSearch() {

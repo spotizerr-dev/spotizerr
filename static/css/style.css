@@ -142,10 +142,6 @@ body {
     transition: transform 0.3s;
 }
 
-.settings-icon:hover {
-    transform: rotate(90deg);
-}
-
 .sidebar {
     position: fixed;
     top: 0;
@@ -368,43 +364,61 @@ input:checked + .slider:before {
 }
 /* Add these styles to your existing CSS */
 
-/* Download Queue styles */
-#downloadQueue {
+#downloadQueue.sidebar {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    top: 0;
+    right: -350px;
     width: 350px;
+    height: 100vh;
     background: #181818;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    transform: translateX(120%);
-    transition: transform 0.3s ease;
-    z-index: 1002;
+    padding: 20px;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1001;
+    box-shadow: -20px 0 30px rgba(0,0,0,0.4);
 }
 
-#downloadQueue.active {
-    transform: translateX(0);
+#downloadQueue.sidebar.active {
+    right: 0;
 }
 
 .queue-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #2a2a2a;
+    margin-bottom: 20px;
 }
 
 .queue-title {
-    font-size: 18px;
+    font-size: 1.25rem;
     font-weight: 600;
+    color: #fff;
+}
+
+.queue-item .title {
+    font-size: 14px;
+    color: #fff;
+}
+
+.queue-item .log {
+    font-size: 12px;
+    color: #b3b3b3;
 }
 
 .queue-close {
-    background: none;
-    border: none;
-    color: #b3b3b3;
-    cursor: pointer;
-    padding: 5px;
+    background: #2a2a2a;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s ease;
+}
+
+.queue-close:hover {
+    background-color: #333;
 }
 
 #queueItems {
@@ -412,12 +426,29 @@ input:checked + .slider:before {
     overflow-y: auto;
 }
 
+#queueItems::-webkit-scrollbar {
+    width: 6px;
+}
+
+#queueItems::-webkit-scrollbar-track {
+    background: #181818;
+}
+
+#queueItems::-webkit-scrollbar-thumb {
+    background: #2a2a2a;
+    border-radius: 3px;
+}
+
 .queue-item {
     background: #2a2a2a;
-    padding: 12px;
-    margin-bottom: 10px;
-    border-radius: 6px;
-    transition: transform 0.2s ease;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    transition: background-color 0.3s ease;
+}
+
+.queue-item:hover {
+    background-color: #333;
 }
 
 .queue-item .title {
@@ -982,4 +1013,62 @@ html {
     .sidebar.active {
         box-shadow: 0 0 30px rgba(0,0,0,0.4);
     }
+}
+
+.retry-btn {
+    padding: 4px 12px;
+    margin: 0 8px;
+    background-color: #4CAF50; /* Green color for positive action */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.3s ease;
+}
+
+.retry-btn:hover {
+    background-color: #45a049; /* Darker green on hover */
+}
+
+.retry-btn:active {
+    background-color: #3d8b40;
+    transform: translateY(1px);
+}
+
+/* Close button with matching size */
+.close-btn {
+    padding: 4px 12px; /* Match the retry button's padding */
+    margin: 0 8px; /* Match the retry button's margin */
+    background-color: #ff4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em; /* Match the retry button's font size */
+    transition: background-color 0.3s ease;
+    line-height: 1; /* Ensure the "×" is vertically centered */
+}
+
+.close-btn:hover {
+    background-color: #cc0000;
+}
+
+.close-btn:active {
+    background-color: #b30000;
+    transform: translateY(1px);
+}
+
+.settings-icon img,
+.queue-icon img {
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  filter: invert(1); /* Makes icons white */
+}
+
+/* Optional: Add hover effects */
+.settings-icon:hover img,
+.queue-icon:hover img {
+  opacity: 0.8;
 }

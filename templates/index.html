@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spotify Search</title>
+    <title>Spotizerr</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -58,7 +58,9 @@
 
     <div class="container">
         <div class="search-header">
-            <button id="settingsIcon" class="settings-icon">⚙️</button>
+            <button id="settingsIcon" class="settings-icon">
+                <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings">
+            </button>
             <input type="text" class="search-input" placeholder="Search tracks, albums, or playlists..." id="searchInput">
             <select class="search-type" id="searchType">
                 <option value="track">Tracks</option>
@@ -66,7 +68,9 @@
                 <option value="playlist">Playlists</option>
             </select>
             <button class="search-button" id="searchButton">Search</button>
-            <button id="queueIcon" class="queue-icon" onclick="toggleDownloadQueue()">📥</button>
+            <button id="queueIcon" class="queue-icon" onclick="toggleDownloadQueue()">
+                <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="Download Queue">
+            </button>
         </div>
         <div id="resultsContainer" class="results-grid"></div>
     </div>

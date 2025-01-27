@@ -46,6 +46,11 @@ def create_app():
     def serve_static(path):
         return send_from_directory('static', path)
 
+    # Serve favicon.ico from the same directory as index.html (templates)
+    @app.route('/favicon.ico')
+    def serve_favicon():
+        return send_from_directory('templates', 'favicon.ico')
+
     # Add request logging middleware
     @app.before_request
     def log_request():
@@ -72,6 +77,6 @@ if __name__ == '__main__':
     logger.setLevel(logging.INFO)
     
     app = create_app()
-    logging.info("Starting Flask server on port 5000")
+    logging.info("Starting Flask server on port 7171")
     from waitress import serve
-    serve(app, host='0.0.0.0', port=5000)
+    serve(app, host='0.0.0.0', port=7171)

@@ -6,7 +6,8 @@
 /Test.py
 /prgs/
 /flask_server.log
-routes/__pycache__/
-routes/utils/__pycache__/
-test.sh
-__pycache__/
+/routes/__pycache__/
+/routes/utils/__pycache__/
+/test.sh
+/__pycache__/
+/Dockerfile
