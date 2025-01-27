@@ -33,8 +33,6 @@ def download_album(service, url, main, fallback=None):
                         method_save=1
                     )
                 except Exception as e:
-                    # If the first attempt fails, use the fallback Spotify main
-                    print(f"Failed to download via Deezer fallback: {e}. Trying Spotify fallback main.")
                     # Load fallback Spotify credentials and attempt download
                     try:
                         spo_creds_dir = os.path.join('./creds/spotify', fallback)

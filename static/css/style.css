@@ -420,10 +420,6 @@ input:checked + .slider:before {
     transition: transform 0.2s ease;
 }
 
-.queue-item:hover {
-    transform: translateX(5px);
-}
-
 .queue-item .title {
     font-weight: 500;
     margin-bottom: 4px;
@@ -953,15 +949,9 @@ html {
 /* Queue Item Animations */
 .queue-item {
     transition: 
-        transform 0.2s ease,
         opacity 0.3s ease,
         background-color 0.3s ease;
     opacity: 1;
-}
-
-.queue-item:not(.active):hover {
-    transform: translateX(5px);
-    background-color: #333;
 }
 
 .queue-item.entering {

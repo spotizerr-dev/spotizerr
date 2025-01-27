@@ -1,23 +1,30 @@
-from flask import Blueprint, send_from_directory, abort
+from flask import Blueprint, abort
 import os
 
 prgs_bp = Blueprint('prgs', __name__, url_prefix='/api/prgs')
 
-# Base directory for .prg files
+# Base directory for files
 PRGS_DIR = os.path.join(os.getcwd(), 'prgs')
 
 @prgs_bp.route('/<filename>', methods=['GET'])
 def get_prg_file(filename):
     """
-    Serve a .prg file from the prgs directory.
+    Return the last line of the specified file from the prgs directory.
     """
     try:
         # Security check to prevent path traversal attacks
-        if not filename.endswith('.prg') or '..' in filename or '/' in filename:
+        if '..' in filename or '/' in filename:
             abort(400, "Invalid file request")
 
-        # Ensure the file exists in the directory
-        return send_from_directory(PRGS_DIR, filename)
+        filepath = os.path.join(PRGS_DIR, filename)
+
+        # Read the last line of the file
+        with open(filepath, 'r') as f:
+            content = f.read()
+            lines = content.splitlines()
+            last_line = lines[-1] if lines else ''
+
+        return last_line
     except FileNotFoundError:
         abort(404, "File not found")
     except Exception as e:

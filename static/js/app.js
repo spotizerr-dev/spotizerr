@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     settingsIcon.addEventListener('click', () => {
         sidebar.classList.add('active');
         loadCredentials(currentService);
+        updateFormFields();
     });
 
     closeSidebar.addEventListener('click', () => {
@@ -166,6 +167,30 @@ function performSearch() {
         return;
     }
 
+    // Handle direct Spotify URLs
+    if (isSpotifyUrl(query)) {
+        try {
+            const type = getResourceTypeFromUrl(query);
+            if (!['track', 'album', 'playlist'].includes(type)) {
+                throw new Error('Unsupported URL type');
+            }
+            
+            const item = {
+                name: `Direct URL (${type})`,
+                external_urls: { spotify: query }
+            };
+            
+            startDownload(query, type, item);
+            document.getElementById('searchInput').value = '';
+            return;
+            
+        } catch (error) {
+            showError(`Invalid Spotify URL: ${error.message}`);
+            return;
+        }
+    }
+
+    // Existing search functionality
     resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
     
     fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=${searchType}&limit=30`)
@@ -183,7 +208,6 @@ function performSearch() {
             
             const cards = resultsContainer.querySelectorAll('.result-card');
             cards.forEach((card, index) => {
-                // Add download handler
                 card.querySelector('.download-btn').addEventListener('click', async (e) => {
                     e.stopPropagation();
                     const url = e.target.dataset.url;
@@ -195,6 +219,7 @@ function performSearch() {
         })
         .catch(error => showError(error.message));
 }
+
 
 function createResultCard(item, type) {
     let imageUrl, title, subtitle, details;
@@ -262,149 +287,147 @@ async function startDownload(url, type, item) {
         const data = await response.json();
         
         addToQueue(item, type, data.prg_file);
-        startMonitoringQueue();
     } catch (error) {
         showError('Download failed: ' + error.message);
     }
 }
 
 function addToQueue(item, type, prgFile) {
-    const queueId = Date.now().toString();
-    downloadQueue[queueId] = {
+    const queueId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    const entry = {
         item,
         type,
         prgFile,
-        element: createQueueItem(item, type, prgFile),
-        lastLineCount: 0,
+        element: createQueueItem(item, type, prgFile, queueId),
+        lastStatus: null,
         lastUpdated: Date.now(),
-        hasEnded: false
+        hasEnded: false,
+        intervalId: null,
+        uniqueId: queueId  // Add unique identifier
     };
-    document.getElementById('queueItems').appendChild(downloadQueue[queueId].element);
+    
+    downloadQueue[queueId] = entry;
+    document.getElementById('queueItems').appendChild(entry.element);
+    startEntryMonitoring(queueId);
 }
 
+async function startEntryMonitoring(queueId) {
+    const entry = downloadQueue[queueId];
+    if (!entry || entry.hasEnded) return;
 
-function createQueueItem(item, type, prgFile) {
+    entry.intervalId = setInterval(async () => {
+        const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+        if (entry.hasEnded) {
+            clearInterval(entry.intervalId);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/prgs/${entry.prgFile}`);
+            const lastLine = (await response.text()).trim();
+
+            // Handle empty response
+            if (!lastLine) {
+                handleInactivity(entry, queueId, logElement);
+                return;
+            }
+
+            try {
+                const data = JSON.parse(lastLine);
+                
+                // Check for status changes
+                if (JSON.stringify(entry.lastStatus) === JSON.stringify(data)) {
+                    handleInactivity(entry, queueId, logElement);
+                    return;
+                }
+
+                // Update entry state
+                entry.lastStatus = data;
+                entry.lastUpdated = Date.now();
+                entry.status = data.status;
+                logElement.textContent = getStatusMessage(data);
+
+                // Handle terminal states
+                if (data.status === 'error' || data.status === 'complete') {
+                    handleTerminalState(entry, queueId, data);
+                }
+
+            } catch (e) {
+                console.error('Invalid PRG line:', lastLine);
+                logElement.textContent = 'Error parsing status update';
+                handleTerminalState(entry, queueId, { 
+                    status: 'error', 
+                    message: 'Invalid status format' 
+                });
+            }
+
+        } catch (error) {
+            console.error('Status check failed:', error);
+            handleTerminalState(entry, queueId, { 
+                status: 'error', 
+                message: 'Status check error' 
+            });
+        }
+    }, 2000);
+}
+
+function handleInactivity(entry, queueId, logElement) {
+    if (Date.now() - entry.lastUpdated > 180000) {
+        logElement.textContent = 'Download timed out (3 minutes inactivity)';
+        handleTerminalState(entry, queueId, { status: 'timeout' });
+    }
+}
+
+function handleTerminalState(entry, queueId, data) {
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+    
+    entry.hasEnded = true;
+    entry.status = data.status;
+    
+    if (data.status === 'error') {
+        logElement.innerHTML = `
+            <span class="error-status">${getStatusMessage(data)}</span>
+            <button class="retry-btn">Retry</button>
+            <button class="close-btn">×</button>
+        `;
+        
+        logElement.querySelector('.retry-btn').addEventListener('click', () => {
+            startDownload(entry.item.external_urls.spotify, entry.type, entry.item);
+            cleanupEntry(queueId);
+        });
+        
+        logElement.querySelector('.close-btn').addEventListener('click', () => {
+            cleanupEntry(queueId);
+        });
+        
+        entry.element.classList.add('failed');
+    }
+    
+    if (data.status === 'complete') {
+        setTimeout(() => cleanupEntry(queueId), 5000);
+    }
+    
+    clearInterval(entry.intervalId);
+}
+
+function cleanupEntry(queueId) {
+    const entry = downloadQueue[queueId];
+    if (entry) {
+        clearInterval(entry.intervalId);
+        entry.element.remove();
+        delete downloadQueue[queueId];
+    }
+}
+
+function createQueueItem(item, type, prgFile, queueId) {
     const div = document.createElement('div');
     div.className = 'queue-item';
     div.innerHTML = `
         <div class="title">${item.name}</div>
         <div class="type">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
-        <div class="log" id="log-${prgFile}">Initializing download...</div>
+        <div class="log" id="log-${queueId}-${prgFile}">Initializing download...</div>
     `;
     return div;
-}
-
-function startMonitoringQueue() {
-    if (!prgInterval) {
-        prgInterval = setInterval(async () => {
-            const queueEntries = Object.entries(downloadQueue);
-            if (queueEntries.length === 0) {
-                clearInterval(prgInterval);
-                prgInterval = null;
-                return;
-            }
-
-            let activeEntries = 0;
-
-            for (const [id, entry] of queueEntries) {
-                if (entry.hasEnded) continue;
-                activeEntries++;
-
-                try {
-                    const response = await fetch(`/api/prgs/${entry.prgFile}`);
-                    const log = await response.text();
-                    const lines = log.split('\n').filter(line => line.trim() !== '');
-                    const logElement = document.getElementById(`log-${entry.prgFile}`);
-
-                    // Process new lines
-                    if (lines.length > entry.lastLineCount) {
-                        const newLines = lines.slice(entry.lastLineCount);
-                        entry.lastLineCount = lines.length;
-                        entry.lastUpdated = Date.now();
-
-                        for (const line of newLines) {
-                            try {
-                                const data = JSON.parse(line);
-
-                                // Store status in queue entry
-                                if (data.status === 'error' || data.status === 'complete') {
-                                    entry.status = data.status;
-                                }
-
-                                // Handle error status with retry button
-                                if (data.status === 'error') {
-                                    logElement.innerHTML = `
-                                        <span class="error-status">${getStatusMessage(data)}</span>
-                                        <button class="retry-btn">Retry</button>
-                                        <button class="close-btn">×</button>
-                                    `;
-                                    
-                                    // Retry handler
-                                    logElement.querySelector('.retry-btn').addEventListener('click', (e) => {
-                                        e.stopPropagation();
-                                        startDownload(entry.item.external_urls.spotify, entry.type, entry.item);
-                                        delete downloadQueue[id];
-                                        entry.element.remove();
-                                    });
-                                
-                                    // Close handler
-                                    logElement.querySelector('.close-btn').addEventListener('click', (e) => {
-                                        e.stopPropagation();
-                                        delete downloadQueue[id];
-                                        entry.element.remove();
-                                    });
-                                
-                                    entry.element.classList.add('failed');
-                                    entry.hasEnded = true;
-                                } else {
-                                    logElement.textContent = getStatusMessage(data);
-                                }
-
-                                // Handle terminal statuses
-                                if (data.status === 'error' || data.status === 'complete') {
-                                    entry.hasEnded = true;
-                                    entry.status = data.status;
-                                    if (data.status === 'error' && data.traceback) {
-                                        console.error('Server error:', data.traceback);
-                                    }
-                                    break;
-                                }
-                            } catch (e) {
-                                console.error('Invalid PRG line:', line);
-                            }
-                        }
-                    }
-
-                    // Handle timeout
-                    if (Date.now() - entry.lastUpdated > 180000) {
-                        logElement.textContent = 'Download timed out (3 minutes inactivity)';
-                        entry.hasEnded = true;
-                        entry.status = 'timeout';
-                    }
-
-                    // Cleanup completed entries only
-                    if (entry.hasEnded && entry.status === 'complete') {
-                        setTimeout(() => {
-                            delete downloadQueue[id];
-                            entry.element.remove();
-                        }, 5000);
-                    }
-                    
-                } catch (error) {
-                    console.error('Status check failed:', error);
-                    entry.hasEnded = true;
-                    entry.status = 'error';
-                    document.getElementById(`log-${entry.prgFile}`).textContent = 'Status check error';
-                }
-            }
-
-            // Stop interval if no active entries
-            if (activeEntries === 0) {
-                clearInterval(prgInterval);
-                prgInterval = null;
-            }
-        }, 2000);
-    }
 }
 
 
@@ -626,4 +649,13 @@ function loadConfig() {
     
     const fallbackToggle = document.getElementById('fallbackToggle');
     if (fallbackToggle) fallbackToggle.checked = !!saved.fallback;
+}
+
+function isSpotifyUrl(url) {
+    return url.startsWith('https://open.spotify.com/');
+}
+
+function getResourceTypeFromUrl(url) {
+    const pathParts = new URL(url).pathname.split('/');
+    return pathParts[1]; // Returns 'track', 'album', or 'playlist'
 }
