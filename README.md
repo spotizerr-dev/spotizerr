@@ -37,7 +37,7 @@ services:
     spotizerr:
         volumes:
             - ./creds:/app/creds
-            - ./downloads:/app/downloads
+            - ./downloads:/app/downloads # <-- change for your music library dir
         ports:
             - 7171:7171
         image: cooldockerizer93/spotizerr
