@@ -11,3 +11,4 @@
 /test.sh
 /__pycache__/
 /Dockerfile
+/docker-compose.yaml
