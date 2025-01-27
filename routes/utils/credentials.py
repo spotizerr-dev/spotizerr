@@ -62,7 +62,7 @@ def create_credential(service, name, data):
         data (dict): Dictionary containing the credential data
         
     Raises:
-        ValueError: If service is invalid or data is missing required fields
+        ValueError: If service is invalid, data has invalid fields, or missing required fields
         FileExistsError: If the credential directory already exists
     """
     if service not in ['spotify', 'deezer']:
@@ -70,11 +70,18 @@ def create_credential(service, name, data):
     
     # Validate data structure
     required_fields = []
+    allowed_fields = []
     if service == 'spotify':
         required_fields = ['username', 'credentials']
+        allowed_fields = required_fields + ['type']
         data['type'] = 'AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS'
     else:
-        required_fields = ['arl', 'email', 'password']
+        required_fields = ['arl']
+        allowed_fields = required_fields.copy()
+        # Check for extra fields
+        extra_fields = set(data.keys()) - set(allowed_fields)
+        if extra_fields:
+            raise ValueError(f"Deezer credentials can only contain 'arl'. Extra fields found: {', '.join(extra_fields)}")
     
     for field in required_fields:
         if field not in data:
@@ -122,7 +129,6 @@ def edit_credential(service, name, new_data):
         FileNotFoundError: If the credential does not exist
         ValueError: If new_data contains invalid fields or missing required fields after update
     """
-    # Validate service
     if service not in ['spotify', 'deezer']:
         raise ValueError("Service must be 'spotify' or 'deezer'")
     
@@ -140,7 +146,7 @@ def edit_credential(service, name, new_data):
     if service == 'spotify':
         allowed_fields = ['username', 'credentials']
     else:
-        allowed_fields = ['arl', 'email', 'password']
+        allowed_fields = ['arl']
     
     for key in new_data.keys():
         if key not in allowed_fields:
@@ -149,13 +155,19 @@ def edit_credential(service, name, new_data):
     # Update data
     data.update(new_data)
     
+    # For Deezer: Strip all fields except 'arl'
+    if service == 'deezer':
+        if 'arl' not in data:
+            raise ValueError("Missing 'arl' field for Deezer credential")
+        data = {'arl': data['arl']}
+    
     # Ensure required fields are present
     required_fields = []
     if service == 'spotify':
         required_fields = ['username', 'credentials', 'type']
-        data['type'] = 'AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS'  # Ensure type is correct
+        data['type'] = 'AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS'
     else:
-        required_fields = ['arl', 'email', 'password']
+        required_fields = ['arl']
     
     for field in required_fields:
         if field not in data:

@@ -18,8 +18,6 @@ def download_album(service, url, main, fallback=None):
                     # Initialize DeeLogin with Deezer credentials
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
-                        email=deezer_creds.get('email', ''),
-                        password=deezer_creds.get('password', '')
                     )
                     # Download using download_albumspo
                     dl.download_albumspo(
@@ -77,8 +75,6 @@ def download_album(service, url, main, fallback=None):
                 creds = json.load(f)
             dl = DeeLogin(
                 arl=creds.get('arl', ''),
-                email=creds.get('email', ''),
-                password=creds.get('password', '')
             )
             dl.download_albumdee(
                 link_album=url,

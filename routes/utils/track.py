@@ -16,8 +16,6 @@ def download_track(service, url, main, fallback=None):
                         deezer_creds = json.load(f)
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
-                        email=deezer_creds.get('email', ''),
-                        password=deezer_creds.get('password', '')
                     )
                     dl.download_trackspo(
                         link_track=url,
@@ -65,8 +63,6 @@ def download_track(service, url, main, fallback=None):
                 creds = json.load(f)
             dl = DeeLogin(
                 arl=creds.get('arl', ''),
-                email=creds.get('email', ''),
-                password=creds.get('password', '')
             )
             dl.download_trackdee(
                 link_track=url,

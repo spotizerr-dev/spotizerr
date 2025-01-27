@@ -11,14 +11,10 @@ const serviceConfig = {
     },
     deezer: {
         fields: [
-            { id: 'arl', label: 'ARL', type: 'text' },
-            { id: 'email', label: 'Email', type: 'email' },
-            { id: 'password', label: 'Password', type: 'password' }
+            { id: 'arl', label: 'ARL', type: 'text' }
         ],
         validator: (data) => ({
-            arl: data.arl,
-            email: data.email,
-            password: data.password
+            arl: data.arl
         })
     }
 };
