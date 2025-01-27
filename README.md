@@ -53,6 +53,7 @@ Access at: `http://localhost:7171`
 2. Switch between service tabs (Spotify/Deezer)
 3. Enter credentials using the form
 4. Configure active accounts in settings
+_Note: If you want Spotify-only mode, just keep "Download fallback" setting disabled and don't bother adding Deezer credentials. Deezer-only mode is not, and will not be supported since there already is a much better tool for that called "Deemix"_
 
 ### Deezer ARL Setup
 
