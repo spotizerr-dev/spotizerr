@@ -6,7 +6,14 @@ As of 2025, Spotify pays an average of $0.005 per stream to the artist. That mea
 
 Music downloader which combines the best of two worlds: Spotify's catalog and Deezer's quality. Search for a track using Spotify search api, click download and, depending on your preferences, it will download directly from Spotify or firstly try to download from Deezer, if it fails, it'll fallback to Spotify.
 
+## Desktop interface
 ![image](https://github.com/user-attachments/assets/69674c27-9f53-48cb-84c3-1eaf612735fb)
+
+## Mobile interface
+![image](https://github.com/user-attachments/assets/0224adc6-5a24-4334-8e15-db0f376096b7)
+
+
+
 
 ## Features
 
@@ -152,6 +159,11 @@ jq -r '.username, .auth_data' credentials.json
 
 ## Notes
 
+- This app has no way of authentication, if you plan on exposing it, put a security layer on top of it (such as cloudflare tunnel, authelia or just leave it accessible only through a vpn)
 - Credentials are stored in plaintext - secure your installation
 - Downloaded files retain original metadata
 - Service limitations apply based on account types
+
+# Acknowledgements
+
+- This project is based on the amazing [deezspot library](https://github.com/jakiepari/deezspot), although their creators are in no way related with Spotizerr, they still deserve credit
