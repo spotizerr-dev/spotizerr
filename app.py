@@ -9,20 +9,24 @@ from routes.prgs import prgs_bp
 import logging
 import time
 from pathlib import Path
+import os
 
 def create_app():
     app = Flask(__name__)
     
     # Configure basic logging
+    log_file='flask_server.log'
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s',
         handlers=[
-            logging.FileHandler('flask_server.log'),
+            logging.FileHandler(log_file),
             logging.StreamHandler()
         ]
     )
     
+    os.chmod(log_file, 0o666)
+
     # Get Flask's logger
     logger = logging.getLogger('werkzeug')
     logger.setLevel(logging.INFO)
