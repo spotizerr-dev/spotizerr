@@ -1,23 +1,29 @@
 # Use an official Python runtime as a parent image
 FROM python:3.12-slim
 
+# Install system dependencies and gosu for user switching
+RUN apt-get update && apt-get install -y git ffmpeg gosu && \
+    rm -rf /var/lib/apt/lists/*
+
 # Set the working directory in the container
 WORKDIR /app
-
-# Install git
-RUN apt-get update && apt-get install -y git ffmpeg
 
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install any needed packages specified in requirements.txt
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the current directory contents into the container at /app
+# Copy application code
 COPY . .
 
-# Make port 5000 available to the world outside this container
+# Copy entrypoint script and make it executable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Expose the application port
 EXPOSE 7171
 
-# Run app.py when the container launches
+# Set entrypoint to handle user permission setup
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "app.py"]
