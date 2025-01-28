@@ -16,20 +16,30 @@ else
     if [ "${PUID}" -eq 0 ] && [ "${PGID}" -eq 0 ]; then
         exec "$@"
     else
-        # Create group if it doesn't exist
-        if ! getent group appgroup >/dev/null; then
-            groupadd -g "${PGID}" appgroup
+        # Check if the group with the specified GID already exists
+        if getent group "${PGID}" >/dev/null; then
+            # If the group exists, use its name instead of creating a new one
+            GROUP_NAME=$(getent group "${PGID}" | cut -d: -f1)
+        else
+            # If the group doesn't exist, create it
+            GROUP_NAME="appgroup"
+            groupadd -g "${PGID}" "${GROUP_NAME}"
         fi
 
-        # Create user if it doesn't exist
-        if ! id appuser >/dev/null 2>&1; then
-            useradd -u "${PUID}" -g appgroup -d /app appuser
+        # Check if the user with the specified UID already exists
+        if getent passwd "${PUID}" >/dev/null; then
+            # If the user exists, use its name instead of creating a new one
+            USER_NAME=$(getent passwd "${PUID}" | cut -d: -f1)
+        else
+            # If the user doesn't exist, create it
+            USER_NAME="appuser"
+            useradd -u "${PUID}" -g "${GROUP_NAME}" -d /app "${USER_NAME}"
         fi
 
         # Ensure proper permissions
-        chown -R appuser:appgroup /app
+        chown -R "${USER_NAME}:${GROUP_NAME}" /app
 
         # Run as specified user
-        exec gosu appuser "$@"
+        exec gosu "${USER_NAME}" "$@"
     fi
 fi
