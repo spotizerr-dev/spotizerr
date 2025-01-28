@@ -37,18 +37,7 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 mkdir spotizerr && cd spotizerr
 ```
 
-2. Create `docker-compose.yml`:
-```yaml
-name: spotizerr
-services:
-    spotizerr:
-        volumes:
-            - ./creds:/app/creds
-            - ./downloads:/app/downloads # <-- change for your music library dir
-        ports:
-            - 7171:7171
-        image: cooldockerizer93/spotizerr
-```
+2. Copy `docker-compose.yml` from this repo
 
 3. Launch container:
 ```bash
