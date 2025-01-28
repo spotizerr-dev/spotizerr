@@ -19,8 +19,7 @@ COPY . .
 
 # Copy entrypoint script and make it executable
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && \
-    dos2unix /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Expose the application port
 EXPOSE 7171
