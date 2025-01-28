@@ -2,7 +2,7 @@
 FROM python:3.12-slim
 
 # Install system dependencies and gosu for user switching
-RUN apt-get update && apt-get install -y git ffmpeg gosu && \
+RUN apt-get update && apt-get install -y git ffmpeg gosu bash && \
     rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container
@@ -19,7 +19,8 @@ COPY . .
 
 # Copy entrypoint script and make it executable
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && \
+    dos2unix /entrypoint.sh
 
 # Expose the application port
 EXPOSE 7171

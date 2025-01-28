@@ -1,4 +1,4 @@
-    #!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 # Check if both PUID and PGID are not set
