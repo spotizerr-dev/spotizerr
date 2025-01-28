@@ -74,20 +74,53 @@ Copy that value and paste it into the correspondant setting in Spotizerr
 
 First create a Spotify credentials file using the 3rd-party `librespot-auth` tool, this step has to be done in a PC/Laptop that has the Spotify desktop app installed.
 
-In a Terminal, run:
+---
+#### For Linux and Windows (using Docker)
+1. Clone the `librespot-auth` repository:  
+   ```shell
+   git clone --depth 1 https://github.com/dspearson/librespot-auth.git
+   ```
 
-```shell
-# Clone the librespot-auth repo
-git clone --depth 1 https://github.com/dspearson/librespot-auth.git
+2. Build the repository using the Rust Docker image:  
+   ```shell
+   docker run --rm -v "$(pwd)/librespot-auth":/app -w /app rust:latest cargo build --release
+   ```
 
-# Build the repo using a Rust Docker image
-docker run --rm -v "$(pwd)/librespot-auth":/app -w /app rust:latest cargo build --release
+3. Run the built binary:  
+   - **Linux**:  
+     ```shell
+     ./librespot-auth/target/release/librespot-auth --name "mySpotifyAccount1" --class=computer
+     ```
+   - **Windows**:  
+     ```shell
+     .\librespot-auth\target\release\librespot-auth.exe --name "mySpotifyAccount1" --class=computer
+     ```
 
-./librespot-auth/target/release/librespot-auth --name "mySpotifyAccount1" --class=computer
+---
 
-# For Windows, run this command instead:
-# .\librespot-auth\target\release\librespot-auth.exe --name "mySpotifyAccount1" --class=computer
-```
+#### For Apple Silicon (macOS)
+1. Clone the `librespot-auth` repository:  
+   ```shell
+   git clone --depth 1 https://github.com/dspearson/librespot-auth.git
+   ```
+
+2. Install Rust using Homebrew:  
+   ```shell
+   brew install rustup
+   brew install rust
+   ```
+
+3. Build `librespot-auth` for Apple Silicon:  
+   ```shell
+   cd librespot-auth
+   cargo build --target=aarch64-apple-darwin --release
+   ```
+
+4. Run the built binary:  
+   ```shell
+   ./target/aarch64-apple-darwin/release/librespot-auth --name "mySpotifyAccount1" --class=computer
+   ```
+---
 
 - Now open the Spotify app
 - Click on the "Connect to a device" icon
