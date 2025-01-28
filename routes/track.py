@@ -5,7 +5,7 @@ import random
 import string
 import sys
 import traceback
-from multiprocessing import Process  # Changed from threading import Thread
+from multiprocessing import Process
 
 track_bp = Blueprint('track', __name__)
 
@@ -18,13 +18,14 @@ class FlushingFileWrapper:
         self.file = file
 
     def write(self, text):
-        self.file.write(text)
+        for line in text.split('\n'):
+            if line.startswith('{'):
+                self.file.write(line + '\n')
         self.file.flush()
 
     def flush(self):
         self.file.flush()
 
-# Moved download_task to top-level for multiprocessing compatibility
 def download_task(service, url, main, fallback, prg_path):
     try:
         from routes.utils.track import download_track
@@ -78,7 +79,6 @@ def handle_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
     
-    # Start a new process with required arguments
     Process(
         target=download_task,
         args=(service, url, main, fallback, prg_path)

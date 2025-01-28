@@ -5,11 +5,9 @@ import random
 import string
 import sys
 import traceback
-from multiprocessing import Process  # Changed from Thread to Process
+from multiprocessing import Process
 
 playlist_bp = Blueprint('playlist', __name__)
-
-# Removed thread-local stdout setup since we're using process isolation
 
 def generate_random_filename(length=6):
     chars = string.ascii_lowercase + string.digits
@@ -20,13 +18,14 @@ class FlushingFileWrapper:
         self.file = file
 
     def write(self, text):
-        self.file.write(text)
+        for line in text.split('\n'):
+            if line.startswith('{'):
+                self.file.write(line + '\n')
         self.file.flush()
 
     def flush(self):
         self.file.flush()
 
-# Moved download_task to top-level for picklability
 def download_task(service, url, main, fallback, prg_path):
     try:
         from routes.utils.playlist import download_playlist
@@ -53,7 +52,6 @@ def download_task(service, url, main, fallback, prg_path):
             finally:
                 sys.stdout = original_stdout  # Restore original stdout
     except Exception as e:
-        # Handle exceptions outside the main logic
         with open(prg_path, 'w') as f:
             error_data = json.dumps({
                 "status": "error",
@@ -81,7 +79,6 @@ def handle_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
     
-    # Start a new process with required arguments
     Process(
         target=download_task,
         args=(service, url, main, fallback, prg_path)
