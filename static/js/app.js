@@ -192,7 +192,7 @@ function performSearch() {
     // Existing search functionality
     resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
     
-    fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=${searchType}&limit=30`)
+    fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=${searchType}&limit=50`)
         .then(response => response.json())
         .then(data => {
             if (data.error) throw new Error(data.error);
