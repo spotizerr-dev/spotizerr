@@ -159,6 +159,11 @@ jq -r '.username, .auth_data' credentials.json
 
 ## Notes
 
+- This app has no way of authentication, if you plan on exposing it, put a security layer on top of it (such as cloudflare tunnel, authelia or just leave it accessible only through a vpn)
 - Credentials are stored in plaintext - secure your installation
 - Downloaded files retain original metadata
 - Service limitations apply based on account types
+
+# Acknowledgements
+
+- This project is based on the amazing [deezspot library](https://github.com/jakiepari/deezspot), although their creators are in no way related with Spotizerr, they still deserve credit
