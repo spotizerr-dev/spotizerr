@@ -1,9 +1,13 @@
 name: spotizerr
+
 services:
-    spotizerr:
-        volumes:
-            - ./creds:/app/creds
-            - ./downloads:/app/downloads # <-- Change this for your music library dir
-        ports:
-            - 7171:7171
-        image: cooldockerizer93/spotizerr
+  spotizerr:
+    volumes:
+      - ./creds:/app/creds
+      - ./downloads:/app/downloads  # <-- Change this for your music library dir
+    ports:
+      - 7171:7171
+    image: cooldockerizer93/spotizerr
+    environment:
+      - PUID=1000  # Replace with your desired user ID  | Remove both if you want to run as root (not recommended, might result in unreadable files)
+      - PGID=1000  # Replace with your desired group ID | 
