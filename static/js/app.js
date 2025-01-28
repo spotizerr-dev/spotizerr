@@ -617,6 +617,8 @@ function getStatusMessage(data) {
             return `Finished: ${data.song} by ${data.artist}`;
         case 'initializing':
             return `Initializing ${data.type} download for ${data.album || data.artist}...`;
+        case 'retrying':
+            return `Track ${data.song} by ${data.artist} failed, retrying (${data.retries}/${data.max_retries}) in ${data.seconds_left}s`;
         case 'error':
             return `Error: ${data.message || 'Unknown error'}`;
         case 'complete':
