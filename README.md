@@ -58,7 +58,9 @@ _Note: If you want Spotify-only mode, just keep "Download fallback" setting disa
 
 ### Deezer ARL Setup
 
-In a chrome-based browser, open the [web player](https://www.deezer.com/)
+#### Chrome-based browsers
+
+Open the [web player](https://www.deezer.com/)
 
 There, press F12 and select "Application"
 
@@ -69,6 +71,21 @@ Expand Cookies section and select the "https://www.deezer.com". Find the "arl" c
 ![image](https://github.com/user-attachments/assets/75a67906-596e-42a0-beb0-540f2748b16e)
 
 Copy that value and paste it into the correspondant setting in Spotizerr
+
+#### Firefox-based browsers
+
+Open the [web player](https://www.deezer.com/)
+
+There, press F12 and select "Storage"
+
+![image](https://github.com/user-attachments/assets/601be3fb-1ec9-44d9-be4f-28b1d853df2f)
+
+Click the cookies host "https://www.deezer.com" and find the "arl" cookie.
+
+![image](https://github.com/user-attachments/assets/ef8ea256-2c13-4780-ae9f-71527466df56)
+
+Copy that value and paste it into the correspondant setting in Spotizerr
+
 
 ### Spotify Credentials Setup
 
