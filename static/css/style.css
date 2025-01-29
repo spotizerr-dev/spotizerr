@@ -1,3 +1,5 @@
+/* GENERAL STYLING */
+
 * {
     margin: 0;
     padding: 0;
@@ -17,9 +19,12 @@ body {
     padding: 20px;
 }
 
+/* SEARCH AREA */
+
 .search-header {
     display: flex;
-    gap: 15px;
+    align-items: center;
+    gap: 10px;
     margin-bottom: 30px;
     position: sticky;
     top: 0;
@@ -61,6 +66,8 @@ body {
 .search-button:hover {
     background-color: #1ed760;
 }
+
+/* RESULTS GRID */
 
 .results-grid {
     display: grid;
@@ -128,32 +135,66 @@ body {
     padding: 20px;
 }
 
-/* Add to your CSS file */
+/* SETTINGS ICON */
+
 .settings-icon {
-    position: fixed;
-    top: 20px;
-    left: 20px;
+    position: static;
+    order: -1;
+    margin-right: 15px;
+    font-size: 22px;
     background: none;
     border: none;
     color: #ffffff;
-    font-size: 24px;
     cursor: pointer;
     z-index: 1000;
     transition: transform 0.3s;
 }
 
+.settings-icon img,
+.queue-icon img {
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  filter: invert(1);
+}
+
+.settings-icon:hover img,
+.queue-icon:hover img {
+  opacity: 0.8;
+}
+
+/* SIDEBAR */
+
 .sidebar {
     position: fixed;
     top: 0;
-    left: -350px;
     width: 350px;
     height: 100vh;
     background: #181818;
     padding: 20px;
-    transition: left 0.3s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1001;
     overflow-y: auto;
-    color: #ffffff;
+    box-shadow: 0 0 15px rgba(0,0,0,0.3);
+}
+
+#settingsSidebar {
+    left: -350px;
+}
+
+#settingsSidebar.active {
+    left: 0;
+    box-shadow: 20px 0 30px rgba(0,0,0,0.4);
+}
+
+#downloadQueue {
+    right: -350px;
+    left: auto;
+}
+
+#downloadQueue.active {
+    right: 0;
+    box-shadow: -20px 0 30px rgba(0,0,0,0.4);
 }
 
 .sidebar.active {
@@ -175,6 +216,8 @@ body {
     cursor: pointer;
 }
 
+/* SERVICE TABS */
+
 .service-tabs {
     display: flex;
     gap: 10px;
@@ -193,6 +236,8 @@ body {
 .tab-button.active {
     background: #1DB954;
 }
+
+/* CREDENTIALS LIST */
 
 .credentials-list {
     margin-bottom: 20px;
@@ -226,6 +271,8 @@ body {
     color: white;
 }
 
+/* FORM STYLES */
+
 .form-group {
     margin-bottom: 15px;
 }
@@ -236,6 +283,7 @@ body {
 }
 
 .form-group input,
+.form-group select,
 .form-group textarea {
     width: 100%;
     padding: 8px;
@@ -243,6 +291,17 @@ body {
     border: none;
     background: #2a2a2a;
     color: white;
+}
+
+.form-group select {
+    padding-right: 25px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M5 6L0 0h10z' fill='%23fff'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 10px 6px;
 }
 
 .save-btn {
@@ -255,18 +314,8 @@ body {
     width: 100%;
 }
 
-.deezer-field {
-    display: none;
-}
+/* CONFIG BAR */
 
-.service-tabs {
-    margin-bottom: 20px;
-}
-
-.service-tabs button.active {
-    background: #1DB954;
-}
-/* Add to style.css */
 .config-bar {
     position: fixed;
     top: 20px;
@@ -285,6 +334,8 @@ body {
     display: block;
     margin-bottom: 5px;
 }
+
+/* TOGGLE SWITCH */
 
 .switch {
     position: relative;
@@ -331,54 +382,22 @@ input:checked + .slider:before {
     transform: translateX(20px);
 }
 
-.queue-btn {
-    background: #1DB954;
-    color: white;
+/* DOWNLOAD QUEUE */
+
+.queue-icon {
+    position: static;
+    order: 2;
+    margin-left: 15px;
+    font-size: 22px;
+    background: none;
     border: none;
-    padding: 8px 15px;
-    border-radius: 20px;
+    color: white;
     cursor: pointer;
+    z-index: 1000;
 }
-
-.sidebar.right {
-    right: -350px;
-    left: auto;
-}
-
-.sidebar.right.active {
-    right: 0;
-}
-
-.queue-item {
-    background: #2a2a2a;
-    padding: 10px;
-    margin: 10px 0;
-    border-radius: 5px;
-}
-
-.queue-item .log {
-    font-family: monospace;
-    font-size: 12px;
-    color: #b3b3b3;
-    margin-top: 5px;
-}
-/* Add these styles to your existing CSS */
-
-#downloadQueue.sidebar {
-    position: fixed;
-    top: 0;
-    right: -350px;
-    width: 350px;
-    height: 100vh;
-    background: #181818;
-    padding: 20px;
-    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1001;
-    box-shadow: -20px 0 30px rgba(0,0,0,0.4);
-}
-
-#downloadQueue.sidebar.active {
-    right: 0;
+  
+.queue-icon:hover {
+    color: #1DB954;
 }
 
 .queue-header {
@@ -394,16 +413,6 @@ input:checked + .slider:before {
     font-size: 1.25rem;
     font-weight: 600;
     color: #fff;
-}
-
-.queue-item .title {
-    font-size: 14px;
-    color: #fff;
-}
-
-.queue-item .log {
-    font-size: 12px;
-    color: #b3b3b3;
 }
 
 .queue-close {
@@ -424,19 +433,6 @@ input:checked + .slider:before {
 #queueItems {
     max-height: 60vh;
     overflow-y: auto;
-}
-
-#queueItems::-webkit-scrollbar {
-    width: 6px;
-}
-
-#queueItems::-webkit-scrollbar-track {
-    background: #181818;
-}
-
-#queueItems::-webkit-scrollbar-thumb {
-    background: #2a2a2a;
-    border-radius: 3px;
 }
 
 .queue-item {
@@ -474,13 +470,15 @@ input:checked + .slider:before {
     font-family: 'SF Mono', Menlo, monospace;
 }
 
-/* Status message colors */
+/* STATUS MESSAGE COLORS */
+
 .log--success { color: #1DB954 !important; }
 .log--error { color: #ff5555 !important; }
 .log--warning { color: #ffaa00 !important; }
 .log--info { color: #4a90e2 !important; }
 
-/* Progress animation */
+/* PROGRESS ANIMATION */
+
 @keyframes progress-pulse {
     0% { opacity: 0.5; }
     50% { opacity: 1; }
@@ -493,7 +491,8 @@ input:checked + .slider:before {
     animation: progress-pulse 1.5s infinite;
 }
 
-/* Enhanced loading states */
+/* LOADING SPINNER */
+
 .loading-spinner {
     display: inline-block;
     width: 16px;
@@ -508,7 +507,8 @@ input:checked + .slider:before {
     to { transform: rotate(360deg); }
 }
 
-/* Timeout warning */
+/* TIMEOUT WARNING */
+
 .timeout-warning {
     position: relative;
     padding-left: 24px;
@@ -522,48 +522,8 @@ input:checked + .slider:before {
     transform: translateY(-50%);
 }
 
-/* Form enhancements */
-#credentialForm {
-    margin-top: 20px;
-}
+/* STATUS BAR ANIMATIONS */
 
-#credentialName {
-    margin-bottom: 15px;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .container {
-        padding: 15px;
-    }
-
-    .search-header {
-        flex-direction: column;
-    }
-
-    .search-input,
-    .search-type,
-    .search-button {
-        width: 100%;
-    }
-
-    #downloadQueue {
-        width: 90%;
-        right: 5%;
-        top: 70px;
-    }
-
-    .sidebar {
-        width: 100%;
-        left: -100%;
-    }
-
-    .sidebar.active {
-        left: 0;
-    }
-}
-
-/* Status bar animations */
 .status-bar {
     height: 3px;
     background: #1DB954;
@@ -572,7 +532,8 @@ input:checked + .slider:before {
     margin-top: 8px;
 }
 
-/* Error traceback styling */
+/* ERROR TRACEBACK STYLING */
+
 .traceback {
     background: #2a2a2a;
     padding: 10px;
@@ -585,7 +546,8 @@ input:checked + .slider:before {
     overflow-y: auto;
 }
 
-/* Queue item states */
+/* QUEUE ITEM STATES */
+
 .queue-item--complete {
     border-left: 4px solid #1DB954;
 }
@@ -598,19 +560,16 @@ input:checked + .slider:before {
     border-left: 4px solid #4a90e2;
 }
 
-/* Progress percentage styling */
+/* PROGRESS PERCENTAGE STYLING */
+
 .progress-percent {
     float: right;
     font-weight: bold;
     color: #1DB954;
 }
 
-/* Hover tooltip for long messages */
-.queue-item .log {
-    position: relative;
-}
+/* DOWNLOAD BUTTON */
 
-/* Download button styling */
 .download-btn {
     background-color: #1DB954;
     color: white;
@@ -645,7 +604,8 @@ input:checked + .slider:before {
     font-size: 16px;
 }
 
-/* Select dropdown styling */
+/* ACCOUNT SELECTORS */
+
 #spotifyAccountSelect,
 #deezerAccountSelect {
     background: #2a2a2a;
@@ -673,7 +633,6 @@ input:checked + .slider:before {
     box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
 }
 
-/* Style the dropdown options */
 #spotifyAccountSelect option,
 #deezerAccountSelect option {
     background: #181818;
@@ -681,344 +640,23 @@ input:checked + .slider:before {
     padding: 10px;
 }
 
-/* Hover state for options (limited browser support) */
 #spotifyAccountSelect option:hover,
 #deezerAccountSelect option:hover {
     background: #1DB954;
 }
 
-/* Disabled state styling */
 #spotifyAccountSelect:disabled,
 #deezerAccountSelect:disabled {
     opacity: 0.6;
     cursor: not-allowed;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    #spotifyAccountSelect,
-    #deezerAccountSelect {
-        font-size: 16px;
-        padding: 12px 20px;
-    }
-    
-    .download-btn {
-        padding: 10px 20px;
-        font-size: 16px;
-    }
-}
-
-/* Add queue icon styling */
-.queue-icon {
-    position: fixed;
-    top: 20px;
-    right: 70px; /* Adjust based on settings icon position */
-    background: none;
-    border: none;
-    color: white;
-    font-size: 1.5em;
-    cursor: pointer;
-    z-index: 1000;
-  }
-  
-  .queue-icon:hover {
-    color: #1DB954;
-  }
-  
-  /* Keep the existing queue sidebar styles */
-  #downloadQueue {
-    /* existing styles */
-    right: -350px;
-    transition: right 0.3s;
-  }
-  
-  #downloadQueue.active {
-    right: 0;
-  }
-
-  /* Mobile-First Enhancements */
-@media screen and (max-width: 768px) {
-    /* Viewport-friendly base sizing */
-    html {
-        font-size: 14px;
-    }
-
-    /* Container adjustments */
-    .container {
-        padding: 10px;
-        max-width: 100%;
-    }
-
-    /* Stack search elements vertically */
-    .search-header {
-        flex-direction: column;
-        gap: 10px;
-        padding: 15px 0;
-        position: relative;
-        top: auto;
-    }
-
-    /* Improve touch targets */
-    .search-input,
-    .search-type,
-    .search-button {
-        width: 100%;
-        padding: 15px 20px;
-        font-size: 1rem;
-    }
-
-    /* Adjust grid layout for smaller screens */
-    .results-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 15px;
-    }
-
-    /* Optimize card content spacing */
-    .result-card {
-        padding: 12px;
-    }
-
-    .track-title {
-        font-size: 14px;
-    }
-
-    .track-artist {
-        font-size: 12px;
-    }
-
-    /* Mobile-friendly sidebar */
-    .sidebar {
-        width: 100%;
-        left: -100%;
-    }
-
-    .sidebar.active {
-        left: 0;
-    }
-
-    /* Queue positioning adjustments */
-    #downloadQueue {
-        width: 95%;
-        right: 2.5%;
-        top: 60px;
-    }
-
-    /* Icon positioning */
-    .settings-icon {
-        top: 15px;
-        left: 15px;
-    }
-
-    .queue-icon {
-        top: 15px;
-        right: 15px;
-    }
-
-    /* Form element adjustments */
-    .form-group input,
-    .form-group textarea {
-        padding: 12px;
-    }
-}
-
-/* Additional Mobile Optimizations */
-@media screen and (max-width: 480px) {
-    /* Further reduce grid item size */
-    .results-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    /* Increase body text contrast */
-    body {
-        font-size: 16px;
-    }
-
-    /* Enhance tap target sizing */
-    button,
-    .result-card {
-        min-height: 48px;
-    }
-
-    /* Prevent text overflow */
-    .track-title,
-    .track-artist {
-        white-space: normal;
-        overflow: visible;
-        text-overflow: clip;
-    }
-}
-
-/* Input element mobile optimization */
-input,
-select,
-textarea {
-    font-size: 16px !important; /* Prevent iOS zoom */
-}
-
-/* Touch interaction improvements */
-button {
-    touch-action: manipulation;
-}
-
-.result-card {
-    -webkit-tap-highlight-color: transparent;
-}
-
-/* Prevent layout shift on scrollbar appearance */
-html {
-    overflow-y: scroll;
-}
-
-/* Modified Button Positioning */
-.settings-icon {
-    position: static; /* Remove fixed positioning */
-    order: -1; /* Move to start of flex container */
-    margin-right: 15px;
-    font-size: 22px;
-}
-
-.queue-icon {
-    position: static; /* Remove fixed positioning */
-    order: 2; /* Place after search button */
-    margin-left: 15px;
-    font-size: 22px;
-}
-
-/* Updated Search Header */
-.search-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 30px;
-    position: sticky;
-    top: 0;
-    background-color: #121212;
-    padding: 20px 0;
-    z-index: 100;
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    .search-header {
-        flex-wrap: wrap;
-        gap: 12px;
-        padding: 15px 0;
-    }
-
-    .settings-icon,
-    .queue-icon {
-        margin: 0;
-        order: 0; /* Reset order for mobile */
-        font-size: 24px;
-    }
-
-    .search-input,
-    .search-type {
-        order: 1;
-        width: 100%;
-    }
-
-    .search-button {
-        order: 2;
-        width: 100%;
-    }
-
-    .queue-icon {
-        order: 3;
-        margin-left: auto;
-    }
-}
-
-/* Existing queue icon styles remain the same */
-.queue-icon:hover {
-    color: #1DB954;
-}
-
-/* Updated Sidebar Animations */
-.sidebar {
-    position: fixed;
-    top: 0;
-    width: 350px;
-    height: 100vh;
-    background: #181818;
-    padding: 20px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 1001;
-    overflow-y: auto;
-    box-shadow: 0 0 15px rgba(0,0,0,0.3);
-}
-
-/* Settings Sidebar Specific */
-#settingsSidebar {
-    left: -350px;
-}
-
-#settingsSidebar.active {
-    left: 0;
-    box-shadow: 20px 0 30px rgba(0,0,0,0.4);
-}
-
-/* Download Queue Specific */
-#downloadQueue {
-    right: -350px;
-    left: auto;
-}
-
-#downloadQueue.active {
-    right: 0;
-    box-shadow: -20px 0 30px rgba(0,0,0,0.4);
-}
-
-/* Enhanced Transition Effects */
-.sidebar {
-    transition: 
-        left 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        box-shadow 0.3s ease;
-}
-
-/* Queue Item Animations */
-.queue-item {
-    transition: 
-        opacity 0.3s ease,
-        background-color 0.3s ease;
-    opacity: 1;
-}
-
-.queue-item.entering {
-    opacity: 0;
-    transform: translateX(20px);
-}
-
-.queue-item.exiting {
-    opacity: 0;
-    transform: translateX(-20px);
-}
-
-/* Mobile Responsiveness Adjustments */
-@media (max-width: 768px) {
-    .sidebar {
-        width: 100%;
-        box-shadow: none;
-    }
-    
-    #settingsSidebar {
-        left: -100%;
-    }
-    
-    #downloadQueue {
-        right: -100%;
-    }
-    
-    .sidebar.active {
-        box-shadow: 0 0 30px rgba(0,0,0,0.4);
-    }
-}
+/* RETRY AND CLOSE BUTTONS */
 
 .retry-btn {
     padding: 4px 12px;
     margin: 0 8px;
-    background-color: #4CAF50; /* Green color for positive action */
+    background-color: #4CAF50;
     color: white;
     border: none;
     border-radius: 4px;
@@ -1028,7 +666,7 @@ html {
 }
 
 .retry-btn:hover {
-    background-color: #45a049; /* Darker green on hover */
+    background-color: #45a049;
 }
 
 .retry-btn:active {
@@ -1036,18 +674,17 @@ html {
     transform: translateY(1px);
 }
 
-/* Close button with matching size */
 .close-btn {
-    padding: 4px 12px; /* Match the retry button's padding */
-    margin: 0 8px; /* Match the retry button's margin */
+    padding: 4px 12px;
+    margin: 0 8px;
     background-color: #ff4444;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 0.9em; /* Match the retry button's font size */
+    font-size: 0.9em;
     transition: background-color 0.3s ease;
-    line-height: 1; /* Ensure the "×" is vertically centered */
+    line-height: 1;
 }
 
 .close-btn:hover {
@@ -1059,21 +696,8 @@ html {
     transform: translateY(1px);
 }
 
-.settings-icon img,
-.queue-icon img {
-  width: 24px;
-  height: 24px;
-  vertical-align: middle;
-  filter: invert(1); /* Makes icons white */
-}
+/* SCROLLBAR STYLING */
 
-/* Optional: Add hover effects */
-.settings-icon:hover img,
-.queue-icon:hover img {
-  opacity: 0.8;
-}
-
-/* Global Scrollbar Styles */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -1094,13 +718,11 @@ html {
     background: #3a3a3a;
 }
 
-/* Firefox Support */
 * {
     scrollbar-width: thin;
     scrollbar-color: #2a2a2a #181818;
 }
 
-/* Sidebar Specific Scrollbars */
 .sidebar::-webkit-scrollbar {
     width: 8px;
 }
@@ -1109,7 +731,6 @@ html {
     border-width: 1px;
 }
 
-/* Queue Items Scrollbar */
 #queueItems::-webkit-scrollbar {
     width: 6px;
 }
@@ -1118,17 +739,235 @@ html {
     background: #3a3a3a;
 }
 
-/* Results Container Scrollbar */
 .results-container::-webkit-scrollbar {
     width: 8px;
 }
 
-/* Smooth Scroll Behavior */
 html {
     scroll-behavior: smooth;
 }
 
-/* Scrollbar Corner */
 ::-webkit-scrollbar-corner {
     background: #121212;
+}
+
+/* MOBILE RESPONSIVENESS */
+
+@media (max-width: 768px) {
+    html {
+        font-size: 14px;
+    }
+
+    .container {
+        padding: 15px;
+    }
+
+    .search-header {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 15px 0;
+    }
+
+    .settings-icon,
+    .queue-icon {
+        margin: 0;
+        order: 0;
+        font-size: 24px;
+    }
+
+    .search-input,
+    .search-type {
+        order: 1;
+        width: 100%;
+    }
+
+    .search-button {
+        order: 2;
+        width: 100%;
+    }
+
+    .queue-icon {
+        order: 3;
+        margin-left: auto;
+    }
+
+    .results-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 15px;
+    }
+
+    .result-card {
+        padding: 12px;
+    }
+
+    .track-title {
+        font-size: 14px;
+    }
+
+    .track-artist {
+        font-size: 12px;
+    }
+
+    .sidebar {
+        width: 100%;
+        left: -100%;
+    }
+    
+    #settingsSidebar {
+        left: -100%;
+    }
+
+    #downloadQueue {
+        right: -100%;
+        top: 70px;
+    }
+
+    .sidebar.active {
+        left: 0;
+    }
+
+    #downloadQueue {
+        width: 90%;
+        right: 5%;
+        top: 70px;
+    }
+
+    .settings-icon {
+        top: 15px;
+        left: 15px;
+    }
+
+    .queue-icon {
+        top: 15px;
+        right: 15px;
+    }
+
+    .form-group input,
+    .form-group textarea {
+        padding: 12px;
+    }
+
+    .sidebar {
+        width: 100%;
+        box-shadow: none;
+    }
+    
+    #settingsSidebar {
+        left: -100%;
+    }
+    
+    #downloadQueue {
+        right: -100%;
+    }
+    
+    .sidebar.active {
+        box-shadow: 0 0 30px rgba(0,0,0,0.4);
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .results-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    body {
+        font-size: 16px;
+    }
+
+    button,
+    .result-card {
+        min-height: 48px;
+    }
+
+    .track-title,
+    .track-artist {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+}
+
+input,
+select,
+textarea {
+    font-size: 16px !important;
+}
+
+button {
+    touch-action: manipulation;
+}
+
+.result-card {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html {
+    overflow-y: scroll;
+}
+
+/* Add to existing form styles */
+.config-item {
+    margin-bottom: 1.5rem;
+}
+
+.config-item label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #b3b3b3;
+    font-size: 0.9rem;
+}
+
+/* Quality selectors - match account select style */
+#spotifyQualitySelect,
+#deezerQualitySelect {
+    background: #2a2a2a;
+    color: white;
+    border: 1px solid #404040;
+    border-radius: 8px;
+    padding: 10px 15px;
+    font-size: 14px;
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    transition: all 0.3s ease;
+}
+
+#spotifyQualitySelect:focus,
+#deezerQualitySelect:focus {
+    outline: none;
+    border-color: #1DB954;
+    box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
+}
+
+/* Quality options styling */
+#spotifyQualitySelect option,
+#deezerQualitySelect option {
+    background: #181818;
+    color: white;
+    padding: 10px;
+}
+
+/* Config group spacing */
+.account-config {
+    display: grid;
+    gap: 1.2rem;
+    margin-bottom: 2rem;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .config-item {
+        margin-bottom: 1rem;
+    }
+    
+    #spotifyQualitySelect,
+    #deezerQualitySelect {
+        padding: 12px;
+        font-size: 15px;
+    }
 }

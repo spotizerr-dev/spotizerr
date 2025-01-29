@@ -4,10 +4,15 @@ import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 
-def download_playlist(service, url, main, fallback=None):
+def download_playlist(service, url, main, fallback=None, quality=None, fall_quality=None):
     try:
+
         if service == 'spotify':
             if fallback:
+                if quality is None:
+                    quality = 'FLAC'
+                if fall_quality is None:
+                    fall_quality='HIGH'
                 # First attempt: use DeeLogin's download_playlistspo with the 'main' (Deezer credentials)
                 try:
                     # Load Deezer credentials from 'main' under deezer directory
@@ -23,7 +28,7 @@ def download_playlist(service, url, main, fallback=None):
                     dl.download_playlistspo(
                         link_playlist=url,
                         output_dir="./downloads",
-                        quality_download="FLAC",
+                        quality_download=quality,
                         recursive_quality=True,
                         recursive_download=False,
                         not_interface=False,
@@ -39,7 +44,7 @@ def download_playlist(service, url, main, fallback=None):
                         spo.download_playlist(
                             link_playlist=url,
                             output_dir="./downloads",
-                            quality_download="HIGH",
+                            quality_download=fall_quality,
                             recursive_quality=True,
                             recursive_download=False,
                             not_interface=False,
@@ -54,13 +59,15 @@ def download_playlist(service, url, main, fallback=None):
                         ) from e2
             else:
                 # Original behavior: use Spotify main
+                if quality is None:
+                    quality='HIGH'
                 creds_dir = os.path.join('./creds/spotify', main)
                 credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
                 spo = SpoLogin(credentials_path=credentials_path)
                 spo.download_playlist(
                     link_playlist=url,
                     output_dir="./downloads",
-                    quality_download="HIGH",
+                    quality_download=quality,
                     recursive_quality=True,
                     recursive_download=False,
                     not_interface=False,
@@ -68,6 +75,8 @@ def download_playlist(service, url, main, fallback=None):
                     make_zip=False
                 )
         elif service == 'deezer':
+            if quality is None:
+                quality='FLAC'
             # Existing code for Deezer, using main as Deezer account
             creds_dir = os.path.join('./creds/deezer', main)
             creds_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
@@ -79,7 +88,7 @@ def download_playlist(service, url, main, fallback=None):
             dl.download_playlistdee(
                 link_playlist=url,
                 output_dir="./downloads",
-                quality_download="FLAC",
+                quality_download=quality,
                 recursive_quality=False,
                 recursive_download=False,
                 method_save=1,

@@ -76,23 +76,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initConfig() {
     loadConfig();
-    console.log(loadConfig())
     await updateAccountSelectors();
     
-    // Event listeners
-    document.getElementById('fallbackToggle').addEventListener('change', () => {
-        saveConfig();
-        updateAccountSelectors();
-    });
-    
-    const accountSelects = ['spotifyAccountSelect', 'deezerAccountSelect'];
-    accountSelects.forEach(id => {
-        document.getElementById(id).addEventListener('change', () => {
+    // Existing listeners
+    const fallbackToggle = document.getElementById('fallbackToggle');
+    if (fallbackToggle) {
+        fallbackToggle.addEventListener('change', () => {
             saveConfig();
             updateAccountSelectors();
         });
+    }
+    
+    const accountSelects = ['spotifyAccountSelect', 'deezerAccountSelect'];
+    accountSelects.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', () => {
+                saveConfig();
+                updateAccountSelectors();
+            });
+        }
     });
+
+    // Add quality select listeners with null checks
+    const spotifyQuality = document.getElementById('spotifyQualitySelect');
+    if (spotifyQuality) {
+        spotifyQuality.addEventListener('change', saveConfig);
+    }
+    
+    const deezerQuality = document.getElementById('deezerQualitySelect');
+    if (deezerQuality) {
+        deezerQuality.addEventListener('change', saveConfig);
+    }
 }
+  
 
 async function updateAccountSelectors() {
     try {
@@ -273,23 +290,43 @@ async function startDownload(url, type, item) {
     const spotifyAccount = document.getElementById('spotifyAccountSelect').value;
     const deezerAccount = document.getElementById('deezerAccountSelect').value;
     
-    let apiUrl = `/api/${type}/download?service=spotify&url=${encodeURIComponent(url)}`;
-    
-    if (fallbackEnabled) {
-        apiUrl += `&main=${deezerAccount}&fallback=${spotifyAccount}`;
+    // Determine service from URL
+    let service;
+    if (url.includes('open.spotify.com')) {
+      service = 'spotify';
+    } else if (url.includes('deezer.com')) {
+      service = 'deezer';
     } else {
-        apiUrl += `&main=${spotifyAccount}`;
+      showError('Unsupported service URL');
+      return;
     }
-
+  
+    let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
+    
+    // Get quality settings
+    const spotifyQuality = document.getElementById('spotifyQualitySelect').value;
+    const deezerQuality = document.getElementById('deezerQualitySelect').value;
+  
+    if (fallbackEnabled && service === 'spotify') {
+      // Deezer fallback for Spotify URLs
+      apiUrl += `&main=${deezerAccount}&fallback=${spotifyAccount}`;
+      apiUrl += `&quality=${encodeURIComponent(deezerQuality)}`;
+      apiUrl += `&fall_quality=${encodeURIComponent(spotifyQuality)}`;
+    } else {
+      // Standard download without fallback
+      const mainAccount = service === 'spotify' ? spotifyAccount : deezerAccount;
+      apiUrl += `&main=${mainAccount}`;
+      apiUrl += `&quality=${encodeURIComponent(service === 'spotify' ? spotifyQuality : deezerQuality)}`;
+    }
+  
     try {
-        const response = await fetch(apiUrl);
-        const data = await response.json();
-        
-        addToQueue(item, type, data.prg_file);
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      addToQueue(item, type, data.prg_file);
     } catch (error) {
-        showError('Download failed: ' + error.message);
+      showError('Download failed: ' + error.message);
     }
-}
+  }
 
 function addToQueue(item, type, prgFile) {
     const queueId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -630,9 +667,11 @@ function getStatusMessage(data) {
 
 function saveConfig() {
     const config = {
-        spotify: document.getElementById('spotifyAccountSelect').value,
-        deezer: document.getElementById('deezerAccountSelect').value,
-        fallback: document.getElementById('fallbackToggle').checked
+      spotify: document.getElementById('spotifyAccountSelect').value,
+      deezer: document.getElementById('deezerAccountSelect').value,
+      fallback: document.getElementById('fallbackToggle').checked,
+      spotifyQuality: document.getElementById('spotifyQualitySelect').value,
+      deezerQuality: document.getElementById('deezerQualitySelect').value
     };
     localStorage.setItem('activeConfig', JSON.stringify(config));
 }
@@ -641,16 +680,24 @@ function saveConfig() {
 function loadConfig() {
     const saved = JSON.parse(localStorage.getItem('activeConfig')) || {};
     
-    // Set values only if they exist in the DOM
+    // Account selects
     const spotifySelect = document.getElementById('spotifyAccountSelect');
-    const deezerSelect = document.getElementById('deezerAccountSelect');
-    
     if (spotifySelect) spotifySelect.value = saved.spotify || '';
+    
+    const deezerSelect = document.getElementById('deezerAccountSelect');
     if (deezerSelect) deezerSelect.value = saved.deezer || '';
     
+    // Fallback toggle
     const fallbackToggle = document.getElementById('fallbackToggle');
     if (fallbackToggle) fallbackToggle.checked = !!saved.fallback;
-}
+    
+    // Quality selects
+    const spotifyQuality = document.getElementById('spotifyQualitySelect');
+    if (spotifyQuality) spotifyQuality.value = saved.spotifyQuality || 'NORMAL';
+    
+    const deezerQuality = document.getElementById('deezerQualitySelect');
+    if (deezerQuality) deezerQuality.value = saved.deezerQuality || 'MP3_128';
+}  
 
 function isSpotifyUrl(url) {
     return url.startsWith('https://open.spotify.com/');

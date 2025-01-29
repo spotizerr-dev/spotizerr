@@ -4,10 +4,15 @@ import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 
-def download_track(service, url, main, fallback=None):
+def download_track(service, url, main, fallback=None, quality=None, fall_quality=None):
     try:
+
         if service == 'spotify':
             if fallback:
+                if quality is None:
+                    quality = 'FLAC'
+                if fall_quality is None:
+                    fall_quality='HIGH'
                 # First attempt: use Deezer's download_trackspo with 'main' (Deezer credentials)
                 try:
                     deezer_creds_dir = os.path.join('./creds/deezer', main)
@@ -20,7 +25,7 @@ def download_track(service, url, main, fallback=None):
                     dl.download_trackspo(
                         link_track=url,
                         output_dir="./downloads",
-                        quality_download="FLAC",
+                        quality_download=quality,
                         recursive_quality=False,
                         recursive_download=False,
                         not_interface=False,
@@ -33,7 +38,7 @@ def download_track(service, url, main, fallback=None):
                     spo.download_track(
                         link_track=url,
                         output_dir="./downloads",
-                        quality_download="HIGH",
+                        quality_download=fall_quality,
                         recursive_quality=False,
                         recursive_download=False,
                         not_interface=False,
@@ -41,19 +46,23 @@ def download_track(service, url, main, fallback=None):
                     )
             else:
                 # Directly use Spotify main account
+                if quality is None:
+                    quality='HIGH'
                 creds_dir = os.path.join('./creds/spotify', main)
                 credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
                 spo = SpoLogin(credentials_path=credentials_path)
                 spo.download_track(
                     link_track=url,
                     output_dir="./downloads",
-                    quality_download="HIGH",
+                    quality_download=quality,
                     recursive_quality=False,
                     recursive_download=False,
                     not_interface=False,
                     method_save=1
                 )
         elif service == 'deezer':
+            if quality is None:
+                quality='FLAC'
             # Deezer download logic remains unchanged
             creds_dir = os.path.join('./creds/deezer', main)
             creds_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
@@ -65,7 +74,7 @@ def download_track(service, url, main, fallback=None):
             dl.download_trackdee(
                 link_track=url,
                 output_dir="./downloads",
-                quality_download="FLAC",
+                quality_download=quality,
                 recursive_quality=False,
                 recursive_download=False,
                 method_save=1

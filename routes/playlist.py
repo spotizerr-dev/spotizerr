@@ -26,7 +26,7 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, prg_path):
+def download_task(service, url, main, fallback, quality, fall_quality, prg_path):
     try:
         from routes.utils.playlist import download_playlist
         with open(prg_path, 'w') as f:
@@ -39,7 +39,9 @@ def download_task(service, url, main, fallback, prg_path):
                     service=service,
                     url=url,
                     main=main,
-                    fallback=fallback
+                    fallback=fallback,
+                    quality=quality,
+                    fall_quality=fall_quality
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -66,6 +68,8 @@ def handle_download():
     url = request.args.get('url')
     main = request.args.get('main')
     fallback = request.args.get('fallback')
+    quality = request.args.get('quality')
+    fall_quality = request.args.get('fall_quality')
     
     if not all([service, url, main]):
         return Response(
@@ -81,7 +85,7 @@ def handle_download():
     
     Process(
         target=download_task,
-        args=(service, url, main, fallback, prg_path)
+        args=(service, url, main, fallback, quality, fall_quality, prg_path)
     ).start()
     
     return Response(

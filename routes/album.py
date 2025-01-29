@@ -27,7 +27,7 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, prg_path):
+def download_task(service, url, main, fallback, quality, fall_quality, prg_path):
     try:
         from routes.utils.album import download_album
         with open(prg_path, 'w') as f:
@@ -40,7 +40,9 @@ def download_task(service, url, main, fallback, prg_path):
                     service=service,
                     url=url,
                     main=main,
-                    fallback=fallback
+                    fallback=fallback,
+                    quality=quality,
+                    fall_quality=fall_quality
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -67,11 +69,69 @@ def handle_download():
     url = request.args.get('url')
     main = request.args.get('main')
     fallback = request.args.get('fallback')
+    quality = request.args.get('quality')
+    fall_quality = request.args.get('fall_quality')
+
+    # Sanitize main and fallback to prevent directory traversal
+    if main:
+        main = os.path.basename(main)
+    if fallback:
+        fallback = os.path.basename(fallback)
 
     if not all([service, url, main]):
         return Response(
             json.dumps({"error": "Missing parameters"}),
             status=400,
+            mimetype='application/json'
+        )
+
+    # Validate credentials based on service and fallback
+    try:
+        if service == 'spotify':
+            if fallback:
+                # Validate Deezer main and Spotify fallback credentials
+                deezer_creds_path = os.path.abspath(os.path.join('./creds/deezer', main, 'credentials.json'))
+                if not os.path.isfile(deezer_creds_path):
+                    return Response(
+                        json.dumps({"error": "Invalid Deezer credentials directory"}),
+                        status=400,
+                        mimetype='application/json'
+                    )
+                spotify_fallback_path = os.path.abspath(os.path.join('./creds/spotify', fallback, 'credentials.json'))
+                if not os.path.isfile(spotify_fallback_path):
+                    return Response(
+                        json.dumps({"error": "Invalid Spotify fallback credentials directory"}),
+                        status=400,
+                        mimetype='application/json'
+                    )
+            else:
+                # Validate Spotify main credentials
+                spotify_creds_path = os.path.abspath(os.path.join('./creds/spotify', main, 'credentials.json'))
+                if not os.path.isfile(spotify_creds_path):
+                    return Response(
+                        json.dumps({"error": "Invalid Spotify credentials directory"}),
+                        status=400,
+                        mimetype='application/json'
+                    )
+        elif service == 'deezer':
+            # Validate Deezer main credentials
+            deezer_creds_path = os.path.abspath(os.path.join('./creds/deezer', main, 'credentials.json'))
+            if not os.path.isfile(deezer_creds_path):
+                return Response(
+                    json.dumps({"error": "Invalid Deezer credentials directory"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+        else:
+            return Response(
+                json.dumps({"error": "Unsupported service"}),
+                status=400,
+                mimetype='application/json'
+            )
+    except Exception as e:
+        return Response(
+            json.dumps({"error": f"Credential validation failed: {str(e)}"}),
+            status=500,
             mimetype='application/json'
         )
 
@@ -82,7 +142,7 @@ def handle_download():
     
     Process(
         target=download_task,
-        args=(service, url, main, fallback, prg_path)
+        args=(service, url, main, fallback, quality, fall_quality, prg_path)
     ).start()
     
     return Response(
