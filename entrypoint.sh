@@ -37,7 +37,7 @@ else
         fi
 
         # Ensure proper permissions
-        chown -R "${USER_NAME}:${GROUP_NAME}" /app
+        chown -R "${USER_NAME}:${GROUP_NAME}" /app || true
 
         # Run as specified user
         exec gosu "${USER_NAME}" "$@"
