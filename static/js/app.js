@@ -660,6 +660,8 @@ function getStatusMessage(data) {
             return `Error: ${data.message || 'Unknown error'}`;
         case 'complete':
             return 'Download completed successfully';
+        case 'skipped':
+            return `Track ${data.song} skipped, it already exists!`;
         default:
             return data.status;
     }
