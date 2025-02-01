@@ -22,7 +22,11 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 - Search using spotify's catalog
 - Credential management system
 - Download queue with real-time progress
-- Service fallback system when downloading, it will first try to download each track from Deezer and only if it fails, will grab it from Spotify
+- Service fallback system when downloading*
+- Real time downloading**
+
+*It will first try to download each track from Deezer and only if it fails, will grab it from Spotify
+**Only for spotify. For each track, it matches its length with the time it takes to download it
 
 ## Prerequisites
 
