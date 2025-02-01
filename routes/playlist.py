@@ -26,7 +26,7 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, prg_path):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path):
     try:
         from routes.utils.playlist import download_playlist
         with open(prg_path, 'w') as f:
@@ -41,7 +41,8 @@ def download_task(service, url, main, fallback, quality, fall_quality, prg_path)
                     main=main,
                     fallback=fallback,
                     quality=quality,
-                    fall_quality=fall_quality
+                    fall_quality=fall_quality,
+                    real_time=real_time
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -71,6 +72,11 @@ def handle_download():
     quality = request.args.get('quality')
     fall_quality = request.args.get('fall_quality')
     
+    # Retrieve the real_time parameter from the request query string.
+    # Here, if real_time is provided as "true", "1", or "yes" (case-insensitive) it will be interpreted as True.
+    real_time_str = request.args.get('real_time', 'false').lower()
+    real_time = real_time_str in ['true', '1', 'yes']
+    
     if not all([service, url, main]):
         return Response(
             json.dumps({"error": "Missing parameters"}),
@@ -85,7 +91,7 @@ def handle_download():
     
     Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, prg_path)
+        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path)
     ).start()
     
     return Response(

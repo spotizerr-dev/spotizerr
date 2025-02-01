@@ -18,6 +18,7 @@ class FlushingFileWrapper:
         self.file = file
 
     def write(self, text):
+        # Write only lines that start with a JSON object
         for line in text.split('\n'):
             if line.startswith('{'):
                 self.file.write(line + '\n')
@@ -26,13 +27,13 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, prg_path):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path):
     try:
         from routes.utils.track import download_track
         with open(prg_path, 'w') as f:
             flushing_file = FlushingFileWrapper(f)
             original_stdout = sys.stdout
-            sys.stdout = flushing_file  # Redirect stdout per process
+            sys.stdout = flushing_file  # Redirect stdout for this process
             
             try:
                 download_track(
@@ -41,7 +42,8 @@ def download_task(service, url, main, fallback, quality, fall_quality, prg_path)
                     main=main,
                     fallback=fallback,
                     quality=quality,
-                    fall_quality=fall_quality
+                    fall_quality=fall_quality,
+                    real_time=real_time
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -71,6 +73,16 @@ def handle_download():
     quality = request.args.get('quality')
     fall_quality = request.args.get('fall_quality')
     
+    # Retrieve and normalize the real_time parameter; defaults to False.
+    real_time_arg = request.args.get('real_time', 'false')
+    real_time = real_time_arg.lower() in ['true', '1', 'yes']
+
+    # Sanitize main and fallback to prevent directory traversal
+    if main:
+        main = os.path.basename(main)
+    if fallback:
+        fallback = os.path.basename(fallback)
+
     if not all([service, url, main]):
         return Response(
             json.dumps({"error": "Missing parameters"}),
@@ -78,6 +90,56 @@ def handle_download():
             mimetype='application/json'
         )
     
+    # Validate credentials based on service and fallback
+    try:
+        if service == 'spotify':
+            if fallback:
+                # Validate Deezer main credentials and Spotify fallback credentials
+                deezer_creds_path = os.path.abspath(os.path.join('./creds/deezer', main, 'credentials.json'))
+                if not os.path.isfile(deezer_creds_path):
+                    return Response(
+                        json.dumps({"error": "Invalid Deezer credentials directory"}),
+                        status=400,
+                        mimetype='application/json'
+                    )
+                spotify_fallback_path = os.path.abspath(os.path.join('./creds/spotify', fallback, 'credentials.json'))
+                if not os.path.isfile(spotify_fallback_path):
+                    return Response(
+                        json.dumps({"error": "Invalid Spotify fallback credentials directory"}),
+                        status=400,
+                        mimetype='application/json'
+                    )
+            else:
+                # Validate Spotify main credentials
+                spotify_creds_path = os.path.abspath(os.path.join('./creds/spotify', main, 'credentials.json'))
+                if not os.path.isfile(spotify_creds_path):
+                    return Response(
+                        json.dumps({"error": "Invalid Spotify credentials directory"}),
+                        status=400,
+                        mimetype='application/json'
+                    )
+        elif service == 'deezer':
+            # Validate Deezer main credentials
+            deezer_creds_path = os.path.abspath(os.path.join('./creds/deezer', main, 'credentials.json'))
+            if not os.path.isfile(deezer_creds_path):
+                return Response(
+                    json.dumps({"error": "Invalid Deezer credentials directory"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+        else:
+            return Response(
+                json.dumps({"error": "Unsupported service"}),
+                status=400,
+                mimetype='application/json'
+            )
+    except Exception as e:
+        return Response(
+            json.dumps({"error": f"Credential validation failed: {str(e)}"}),
+            status=500,
+            mimetype='application/json'
+        )
+
     filename = generate_random_filename()
     prg_dir = './prgs'
     os.makedirs(prg_dir, exist_ok=True)
@@ -85,7 +147,7 @@ def handle_download():
     
     Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, prg_path)
+        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path)
     ).start()
     
     return Response(

@@ -4,15 +4,14 @@ import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 
-def download_album(service, url, main, fallback=None, quality=None, fall_quality=None):
+def download_album(service, url, main, fallback=None, quality=None, fall_quality=None, real_time=False):
     try:
         if service == 'spotify':
-
             if fallback:
                 if quality is None:
                     quality = 'FLAC'
                 if fall_quality is None:
-                    fall_quality='HIGH'
+                    fall_quality = 'HIGH'
                 # First attempt: use DeeLogin's download_albumspo with the 'main' (Deezer credentials)
                 try:
                     # Load Deezer credentials from 'main' under deezer directory
@@ -24,7 +23,7 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
                     )
-                    # Download using download_albumspo
+                    # Download using download_albumspo; pass real_time_dl accordingly
                     dl.download_albumspo(
                         link_album=url,
                         output_dir="./downloads",
@@ -33,7 +32,8 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                         recursive_download=False,
                         not_interface=False,
                         make_zip=False,
-                        method_save=1
+                        method_save=1,
+                        real_time_dl=real_time
                     )
                 except Exception as e:
                     # Load fallback Spotify credentials and attempt download
@@ -49,7 +49,8 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                             recursive_download=False,
                             not_interface=False,
                             method_save=1,
-                            make_zip=False
+                            make_zip=False,
+                            real_time_dl=real_time
                         )
                     except Exception as e2:
                         # If fallback also fails, raise an error indicating both attempts failed
@@ -60,7 +61,7 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
             else:
                 # Original behavior: use Spotify main
                 if quality is None:
-                    quality ='HIGH'
+                    quality = 'HIGH'
                 creds_dir = os.path.join('./creds/spotify', main)
                 credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
                 spo = SpoLogin(credentials_path=credentials_path)
@@ -72,11 +73,12 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                     recursive_download=False,
                     not_interface=False,
                     method_save=1,
-                    make_zip=False
+                    make_zip=False,
+                    real_time_dl=real_time
                 )
         elif service == 'deezer':
             if quality is None:
-                quality='FLAC'
+                quality = 'FLAC'
             # Existing code remains the same, ignoring fallback
             creds_dir = os.path.join('./creds/deezer', main)
             creds_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
@@ -92,7 +94,8 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                 recursive_quality=True,
                 recursive_download=False,
                 method_save=1,
-                make_zip=False
+                make_zip=False,
+                real_time_dl=real_time
             )
         else:
             raise ValueError(f"Unsupported service: {service}")

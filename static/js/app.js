@@ -319,6 +319,12 @@ async function startDownload(url, type, item) {
       apiUrl += `&quality=${encodeURIComponent(service === 'spotify' ? spotifyQuality : deezerQuality)}`;
     }
   
+    // New: append real_time parameter if Real time downloading is enabled
+    const realTimeEnabled = document.getElementById('realTimeToggle').checked;
+    if (realTimeEnabled) {
+      apiUrl += `&real_time=true`;
+    }
+  
     try {
       const response = await fetch(apiUrl);
       const data = await response.json();
@@ -326,7 +332,8 @@ async function startDownload(url, type, item) {
     } catch (error) {
       showError('Download failed: ' + error.message);
     }
-  }
+}
+
 
 function addToQueue(item, type, prgFile) {
     const queueId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -673,11 +680,11 @@ function saveConfig() {
       deezer: document.getElementById('deezerAccountSelect').value,
       fallback: document.getElementById('fallbackToggle').checked,
       spotifyQuality: document.getElementById('spotifyQualitySelect').value,
-      deezerQuality: document.getElementById('deezerQualitySelect').value
+      deezerQuality: document.getElementById('deezerQualitySelect').value,
+      realTime: document.getElementById('realTimeToggle').checked  // new property
     };
     localStorage.setItem('activeConfig', JSON.stringify(config));
 }
-
 
 function loadConfig() {
     const saved = JSON.parse(localStorage.getItem('activeConfig')) || {};
@@ -699,7 +706,11 @@ function loadConfig() {
     
     const deezerQuality = document.getElementById('deezerQualitySelect');
     if (deezerQuality) deezerQuality.value = saved.deezerQuality || 'MP3_128';
-}  
+
+    // New: Real time downloading toggle
+    const realTimeToggle = document.getElementById('realTimeToggle');
+    if (realTimeToggle) realTimeToggle.checked = !!saved.realTime;
+}
 
 function isSpotifyUrl(url) {
     return url.startsWith('https://open.spotify.com/');
