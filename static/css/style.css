@@ -971,3 +971,27 @@ html {
         font-size: 15px;
     }
 }
+
+.cancel-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    outline: none;
+    margin-top: 10px;
+}
+
+.cancel-btn img {
+    width: 24px;
+    height: 24px;
+    filter: invert(1);
+    transition: transform 0.3s ease;
+}
+
+.cancel-btn:hover img {
+    transform: scale(1.1);
+}
+
+.cancel-btn:active img {
+    transform: scale(0.9);
+}

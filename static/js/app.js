@@ -477,9 +477,50 @@ function createQueueItem(item, type, prgFile, queueId) {
         <div class="title">${item.name}</div>
         <div class="type">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
         <div class="log" id="log-${queueId}-${prgFile}">Initializing download...</div>
+        <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
+            <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Cancel Download">
+        </button>
     `;
+
+    // Attach cancel event listener
+    const cancelBtn = div.querySelector('.cancel-btn');
+    cancelBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        // Hide the cancel button immediately so the user can’t click it again.
+        cancelBtn.style.display = 'none';
+        
+        const prg = e.target.closest('button').dataset.prg;
+        const type = e.target.closest('button').dataset.type;
+        const queueId = e.target.closest('button').dataset.queueid;
+        // Determine the correct cancel endpoint based on the type.
+        // For example: `/api/album/download/cancel`, `/api/playlist/download/cancel`, `/api/track/download/cancel`
+        const cancelEndpoint = `/api/${type}/download/cancel?prg_file=${encodeURIComponent(prg)}`;
+        try {
+            const response = await fetch(cancelEndpoint);
+            const data = await response.json();
+            if (data.status === "cancel") {
+                const logElement = document.getElementById(`log-${queueId}-${prg}`);
+                logElement.textContent = "Download cancelled";
+                // Mark the entry as ended and clear its monitoring interval.
+                const entry = downloadQueue[queueId];
+                if (entry) {
+                    entry.hasEnded = true;
+                    clearInterval(entry.intervalId);
+                }
+                // Remove the queue item after 5 seconds, same as when a download finishes.
+                setTimeout(() => cleanupEntry(queueId), 5000);
+            } else {
+                alert("Cancel error: " + (data.error || "Unknown error"));
+            }
+        } catch (error) {
+            alert("Cancel error: " + error.message);
+        }
+    });
+
     return div;
 }
+
+
 
 
 async function loadCredentials(service) {
@@ -677,6 +718,17 @@ function getStatusMessage(data) {
             return 'Download completed successfully';
         case 'skipped':
             return `Track ${data.song} skipped, it already exists!`;
+        case 'real_time': {
+            // Convert milliseconds to minutes and seconds.
+            const totalMs = data.time_elapsed;
+            const minutes = Math.floor(totalMs / 60000);
+            const seconds = Math.floor((totalMs % 60000) / 1000);
+            // Optionally pad seconds with a leading zero if needed:
+            const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
+                
+           return `Real-time downloading track ${data.song} by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
+        }
+            
         default:
             return data.status;
     }

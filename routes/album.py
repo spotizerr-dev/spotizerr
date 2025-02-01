@@ -9,6 +9,9 @@ from multiprocessing import Process
 
 album_bp = Blueprint('album', __name__)
 
+# Global dictionary to keep track of running download processes.
+download_processes = {}
+
 def generate_random_filename(length=6):
     chars = string.ascii_lowercase + string.digits
     return ''.join(random.choice(chars) for _ in range(length)) + '.prg'
@@ -34,7 +37,7 @@ def download_task(service, url, main, fallback, quality, fall_quality, real_time
             flushing_file = FlushingFileWrapper(f)
             original_stdout = sys.stdout
             sys.stdout = flushing_file  # Redirect stdout
-            
+
             try:
                 download_album(
                     service=service,
@@ -145,13 +148,64 @@ def handle_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
     
-    Process(
+    # Create and start the download process, and track it in the global dictionary.
+    process = Process(
         target=download_task,
         args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path)
-    ).start()
-    
+    )
+    process.start()
+    download_processes[filename] = process
+
     return Response(
         json.dumps({"prg_file": filename}),
         status=202,
         mimetype='application/json'
     )
+
+@album_bp.route('/download/cancel', methods=['GET'])
+def cancel_download():
+    """
+    Cancel a running download process by its process id (prg file name).
+    """
+    prg_file = request.args.get('prg_file')
+    if not prg_file:
+        return Response(
+            json.dumps({"error": "Missing process id (prg_file) parameter"}),
+            status=400,
+            mimetype='application/json'
+        )
+
+    process = download_processes.get(prg_file)
+    prg_dir = './prgs'
+    prg_path = os.path.join(prg_dir, prg_file)
+
+    if process and process.is_alive():
+        # Terminate the running process
+        process.terminate()
+        process.join()  # Wait for process termination
+        # Remove it from our global tracking dictionary
+        del download_processes[prg_file]
+
+        # Append a cancellation status to the log file
+        try:
+            with open(prg_path, 'a') as f:
+                f.write(json.dumps({"status": "cancel"}) + "\n")
+        except Exception as e:
+            # If writing fails, we log the error in the response.
+            return Response(
+                json.dumps({"error": f"Failed to write cancel status to file: {str(e)}"}),
+                status=500,
+                mimetype='application/json'
+            )
+
+        return Response(
+            json.dumps({"status": "cancel"}),
+            status=200,
+            mimetype='application/json'
+        )
+    else:
+        return Response(
+            json.dumps({"error": "Process not found or already terminated"}),
+            status=404,
+            mimetype='application/json'
+        )
