@@ -415,11 +415,19 @@ async function startEntryMonitoring(queueId) {
 }
 
 function handleInactivity(entry, queueId, logElement) {
+    // Check if real time downloading is enabled
+    const realTimeEnabled = document.getElementById('realTimeToggle')?.checked;
+    if (realTimeEnabled) {
+        // Do nothing if real time downloading is enabled (no timeout)
+        return;
+    }
+    // Only trigger timeout if more than 3 minutes (180000 ms) of inactivity
     if (Date.now() - entry.lastUpdated > 180000) {
         logElement.textContent = 'Download timed out (3 minutes inactivity)';
         handleTerminalState(entry, queueId, { status: 'timeout' });
     }
 }
+
 
 function handleTerminalState(entry, queueId, data) {
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);

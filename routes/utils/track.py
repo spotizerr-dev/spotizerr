@@ -28,8 +28,7 @@ def download_track(service, url, main, fallback=None, quality=None, fall_quality
                         recursive_quality=False,
                         recursive_download=False,
                         not_interface=False,
-                        method_save=1,
-                        real_time_dl=real_time
+                        method_save=1
                     )
                 except Exception as e:
                     spo_creds_dir = os.path.join('./creds/spotify', fallback)
@@ -79,8 +78,7 @@ def download_track(service, url, main, fallback=None, quality=None, fall_quality
                 quality_download=quality,
                 recursive_quality=False,
                 recursive_download=False,
-                method_save=1,
-                real_time_dl=real_time
+                method_save=1
             )
         else:
             raise ValueError(f"Unsupported service: {service}")

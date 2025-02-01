@@ -32,8 +32,7 @@ def download_playlist(service, url, main, fallback=None, quality=None, fall_qual
                         recursive_download=False,
                         not_interface=False,
                         make_zip=False,
-                        method_save=1,
-                        real_time_dl=real_time
+                        method_save=1
                     )
                 except Exception as e:
                     # Load fallback Spotify credentials and attempt download
@@ -94,8 +93,7 @@ def download_playlist(service, url, main, fallback=None, quality=None, fall_qual
                 recursive_quality=False,
                 recursive_download=False,
                 method_save=1,
-                make_zip=False,
-                real_time_dl=real_time
+                make_zip=False
             )
         else:
             raise ValueError(f"Unsupported service: {service}")
