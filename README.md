@@ -7,7 +7,8 @@ As of 2025, Spotify pays an average of $0.005 per stream to the artist. That mea
 Music downloader which combines the best of two worlds: Spotify's catalog and Deezer's quality. Search for a track using Spotify search api, click download and, depending on your preferences, it will download directly from Spotify or firstly try to download from Deezer, if it fails, it'll fallback to Spotify.
 
 ## Desktop interface
-![image](https://github.com/user-attachments/assets/69674c27-9f53-48cb-84c3-1eaf612735fb)
+![image](https://github.com/user-attachments/assets/e367fdd2-6a06-4103-b5f8-badc7a5d0b24)
+
 
 ## Mobile interface
 ![image](https://github.com/user-attachments/assets/0224adc6-5a24-4334-8e15-db0f376096b7)
@@ -24,9 +25,11 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 - Download queue with real-time progress
 - Service fallback system when downloading*
 - Real time downloading**
+- Quality selector***
 
 *It will first try to download each track from Deezer and only if it fails, will grab it from Spotify
 **Only for spotify. For each track, it matches its length with the time it takes to download it
+***Restrictions per account tier apply (see 
 
 ## Prerequisites
 
@@ -186,6 +189,10 @@ jq -r '.username, .auth_data' credentials.json
 - **Multiple Accounts**:
   - Manage credentials in settings
   - Switch active accounts per service
+    
+- **Quality selector**
+   - For spotify: OGG 96k, 160k and 320k (premium only)
+   - For deezer: MP3 128k, MP3 320k (sometimes premium, it varies) and FLAC (premium only)
 
 ## Troubleshooting
 
