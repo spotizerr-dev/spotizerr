@@ -19,7 +19,7 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 ## Features
 
 - Dual-service integration (Spotify & Deezer)
-- Direct URL downloads for Spotify tracks/albums/playlists
+- Direct URL downloads for Spotify tracks/albums/playlists/artists
 - Search using spotify's catalog
 - Credential management system
 - Download queue with real-time progress
@@ -170,16 +170,17 @@ jq -r '.username, .auth_data' credentials.json
 ### Basic Operations
 1. **Search**:
    - Enter query in search bar
-   - Select result type (Track/Album/Playlist)
+   - Select result type (Track/Album/Playlist/Artist)
    - Click search button or press Enter
 
 2. **Download**:
    - Click download button on any result
+      - For artists, you can select a specific subset of albums you want to download
    - Monitor progress in queue sidebar
 
 3. **Direct URLs**:
    - Paste Spotify URLs directly into search
-   - Supports tracks, albums, and playlists
+   - Supports tracks, albums, playlists and artists (this will download the whole discogrpahy, you've been warned)
 
 ### Advanced Features
 - **Fallback System**:
