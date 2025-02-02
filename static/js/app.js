@@ -254,7 +254,6 @@ function performSearch() {
         .catch(error => showError(error.message));
 }
 
-H
 function createResultCard(item, type) {
     let imageUrl, title, subtitle, details;
     
