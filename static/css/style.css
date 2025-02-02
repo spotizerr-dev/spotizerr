@@ -754,116 +754,42 @@ html {
 /* MOBILE RESPONSIVENESS */
 
 @media (max-width: 768px) {
-    html {
-        font-size: 14px;
-    }
-
-    .container {
-        padding: 15px;
-    }
-
     .search-header {
         flex-wrap: wrap;
-        gap: 12px;
-        padding: 15px 0;
+        /* Optional: ensure items are aligned properly */
+        align-items: center;
     }
-
-    .settings-icon,
-    .queue-icon {
-        margin: 0;
-        order: 0;
-        font-size: 24px;
-    }
-
-    .search-input,
-    .search-type {
+  
+    /* First row: search input (full width) */
+    .search-input {
         order: 1;
         width: 100%;
     }
-
-    .search-button {
+  
+    /* Second row: search type selector (full width) */
+    .search-type {
         order: 2;
         width: 100%;
     }
-
-    .queue-icon {
+  
+    /* Third row: search button (full width) */
+    .search-button {
         order: 3;
-        margin-left: auto;
-    }
-
-    .results-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 15px;
-    }
-
-    .result-card {
-        padding: 12px;
-    }
-
-    .track-title {
-        font-size: 14px;
-    }
-
-    .track-artist {
-        font-size: 12px;
-    }
-
-    .sidebar {
         width: 100%;
-        left: -100%;
     }
-    
-    #settingsSidebar {
-        left: -100%;
-    }
-
-    #downloadQueue {
-        right: -100%;
-        top: 70px;
-    }
-
-    .sidebar.active {
-        left: 0;
-    }
-
-    #downloadQueue {
-        width: 90%;
-        right: 5%;
-        top: 70px;
-    }
-
+  
+    /* Fourth row: settings and queue icons */
     .settings-icon {
-        top: 15px;
-        left: 15px;
+        order: 4;
+        /* Optional: remove any extra margins to ensure neat alignment */
+        margin: 0;
     }
-
+  
     .queue-icon {
-        top: 15px;
-        right: 15px;
+        order: 4;
+        margin-left: auto; /* pushes the queue icon to the right */
     }
-
-    .form-group input,
-    .form-group textarea {
-        padding: 12px;
-    }
-
-    .sidebar {
-        width: 100%;
-        box-shadow: none;
-    }
-    
-    #settingsSidebar {
-        left: -100%;
-    }
-    
-    #downloadQueue {
-        right: -100%;
-    }
-    
-    .sidebar.active {
-        box-shadow: 0 0 30px rgba(0,0,0,0.4);
-    }
-}
+}  
 
 @media screen and (max-width: 480px) {
     .results-grid {
