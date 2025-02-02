@@ -183,11 +183,12 @@ function performSearch() {
         return;
     }
 
-    // Handle direct Spotify URLs
+    // Handle direct Spotify URLs for tracks, albums, playlists, and artists
     if (isSpotifyUrl(query)) {
         try {
             const type = getResourceTypeFromUrl(query);
-            if (!['track', 'album', 'playlist'].includes(type)) {
+            const supportedTypes = ['track', 'album', 'playlist', 'artist'];
+            if (!supportedTypes.includes(type)) {
                 throw new Error('Unsupported URL type');
             }
             
@@ -196,7 +197,9 @@ function performSearch() {
                 external_urls: { spotify: query }
             };
             
-            startDownload(query, type, item);
+            // For artist URLs, download all album types by default
+            const albumType = type === 'artist' ? 'album,single,compilation' : undefined;
+            startDownload(query, type, item, albumType);
             document.getElementById('searchInput').value = '';
             return;
             
@@ -206,7 +209,7 @@ function performSearch() {
         }
     }
 
-    // Existing search functionality
+    // Standard search
     resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
     
     fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=${searchType}&limit=50`)
@@ -222,14 +225,18 @@ function performSearch() {
             
             resultsContainer.innerHTML = items.map(item => createResultCard(item, searchType)).join('');
             
+            // Attach event listeners for every download button in each card
             const cards = resultsContainer.querySelectorAll('.result-card');
             cards.forEach((card, index) => {
-                card.querySelector('.download-btn').addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    const url = e.target.dataset.url;
-                    const type = e.target.dataset.type;
-                    startDownload(url, type, items[index]);
-                    card.remove();
+                card.querySelectorAll('.download-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const url = e.currentTarget.dataset.url;
+                        const type = e.currentTarget.dataset.type;
+                        const albumType = e.currentTarget.dataset.albumType; // for artist downloads
+                        startDownload(url, type, items[index], albumType);
+                        card.remove();
+                    });
                 });
             });
         })
@@ -249,7 +256,19 @@ function createResultCard(item, type) {
                 <span>${item.album.name}</span>
                 <span class="duration">${msToMinutesSeconds(item.duration_ms)}</span>
             `;
-            break;
+            return `
+                <div class="result-card" data-id="${item.id}">
+                    <img src="${imageUrl}" class="album-art" alt="${type} cover">
+                    <div class="track-title">${title}</div>
+                    <div class="track-artist">${subtitle}</div>
+                    <div class="track-details">${details}</div>
+                    <button class="download-btn" 
+                            data-url="${item.external_urls.spotify}" 
+                            data-type="${type}">
+                        Download
+                    </button>
+                </div>
+            `;
         case 'playlist':
             imageUrl = item.images[0]?.url || '';
             title = item.name;
@@ -258,7 +277,19 @@ function createResultCard(item, type) {
                 <span>${item.tracks.total} tracks</span>
                 <span class="duration">${item.description || 'No description'}</span>
             `;
-            break;
+            return `
+                <div class="result-card" data-id="${item.id}">
+                    <img src="${imageUrl}" class="album-art" alt="${type} cover">
+                    <div class="track-title">${title}</div>
+                    <div class="track-artist">${subtitle}</div>
+                    <div class="track-details">${details}</div>
+                    <button class="download-btn" 
+                            data-url="${item.external_urls.spotify}" 
+                            data-type="${type}">
+                        Download
+                    </button>
+                </div>
+            `;
         case 'album':
             imageUrl = item.images[0]?.url || '';
             title = item.name;
@@ -267,25 +298,106 @@ function createResultCard(item, type) {
                 <span>${item.release_date}</span>
                 <span class="duration">${item.total_tracks} tracks</span>
             `;
-            break;
-    }
+            return `
+                <div class="result-card" data-id="${item.id}">
+                    <img src="${imageUrl}" class="album-art" alt="${type} cover">
+                    <div class="track-title">${title}</div>
+                    <div class="track-artist">${subtitle}</div>
+                    <div class="track-details">${details}</div>
+                    <button class="download-btn" 
+                            data-url="${item.external_urls.spotify}" 
+                            data-type="${type}">
+                        Download
+                    </button>
+                </div>
+            `;
+        case 'artist':
+            imageUrl = item.images && item.images.length ? item.images[0].url : '';
+            title = item.name;
+            subtitle = item.genres && item.genres.length ? item.genres.join(', ') : 'Unknown genres';
+            details = `<span>Followers: ${item.followers?.total || 'N/A'}</span>`;
+            return `
+                <div class="result-card" data-id="${item.id}">
+                    <img src="${imageUrl}" class="album-art" alt="${type} cover">
+                    <div class="track-title">${title}</div>
+                    <div class="track-artist">${subtitle}</div>
+                    <div class="track-details">${details}</div>
+                    <div class="artist-download-buttons">
+                        <!-- Main Download Button -->
+                        <button class="download-btn main-download" 
+                                data-url="${item.external_urls.spotify}" 
+                                data-type="${type}" 
+                                data-album-type="album,single,compilation">
+                            <svg class="download-icon" viewBox="0 0 24 24">
+                                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                            </svg>
+                            Download All Discography
+                        </button>
 
-    return `
-        <div class="result-card" data-id="${item.id}">
-            <img src="${imageUrl}" class="album-art" alt="${type} cover">
-            <div class="track-title">${title}</div>
-            <div class="track-artist">${subtitle}</div>
-            <div class="track-details">${details}</div>
-            <button class="download-btn" 
-                    data-url="${item.external_urls.spotify}" 
-                    data-type="${type}">
-                Download
-            </button>
-        </div>
-    `;
+                        <!-- Collapsible Options -->
+                        <div class="download-options-container">
+                            <button class="options-toggle" onclick="this.nextElementSibling.classList.toggle('expanded')">
+                                More Options
+                                <svg class="toggle-chevron" viewBox="0 0 24 24">
+                                    <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                                </svg>
+                            </button>
+                            
+                            <div class="secondary-options">
+                                <button class="download-btn option-btn" 
+                                        data-url="${item.external_urls.spotify}" 
+                                        data-type="${type}" 
+                                        data-album-type="album">
+                                    <img src="https://www.svgrepo.com/show/40029/vinyl-record.svg" 
+                                        alt="Albums" 
+                                        class="type-icon" />
+                                    Albums
+                                </button>
+
+                                <button class="download-btn option-btn" 
+                                        data-url="${item.external_urls.spotify}" 
+                                        data-type="${type}" 
+                                        data-album-type="single">
+                                    <img src="https://www.svgrepo.com/show/147837/cassette.svg" 
+                                        alt="Singles" 
+                                        class="type-icon" />
+                                    Singles
+                                </button>
+
+                                <button class="download-btn option-btn" 
+                                        data-url="${item.external_urls.spotify}" 
+                                        data-type="${type}" 
+                                        data-album-type="compilation">
+                                    <img src="https://brandeps.com/icon-download/C/Collection-icon-vector-01.svg" 
+                                        alt="Compilations" 
+                                        class="type-icon" />
+                                    Compilations
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        default:
+            title = item.name || 'Unknown';
+            subtitle = '';
+            details = '';
+            return `
+                <div class="result-card" data-id="${item.id}">
+                    <div class="track-title">${title}</div>
+                    <div class="track-artist">${subtitle}</div>
+                    <div class="track-details">${details}</div>
+                    <button class="download-btn" 
+                            data-url="${item.external_urls.spotify}" 
+                            data-type="${type}">
+                        Download
+                    </button>
+                </div>
+            `;
+    }
 }
 
-async function startDownload(url, type, item) {
+async function startDownload(url, type, item, albumType) {
     const fallbackEnabled = document.getElementById('fallbackToggle').checked;
     const spotifyAccount = document.getElementById('spotifyAccountSelect').value;
     const deezerAccount = document.getElementById('deezerAccountSelect').value;
@@ -301,7 +413,15 @@ async function startDownload(url, type, item) {
       return;
     }
   
-    let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
+    let apiUrl = '';
+    if (type === 'artist') {
+        // Build the API URL for artist downloads.
+        // Use albumType if provided; otherwise, default to "compilation" (or you could default to "album,single,compilation")
+        const albumParam = albumType || 'compilation';
+        apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumParam)}`;
+    } else {
+        apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
+    }
     
     // Get quality settings
     const spotifyQuality = document.getElementById('spotifyQualitySelect').value;
@@ -324,7 +444,7 @@ async function startDownload(url, type, item) {
     if (realTimeEnabled) {
       apiUrl += `&real_time=true`;
     }
-  
+    
     try {
       const response = await fetch(apiUrl);
       const data = await response.json();
@@ -333,7 +453,6 @@ async function startDownload(url, type, item) {
       showError('Download failed: ' + error.message);
     }
 }
-
 
 function addToQueue(item, type, prgFile) {
     const queueId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -493,7 +612,7 @@ function createQueueItem(item, type, prgFile, queueId) {
         const type = e.target.closest('button').dataset.type;
         const queueId = e.target.closest('button').dataset.queueid;
         // Determine the correct cancel endpoint based on the type.
-        // For example: `/api/album/download/cancel`, `/api/playlist/download/cancel`, `/api/track/download/cancel`
+        // For example: `/api/album/download/cancel`, `/api/playlist/download/cancel`, `/api/track/download/cancel`, or `/api/artist/download/cancel`
         const cancelEndpoint = `/api/${type}/download/cancel?prg_file=${encodeURIComponent(prg)}`;
         try {
             const response = await fetch(cancelEndpoint);
@@ -702,13 +821,23 @@ function getStatusMessage(data) {
             return `Downloading ${data.song || 'track'} by ${data.artist || 'artist'}...`;
         case 'progress':
             if (data.type === 'album') {
-                return `Processing track ${data.current_track}/${data.total_tracks} (${data.percentage.toFixed(1)}%): ${data.song}`;
+                return `Processing track ${data.current_track}/${data.total_tracks} (${data.percentage.toFixed(1)}%): ${data.song} from ${data.album}`;
             } else {
                 return `${data.percentage.toFixed(1)}% complete`;
             }
         case 'done':
-            return `Finished: ${data.song} by ${data.artist}`;
+            if (data.type === 'track') {
+                return `Finished: ${data.song} by ${data.artist}`;
+            } else if (data.type === 'album'){
+                return `Finished: ${data.album} by ${data.artist}`;
+            }
+            else if (data.type === 'artist'){
+                return `Finished: Artist's ${data.album_type}s`;
+            }
         case 'initializing':
+            if (data.type === 'artist') {
+                return `Initializing artist download, ${data.total_albums} albums to process...`;
+            }
             return `Initializing ${data.type} download for ${data.album || data.artist}...`;
         case 'retrying':
             return `Track ${data.song} by ${data.artist} failed, retrying (${data.retries}/${data.max_retries}) in ${data.seconds_left}s`;
@@ -723,12 +852,9 @@ function getStatusMessage(data) {
             const totalMs = data.time_elapsed;
             const minutes = Math.floor(totalMs / 60000);
             const seconds = Math.floor((totalMs % 60000) / 1000);
-            // Optionally pad seconds with a leading zero if needed:
             const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
-                
-           return `Real-time downloading track ${data.song} by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
+            return `Real-time downloading track ${data.song} by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
         }
-            
         default:
             return data.status;
     }
@@ -778,5 +904,5 @@ function isSpotifyUrl(url) {
 
 function getResourceTypeFromUrl(url) {
     const pathParts = new URL(url).pathname.split('/');
-    return pathParts[1]; // Returns 'track', 'album', or 'playlist'
+    return pathParts[1]; // Returns 'track', 'album', 'playlist', or 'artist'
 }
