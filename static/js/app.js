@@ -233,17 +233,28 @@ function performSearch() {
                         e.stopPropagation();
                         const url = e.currentTarget.dataset.url;
                         const type = e.currentTarget.dataset.type;
-                        const albumType = e.currentTarget.dataset.albumType; // for artist downloads
+                        const albumType = e.currentTarget.dataset.albumType;
+            
+                        // Check if the clicked button is the main download button
+                        const isMainButton = e.currentTarget.classList.contains('main-download');
+            
+                        if (isMainButton) {
+                            // Remove the entire card for main download button
+                            card.remove();
+                        } else {
+                            // Only remove the clicked specific button
+                            e.currentTarget.remove();
+                        }
+            
                         startDownload(url, type, items[index], albumType);
-                        card.remove();
                     });
                 });
-            });
+            });            
         })
         .catch(error => showError(error.message));
 }
 
-
+H
 function createResultCard(item, type) {
     let imageUrl, title, subtitle, details;
     
