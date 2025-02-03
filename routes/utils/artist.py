@@ -49,10 +49,14 @@ def download_artist_albums(service, artist_url, main, fallback=None, quality=Non
     except Exception as e:
         log_json({"status": "error", "message": f"Error retrieving artist discography: {e}"})
         raise
-
     albums = discography.get('items', [])
-    # Attempt to extract the artist name from the discography; fallback to artist_url if not available.
-    artist_name = discography.get("name", artist_url)
+    # Extract artist name from the first album's artists
+    artist_name = artist_url  # default fallback
+    if albums:
+        first_album = albums[0]
+        artists = first_album.get('artists', [])
+        if artists:
+            artist_name = artists[0].get('name', artist_url)
 
     if not albums:
         log_json({
@@ -64,7 +68,7 @@ def download_artist_albums(service, artist_url, main, fallback=None, quality=Non
         })
         return
 
-    log_json({"status": "initializing", "type": "artist", "total_albums": len(albums)})
+    log_json({"status": "initializing", "type": "artist", "artist": artist_name, "total_albums": len(albums)})
 
     for album in albums:
         try:

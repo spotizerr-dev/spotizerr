@@ -14,16 +14,26 @@ download_processes = {}
 
 def generate_random_filename(length=6):
     chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(length)) + '.prg'
+    return ''.join(random.choice(chars) for _ in range(length)) + '.album.prg'
 
 class FlushingFileWrapper:
     def __init__(self, file):
         self.file = file
 
     def write(self, text):
-        # Filter lines to only write JSON objects
+        # Process each line separately.
         for line in text.split('\n'):
-            if line.startswith('{'):
+            line = line.strip()
+            # Only process non-empty lines that look like JSON objects.
+            if line and line.startswith('{'):
+                try:
+                    obj = json.loads(line)
+                    # Skip writing if the JSON object has a "type" of "track"
+                    if obj.get("type") == "track":
+                        continue
+                except ValueError:
+                    # If not valid JSON, write the line as is.
+                    pass
                 self.file.write(line + '\n')
         self.file.flush()
 

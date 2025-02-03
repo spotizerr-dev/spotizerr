@@ -14,7 +14,7 @@ playlist_processes = {}
 
 def generate_random_filename(length=6):
     chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(length)) + '.prg'
+    return ''.join(random.choice(chars) for _ in range(length)) + '.playlist.prg'
 
 class FlushingFileWrapper:
     def __init__(self, file):
@@ -22,7 +22,18 @@ class FlushingFileWrapper:
 
     def write(self, text):
         for line in text.split('\n'):
-            if line.startswith('{'):
+            line = line.strip()
+            # Only process non-empty lines that start with '{'
+            if line and line.startswith('{'):
+                try:
+                    # Try to parse the line as JSON
+                    obj = json.loads(line)
+                    # If the object has a "type" key with the value "track", skip writing it.
+                    if obj.get("type") == "track":
+                        continue
+                except ValueError:
+                    # If the line isn't valid JSON, we don't filter it.
+                    pass
                 self.file.write(line + '\n')
         self.file.flush()
 

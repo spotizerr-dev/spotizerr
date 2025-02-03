@@ -98,7 +98,6 @@ async function initConfig() {
         }
     });
 
-    // Add quality select listeners with null checks
     const spotifyQuality = document.getElementById('spotifyQualitySelect');
     if (spotifyQuality) {
         spotifyQuality.addEventListener('change', saveConfig);
@@ -108,8 +107,10 @@ async function initConfig() {
     if (deezerQuality) {
         deezerQuality.addEventListener('change', saveConfig);
     }
-}
-  
+
+    // Load existing PRG files after initial setup
+    await loadExistingPrgFiles();
+} 
 
 async function updateAccountSelectors() {
     try {
@@ -496,43 +497,35 @@ async function startEntryMonitoring(queueId) {
 
         try {
             const response = await fetch(`/api/prgs/${entry.prgFile}`);
-            const lastLine = (await response.text()).trim();
+            const data = await response.json();
+            // data contains: { type, name, last_line }
+            const progress = data.last_line;
 
-            // Handle empty response
-            if (!lastLine) {
+            if (entry.type !== 'track' && progress?.type === 'track') {
+                return; // Skip track-type messages for non-track downloads
+            }
+            // If there is no progress data, handle as inactivity.
+            if (!progress) {
                 handleInactivity(entry, queueId, logElement);
                 return;
             }
 
-            try {
-                const data = JSON.parse(lastLine);
-                
-                // Check for status changes
-                if (JSON.stringify(entry.lastStatus) === JSON.stringify(data)) {
-                    handleInactivity(entry, queueId, logElement);
-                    return;
-                }
-
-                // Update entry state
-                entry.lastStatus = data;
-                entry.lastUpdated = Date.now();
-                entry.status = data.status;
-                logElement.textContent = getStatusMessage(data);
-
-                // Handle terminal states
-                if (data.status === 'error' || data.status === 'complete') {
-                    handleTerminalState(entry, queueId, data);
-                }
-
-            } catch (e) {
-                console.error('Invalid PRG line:', lastLine);
-                logElement.textContent = 'Error parsing status update';
-                handleTerminalState(entry, queueId, { 
-                    status: 'error', 
-                    message: 'Invalid status format' 
-                });
+            // Check for unchanged status to handle inactivity.
+            if (JSON.stringify(entry.lastStatus) === JSON.stringify(progress)) {
+                handleInactivity(entry, queueId, logElement);
+                return;
             }
 
+            // Update entry state and log.
+            entry.lastStatus = progress;
+            entry.lastUpdated = Date.now();
+            entry.status = progress.status;
+            logElement.textContent = getStatusMessage(progress);
+
+            // Handle terminal states.
+            if (progress.status === 'error' || progress.status === 'complete') {
+                handleTerminalState(entry, queueId, progress);
+            }
         } catch (error) {
             console.error('Status check failed:', error);
             handleTerminalState(entry, queueId, { 
@@ -542,6 +535,8 @@ async function startEntryMonitoring(queueId) {
         }
     }, 2000);
 }
+
+
 
 function handleInactivity(entry, queueId, logElement) {
     // Check if real time downloading is enabled
@@ -595,9 +590,42 @@ function cleanupEntry(queueId) {
     if (entry) {
         clearInterval(entry.intervalId);
         entry.element.remove();
+        const prgFile = entry.prgFile;
         delete downloadQueue[queueId];
+        // Send delete request for the PRG file
+        fetch(`/api/prgs/delete/${encodeURIComponent(prgFile)}`, { method: 'DELETE' })
+            .catch(err => console.error('Error deleting PRG file:', err));
     }
 }
+
+async function loadExistingPrgFiles() {
+    try {
+        const response = await fetch('/api/prgs/list');
+        if (!response.ok) throw new Error('Failed to fetch PRG files');
+        const prgFiles = await response.json();
+        for (const prgFile of prgFiles) {
+            try {
+                const prgResponse = await fetch(`/api/prgs/${prgFile}`);
+                const prgData = await prgResponse.json();
+                // If name is empty, fallback to using the prgFile as title.
+                const title = prgData.name || prgFile;
+                const type = prgData.type || "unknown";
+                const dummyItem = {
+                    name: title,
+                    external_urls: {} // You can expand this if needed.
+                };
+                addToQueue(dummyItem, type, prgFile);
+            } catch (innerError) {
+                console.error('Error processing PRG file', prgFile, ':', innerError);
+            }
+        }
+    } catch (error) {
+        console.error('Error loading existing PRG files:', error);
+    }
+}
+
+
+
 
 function createQueueItem(item, type, prgFile, queueId) {
     const div = document.createElement('div');
@@ -827,48 +855,84 @@ function showSidebarError(message) {
 
 function getStatusMessage(data) {
     switch (data.status) {
-        case 'downloading':
-            return `Downloading ${data.song || 'track'} by ${data.artist || 'artist'}...`;
-        case 'progress':
-            if (data.type === 'album') {
-                return `Processing track ${data.current_track}/${data.total_tracks} (${data.percentage.toFixed(1)}%): ${data.song} from ${data.album}`;
-            } else {
-                return `${data.percentage.toFixed(1)}% complete`;
-            }
-        case 'done':
-            if (data.type === 'track') {
-                return `Finished: ${data.song} by ${data.artist}`;
-            } else if (data.type === 'album'){
-                return `Finished: ${data.album} by ${data.artist}`;
-            }
-            else if (data.type === 'artist'){
-                return `Finished: Artist's ${data.album_type}s`;
-            }
-        case 'initializing':
-            if (data.type === 'artist') {
-                return `Initializing artist download, ${data.total_albums} albums to process...`;
-            }
-            return `Initializing ${data.type} download for ${data.album || data.artist}...`;
-        case 'retrying':
-            return `Track ${data.song} by ${data.artist} failed, retrying (${data.retries}/${data.max_retries}) in ${data.seconds_left}s`;
-        case 'error':
-            return `Error: ${data.message || 'Unknown error'}`;
-        case 'complete':
-            return 'Download completed successfully';
-        case 'skipped':
-            return `Track ${data.song} skipped, it already exists!`;
-        case 'real_time': {
-            // Convert milliseconds to minutes and seconds.
-            const totalMs = data.time_elapsed;
-            const minutes = Math.floor(totalMs / 60000);
-            const seconds = Math.floor((totalMs % 60000) / 1000);
-            const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
-            return `Real-time downloading track ${data.song} by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
+      case 'downloading':
+        // For track downloads only.
+        if (data.type === 'track') {
+          return `Downloading track "${data.song}" by ${data.artist}...`;
         }
-        default:
-            return data.status;
+        return `Downloading ${data.type}...`;
+  
+      case 'initializing':
+        if (data.type === 'playlist') {
+          return `Initializing playlist download "${data.name}" with ${data.total_tracks} tracks...`;
+        } else if (data.type === 'album') {
+          return `Initializing album download "${data.album}" by ${data.artist}...`;
+        } else if (data.type === 'artist') {
+          return `Initializing artist download for ${data.artist} with ${data.total_albums} album(s) [${data.album_type}]...`;
+        }
+        return `Initializing ${data.type} download...`;
+  
+      case 'progress':
+        // Expect progress messages for playlists, albums (or artist’s albums) to include a "track" and "current_track".
+        if (data.track && data.current_track) {
+          // current_track is a string in the format "current/total"
+          const parts = data.current_track.split('/');
+          const current = parts[0];
+          const total = parts[1] || '?';
+  
+          if (data.type === 'playlist') {
+            return `Downloading playlist: Track ${current} of ${total} - ${data.track}`;
+          } else if (data.type === 'album') {
+            // For album progress, the "album" and "artist" fields may be available on a done message.
+            // In some cases (like artist downloads) only track info is passed.
+            if (data.album && data.artist) {
+              return `Downloading album "${data.album}" by ${data.artist}: track ${current} of ${total} - ${data.track}`;
+            } else {
+              return `Downloading track ${current} of ${total}: ${data.track} from ${data.album}`;
+            }
+          }
+        }
+        // Fallback if fields are missing:
+        return `Progress: ${data.status}...`;
+  
+      case 'done':
+        if (data.type === 'track') {
+          return `Finished track "${data.song}" by ${data.artist}`;
+        } else if (data.type === 'playlist') {
+          return `Finished playlist "${data.name}" with ${data.total_tracks} tracks`;
+        } else if (data.type === 'album') {
+          return `Finished album "${data.album}" by ${data.artist}`;
+        } else if (data.type === 'artist') {
+          return `Finished artist "${data.artist}" (${data.album_type})`;
+        }
+        return `Finished ${data.type}`;
+  
+      case 'retrying':
+        return `Track "${data.song}" by ${data.artist}" failed, retrying (${data.retry_count}/10) in ${data.seconds_left}s`;
+  
+      case 'error':
+        return `Error: ${data.message || 'Unknown error'}`;
+  
+      case 'complete':
+        return 'Download completed successfully';
+  
+      case 'skipped':
+        return `Track "${data.song}" skipped, it already exists!`;
+  
+      case 'real_time': {
+        // Convert milliseconds to minutes and seconds.
+        const totalMs = data.time_elapsed;
+        const minutes = Math.floor(totalMs / 60000);
+        const seconds = Math.floor((totalMs % 60000) / 1000);
+        const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
+        return `Real-time downloading track "${data.song}" by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
+      }
+  
+      default:
+        return data.status;
     }
-}
+  }
+  
 
 function saveConfig() {
     const config = {

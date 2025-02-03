@@ -14,7 +14,7 @@ track_processes = {}
 
 def generate_random_filename(length=6):
     chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(length)) + '.prg'
+    return ''.join(random.choice(chars) for _ in range(length)) + '.track.prg'
 
 class FlushingFileWrapper:
     def __init__(self, file):

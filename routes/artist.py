@@ -19,7 +19,7 @@ download_processes = {}
 
 def generate_random_filename(length=6):
     chars = string.ascii_lowercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(length)) + '.prg'
+    return ''.join(random.choice(chars) for _ in range(length)) + '.artist.prg'
 
 class FlushingFileWrapper:
     def __init__(self, file):
@@ -28,7 +28,16 @@ class FlushingFileWrapper:
     def write(self, text):
         # Only write lines that start with '{'
         for line in text.split('\n'):
-            if line.startswith('{'):
+            line = line.strip()
+            if line and line.startswith('{'):
+                try:
+                    obj = json.loads(line)
+                    # Skip writing if the JSON object has type "track"
+                    if obj.get("type") == "track":
+                        continue
+                except ValueError:
+                    # If not valid JSON, write the line as is.
+                    pass
                 self.file.write(line + '\n')
         self.file.flush()
 
