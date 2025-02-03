@@ -523,7 +523,7 @@ async function startEntryMonitoring(queueId) {
             logElement.textContent = getStatusMessage(progress);
 
             // Handle terminal states.
-            if (progress.status === 'error' || progress.status === 'complete') {
+            if (progress.status === 'error' || progress.status === 'complete' || progress.status === 'cancel') {
                 handleTerminalState(entry, queueId, progress);
             }
         } catch (error) {
@@ -552,7 +552,7 @@ function handleInactivity(entry, queueId, logElement) {
     }
 }
 
-
+// Update the handleTerminalState function to handle 'cancel' status:
 function handleTerminalState(entry, queueId, data) {
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
     
@@ -576,9 +576,10 @@ function handleTerminalState(entry, queueId, data) {
         });
         
         entry.element.classList.add('failed');
-    }
-    
-    if (data.status === 'complete') {
+    } else if (data.status === 'cancel') {
+        logElement.textContent = 'Download cancelled by user';
+        setTimeout(() => cleanupEntry(queueId), 5000);
+    } else if (data.status === 'complete') {
         setTimeout(() => cleanupEntry(queueId), 5000);
     }
     
