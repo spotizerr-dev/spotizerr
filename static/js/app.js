@@ -624,9 +624,6 @@ async function loadExistingPrgFiles() {
     }
 }
 
-
-
-
 function createQueueItem(item, type, prgFile, queueId) {
     const div = document.createElement('div');
     div.className = 'queue-item';
