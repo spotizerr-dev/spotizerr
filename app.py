@@ -16,7 +16,7 @@ def create_app():
     app = Flask(__name__)
     
     # Configure basic logging
-    log_file='flask_server.log'
+    log_file = 'flask_server.log'
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s',
@@ -48,10 +48,16 @@ def create_app():
     def serve_index():
         return render_template('main.html')
 
-    # Add this new route for config page
+    # Config page route
     @app.route('/config')
     def serve_config():
         return render_template('config.html')
+
+    # New route: Serve playlist.html under /playlist/<id>
+    @app.route('/playlist/<id>')
+    def serve_playlist(id):
+        # The id parameter is captured, but you can use it as needed.
+        return render_template('playlist.html')
 
     @app.route('/static/<path:path>')
     def serve_static(path):

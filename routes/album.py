@@ -219,3 +219,39 @@ def cancel_download():
             status=404,
             mimetype='application/json'
         )
+
+# NEW ENDPOINT: Get Album Information
+@album_bp.route('/info', methods=['GET'])
+def get_album_info():
+    """
+    Retrieve Spotify album metadata given a Spotify album ID.
+    Expects a query parameter 'id' that contains the Spotify album ID.
+    """
+    spotify_id = request.args.get('id')
+    if not spotify_id:
+        return Response(
+            json.dumps({"error": "Missing parameter: id"}),
+            status=400,
+            mimetype='application/json'
+        )
+    
+    try:
+        # Import the get_spotify_info function from the utility module.
+        from routes.utils.get_info import get_spotify_info
+        # Call the function with the album type.
+        album_info = get_spotify_info(spotify_id, "album")
+        return Response(
+            json.dumps(album_info),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        error_data = {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        return Response(
+            json.dumps(error_data),
+            status=500,
+            mimetype='application/json'
+        )

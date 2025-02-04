@@ -141,42 +141,6 @@
     color: #1DB954;
 }
 
-/* Download button inside queue items (if needed) */
-.download-btn {
-    background-color: #1DB954;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    justify-content: center;
-}
-
-.download-btn:hover {
-    background-color: #1ed760;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3);
-}
-
-.download-btn:active {
-    transform: translateY(0);
-    box-shadow: none;
-}
-
-/* Optional: icon before the download button text */
-.download-btn::before {
-    content: "↓";
-    font-weight: bold;
-    font-size: 16px;
-}
-
 /* Optional status message colors (if using state classes) */
 .log--success {
     color: #1DB954 !important;
@@ -307,12 +271,6 @@
     .queue-item {
         padding: 12px;
         margin-bottom: 12px;
-    }
-    
-    /* Adjust the download button padding and font size */
-    .download-btn {
-        padding: 8px 10px;
-        font-size: 13px;
     }
     
     /* Ensure text remains legible on smaller screens */

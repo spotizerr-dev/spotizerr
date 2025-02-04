@@ -139,6 +139,15 @@ function msToMinutesSeconds(ms) {
 }
 
 function createResultCard(item, type) {
+    let newUrl = '#';
+    try {
+        const spotifyUrl = item.external_urls.spotify;
+        const parsedUrl = new URL(spotifyUrl);
+        newUrl = window.location.origin + parsedUrl.pathname;
+    } catch (e) {
+        console.error('Error parsing URL:', e);
+    }
+
     let imageUrl, title, subtitle, details;
     
     switch(type) {
@@ -146,10 +155,9 @@ function createResultCard(item, type) {
             imageUrl = item.album.images[0]?.url || '';
             title = item.name;
             subtitle = item.artists.map(a => a.name).join(', ');
-            details = `
-                <span>${item.album.name}</span>
-                <span class="duration">${msToMinutesSeconds(item.duration_ms)}</span>
-            `;
+            details = 
+                `<span>${item.album.name}</span>
+                <span class="duration">${msToMinutesSeconds(item.duration_ms)}</span>`;
             return `
                 <div class="result-card" data-id="${item.id}">
                     <div class="album-art-wrapper">
@@ -163,16 +171,16 @@ function createResultCard(item, type) {
                             data-type="${type}">
                         Download
                     </button>
+                    <button class="view-btn" onclick="window.location.href='${newUrl}'">View</button>
                 </div>
             `;
         case 'playlist':
             imageUrl = item.images[0]?.url || '';
             title = item.name;
             subtitle = item.owner.display_name;
-            details = `
-                <span>${item.tracks.total} tracks</span>
-                <span class="duration">${item.description || 'No description'}</span>
-            `;
+            details = 
+                `<span>${item.tracks.total} tracks</span>
+                <span class="duration">${item.description || 'No description'}</span>`;
             return `
                 <div class="result-card" data-id="${item.id}">
                     <div class="album-art-wrapper">
@@ -186,16 +194,16 @@ function createResultCard(item, type) {
                             data-type="${type}">
                         Download
                     </button>
+                    <button class="view-btn" onclick="window.location.href='${newUrl}'">View</button>
                 </div>
             `;
         case 'album':
             imageUrl = item.images[0]?.url || '';
             title = item.name;
             subtitle = item.artists.map(a => a.name).join(', ');
-            details = `
-                <span>${item.release_date}</span>
-                <span class="duration">${item.total_tracks} tracks</span>
-            `;
+            details = 
+                `<span>${item.release_date}</span>
+                <span class="duration">${item.total_tracks} tracks</span>`;
             return `
                 <div class="result-card" data-id="${item.id}">
                     <div class="album-art-wrapper">
@@ -209,6 +217,7 @@ function createResultCard(item, type) {
                             data-type="${type}">
                         Download
                     </button>
+                    <button class="view-btn" onclick="window.location.href='${newUrl}'">View</button>
                 </div>
             `;
         case 'artist':
@@ -225,7 +234,6 @@ function createResultCard(item, type) {
                     <div class="track-artist">${subtitle}</div>
                     <div class="track-details">${details}</div>
                     <div class="artist-download-buttons">
-                        <!-- Main Download Button -->
                         <button class="download-btn main-download" 
                                 data-url="${item.external_urls.spotify}" 
                                 data-type="${type}" 
@@ -235,8 +243,7 @@ function createResultCard(item, type) {
                             </svg>
                             Download All Discography
                         </button>
-
-                        <!-- Collapsible Options -->
+                        <button class="view-btn" onclick="window.location.href='${newUrl}'">View</button>
                         <div class="download-options-container">
                             <button class="options-toggle" onclick="this.nextElementSibling.classList.toggle('expanded')">
                                 More Options
@@ -297,6 +304,7 @@ function createResultCard(item, type) {
                             data-type="${type}">
                         Download
                     </button>
+                    <button class="view-btn" onclick="window.location.href='${newUrl}'">View</button>
                 </div>
             `;
     }

@@ -38,3 +38,37 @@
     height: 18px;
     margin-right: 0.3rem;
 }
+
+/* Base styles for View buttons */
+.view-btn {
+    background-color: #4CAF50; /* Same green tone as other buttons */
+    color: #fff;
+    border: none;
+    padding: 4px 8px;          /* Smaller padding than the download button */
+    margin: 4px 4px 4px 8px;    /* Adjust margins to keep spacing neat */
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;           /* Smaller font size */
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+/* Hover effect */
+.view-btn:hover {
+    background-color: #45a049;
+    transform: translateY(-1px);
+}
+
+/* Focus outline for accessibility */
+.view-btn:focus {
+    outline: 2px solid #2e7d32;
+    outline-offset: 2px;
+}
+
+/* Mobile compatibility tweaks */
+@media (max-width: 600px) {
+    .view-btn {
+        padding: 6px 10px;   /* Slightly larger padding on mobile for easier tap targets */
+        font-size: 13px;     /* Ensure readability on smaller screens */
+        margin: 4px;         /* Reduce margins to better fit mobile layouts */
+    }
+}

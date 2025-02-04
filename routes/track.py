@@ -208,3 +208,39 @@ def cancel_download():
             status=404,
             mimetype='application/json'
         )
+
+# NEW ENDPOINT: Get Track Information
+@track_bp.route('/info', methods=['GET'])
+def get_track_info():
+    """
+    Retrieve Spotify track metadata given a Spotify track ID.
+    Expects a query parameter 'id' that contains the Spotify track ID.
+    """
+    spotify_id = request.args.get('id')
+    if not spotify_id:
+        return Response(
+            json.dumps({"error": "Missing parameter: id"}),
+            status=400,
+            mimetype='application/json'
+        )
+    
+    try:
+        # Import the get_spotify_info function from the utility module.
+        from routes.utils.get_info import get_spotify_info
+        # Call the function with the track type.
+        track_info = get_spotify_info(spotify_id, "track")
+        return Response(
+            json.dumps(track_info),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        error_data = {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        return Response(
+            json.dumps(error_data),
+            status=500,
+            mimetype='application/json'
+        )
