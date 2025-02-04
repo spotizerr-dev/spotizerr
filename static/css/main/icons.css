@@ -1,0 +1,40 @@
+/* ICON STYLES */
+.settings-icon img,
+#queueIcon img {
+    width: 24px;
+    height: 24px;
+    vertical-align: middle;
+    filter: invert(1);
+    transition: opacity 0.3s;
+}
+
+.settings-icon:hover img,
+#queueIcon:hover img {
+    opacity: 0.8;
+}
+
+#queueIcon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.download-icon,
+.type-icon,
+.toggle-chevron {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+.toggle-chevron {
+    transition: transform 0.2s ease;
+}
+
+.option-btn .type-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 0.3rem;
+}
