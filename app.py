@@ -46,7 +46,12 @@ def create_app():
     # Serve frontend
     @app.route('/')
     def serve_index():
-        return render_template('index.html')
+        return render_template('main.html')
+
+    # Add this new route for config page
+    @app.route('/config')
+    def serve_config():
+        return render_template('config.html')
 
     @app.route('/static/<path:path>')
     def serve_static(path):

@@ -1,0 +1,389 @@
+/* CONFIGURATION PAGE STYLES */
+/* Base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+  
+  body {
+    background-color: #121212;
+    color: #ffffff;
+    min-height: 100vh;
+  }
+  
+  /* Config Container */
+  .config-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+  
+  /* Header */
+  .config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  
+  .back-button {
+    background: #1DB954;
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border-radius: 25px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background 0.3s ease;
+  }
+  
+  .back-button:hover {
+    background: #1ed760;
+  }
+  
+  /* Queue Icon in Header */
+  #queueIcon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+  }
+  
+  #queueIcon img {
+    width: 24px;
+    height: 24px;
+    filter: invert(1);
+    transition: opacity 0.3s;
+  }
+  
+  #queueIcon:hover img {
+    opacity: 0.8;
+  }
+  
+  /* Account Configuration Section */
+  .account-config {
+    background: #181818;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+  }
+  
+  .config-item {
+    margin-bottom: 1.5rem;
+    position: relative;
+  }
+  
+  .config-item label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #b3b3b3;
+    font-size: 0.95rem;
+  }
+  
+  /* Enhanced Dropdown Styling */
+  #spotifyAccountSelect,
+  #deezerAccountSelect,
+  #spotifyQualitySelect,
+  #deezerQualitySelect {
+    background: #2a2a2a;
+    color: white;
+    border: 1px solid #404040;
+    border-radius: 8px;
+    padding: 0.8rem 2.5rem 0.8rem 1rem;
+    width: 100%;
+    font-size: 0.95rem;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 12px;
+    transition: all 0.3s ease;
+  }
+  
+  #spotifyAccountSelect:focus,
+  #deezerAccountSelect:focus,
+  #spotifyQualitySelect:focus,
+  #deezerQualitySelect:focus {
+    outline: none;
+    border-color: #1DB954;
+    box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
+  }
+  
+  #spotifyAccountSelect option,
+  #deezerAccountSelect option,
+  #spotifyQualitySelect option,
+  #deezerQualitySelect option {
+    background: #181818;
+    color: white;
+    padding: 0.8rem;
+  }
+  
+  #spotifyAccountSelect option:hover,
+  #deezerAccountSelect option:hover,
+  #spotifyQualitySelect option:hover,
+  #deezerQualitySelect option:hover {
+    background: #1DB954;
+  }
+  
+  /* Improved Toggle Switches */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    margin-left: 1rem;
+    vertical-align: middle;
+    overflow: hidden;
+  }
+  
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #666;
+    transition: 0.4s;
+    border-radius: 20px;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  
+  input:checked + .slider {
+    background-color: #1DB954;
+  }
+  
+  input:checked + .slider:before {
+    transform: translateX(20px);
+  }
+  
+  /* Service Tabs */
+  .service-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .tab-button {
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 25px;
+    background: #2a2a2a;
+    color: #ffffff;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+  }
+  
+  .tab-button.active {
+    background: #1DB954;
+  }
+  
+  /* Credentials List */
+  .credentials-list {
+    margin-bottom: 2rem;
+  }
+  
+  .credential-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #2a2a2a;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+  
+  .credential-actions button {
+    margin-left: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.3s ease;
+  }
+  
+  .edit-btn {
+    background: #1DB954;
+    color: white;
+  }
+  
+  .delete-btn {
+    background: #ff5555;
+    color: white;
+  }
+  
+  .credential-actions button:hover {
+    opacity: 0.9;
+  }
+  
+  /* Credentials Form */
+  .credentials-form {
+    background: #181818;
+    padding: 1.5rem;
+    border-radius: 12px;
+  }
+  
+  #serviceFields {
+    margin: 1.5rem 0;
+  }
+  
+  .form-group {
+    margin-bottom: 1.2rem;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #b3b3b3;
+  }
+  
+  .form-group input {
+    width: 100%;
+    padding: 0.8rem;
+    background: #2a2a2a;
+    border: 1px solid #404040;
+    border-radius: 8px;
+    color: white;
+    transition: border-color 0.3s ease;
+  }
+  
+  .form-group input:focus {
+    outline: none;
+    border-color: #1DB954;
+  }
+  
+  .save-btn {
+    background: #1DB954;
+    color: white;
+    padding: 0.8rem 1.5rem;
+    border: none;
+    border-radius: 25px;
+    width: 100%;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.3s ease;
+  }
+  
+  .save-btn:hover {
+    background: #1ed760;
+  }
+  
+  /* Error Messages */
+  #configError {
+    color: #ff5555;
+    margin-top: 1rem;
+    text-align: center;
+    font-size: 0.9rem;
+  }
+  
+  /* MOBILE RESPONSIVENESS */
+  @media (max-width: 768px) {
+    .config-container {
+      padding: 1.5rem 1rem;
+    }
+    
+    .config-header {
+      flex-direction: column;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+    
+    /* Increase touch target sizes for buttons and selects */
+    .back-button {
+      width: 100%;
+      text-align: center;
+      padding: 0.8rem;
+    }
+    
+    #spotifyAccountSelect,
+    #deezerAccountSelect,
+    #spotifyQualitySelect,
+    #deezerQualitySelect {
+      padding: 0.8rem 2rem 0.8rem 1rem;
+      font-size: 0.9rem;
+    }
+    
+    .service-tabs {
+      flex-wrap: wrap;
+    }
+    
+    .tab-button {
+      flex: 1 1 auto;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    
+    .credential-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    
+    .credential-actions {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+    }
+    
+    /* Adjust toggle switch size for better touch support */
+    .switch {
+      width: 50px;
+      height: 24px;
+    }
+    
+    .slider:before {
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .config-container {
+      padding: 1rem;
+    }
+    
+    .account-config,
+    .credentials-form {
+      padding: 1rem;
+    }
+    
+    .form-group input {
+      padding: 0.7rem;
+    }
+    
+    .save-btn,
+    .back-button {
+      padding: 0.7rem;
+      font-size: 0.9rem;
+    }
+    
+    /* Reduce dropdown padding for very small screens */
+    #spotifyAccountSelect,
+    #deezerAccountSelect,
+    #spotifyQualitySelect,
+    #deezerQualitySelect {
+      padding: 0.7rem 1.8rem 0.7rem 0.8rem;
+    }
+  }
+  

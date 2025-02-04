@@ -1,0 +1,323 @@
+/* ---------------------- */
+/* DOWNLOAD QUEUE STYLES  */
+/* ---------------------- */
+
+/* Container for the download queue sidebar */
+#downloadQueue {
+    position: fixed;
+    top: 0;
+    right: -350px; /* Hidden offscreen by default */
+    width: 350px;
+    height: 100vh;
+    background: #181818;
+    padding: 20px;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1001;
+    overflow-y: auto;
+    box-shadow: -20px 0 30px rgba(0, 0, 0, 0.4);
+}
+
+/* When active, the sidebar slides into view */
+#downloadQueue.active {
+    right: 0;
+}
+
+/* Header inside the queue sidebar */
+.queue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.queue-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+/* Close button for the queue sidebar */
+.queue-close {
+    background: #2a2a2a;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s ease;
+    cursor: pointer;
+}
+
+.queue-close:hover {
+    background-color: #333;
+}
+
+/* X Icon style for the close button */
+.queue-close::before {
+    content: "×";
+    font-size: 20px;
+    color: #fff;
+    line-height: 32px; /* Center the icon vertically within the button */
+}
+
+/* Container for all queue items */
+#queueItems {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Each download queue item */
+.queue-item {
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.queue-item:hover {
+    background-color: #333;
+    transform: translateY(-2px);
+}
+
+/* Title text in a queue item */
+.queue-item .title {
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #fff;
+}
+
+/* Type indicator (e.g. track, album) */
+.queue-item .type {
+    font-size: 12px;
+    color: #1DB954;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Log text for status messages */
+.queue-item .log {
+    font-size: 13px;
+    color: #b3b3b3;
+    line-height: 1.4;
+    font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* Optional state indicators for each queue item */
+.queue-item--complete {
+    border-left: 4px solid #1DB954;
+}
+
+.queue-item--error {
+    border-left: 4px solid #ff5555;
+}
+
+.queue-item--processing {
+    border-left: 4px solid #4a90e2;
+}
+
+/* Progress bar for downloads */
+.status-bar {
+    height: 3px;
+    background: #1DB954;
+    width: 0;
+    transition: width 0.3s ease;
+    margin-top: 8px;
+}
+
+/* Progress percentage text */
+.progress-percent {
+    text-align: right;
+    font-weight: bold;
+    color: #1DB954;
+}
+
+/* Download button inside queue items (if needed) */
+.download-btn {
+    background-color: #1DB954;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+}
+
+.download-btn:hover {
+    background-color: #1ed760;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3);
+}
+
+.download-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+/* Optional: icon before the download button text */
+.download-btn::before {
+    content: "↓";
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* Optional status message colors (if using state classes) */
+.log--success {
+    color: #1DB954 !important;
+}
+
+.log--error {
+    color: #ff5555 !important;
+}
+
+.log--warning {
+    color: #ffaa00 !important;
+}
+
+.log--info {
+    color: #4a90e2 !important;
+}
+
+/* Loader animations for real-time progress */
+@keyframes progress-pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
+
+.progress-indicator {
+    display: inline-block;
+    margin-left: 8px;
+    animation: progress-pulse 1.5s infinite;
+}
+
+/* Loading spinner style */
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #1DB954;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.cancel-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    outline: none;
+    margin-top: 10px;
+    /* Optionally constrain the overall size */
+    max-width: 24px;
+    max-height: 24px;
+}
+
+.cancel-btn img {
+    width: 16px;  /* Reduced from 24px */
+    height: 16px; /* Reduced from 24px */
+    filter: invert(1);
+    transition: transform 0.3s ease;
+}
+
+.cancel-btn:hover img {
+    transform: scale(1.1);
+}
+
+.cancel-btn:active img {
+    transform: scale(0.9);
+}
+
+/* Close button for the download queue sidebar */
+.close-btn {
+    background: #2a2a2a;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.close-btn:hover {
+    background-color: #333;
+}
+
+/* ------------------------------- */
+/* MOBILE RESPONSIVE ADJUSTMENTS   */
+/* ------------------------------- */
+@media (max-width: 600px) {
+    /* Make the sidebar full width on mobile */
+    #downloadQueue {
+        width: 100%;
+        right: -100%;  /* Off-screen fully */
+        padding: 15px;
+    }
+    
+    /* When active, the sidebar slides into view from full width */
+    #downloadQueue.active {
+        right: 0;
+    }
+
+    /* Adjust header and title for smaller screens */
+    .queue-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .queue-title {
+        font-size: 1.1rem;
+    }
+    
+    /* Reduce the size of the close buttons */
+    .queue-close,
+    .close-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+    }
+    
+    /* Adjust queue items padding */
+    .queue-item {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    
+    /* Adjust the download button padding and font size */
+    .download-btn {
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+    
+    /* Ensure text remains legible on smaller screens */
+    .queue-item .log,
+    .queue-item .type {
+        font-size: 12px;
+    }
+}
