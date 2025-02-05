@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Artist Viewer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/queue/queue.css') }}">
+  <!-- Optionally include the icons CSS if not already merged into your artist.css -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main/icons.css') }}">
+  <!-- Reusing the playlist CSS (or duplicate/modify as needed) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/artist/artist.css') }}" />
+</head>
+<body>
+  <div id="app">
+    <!-- Artist header container -->
+    <div id="artist-header" class="hidden">
+      <img id="artist-image" alt="Artist image">
+      <div id="artist-info">
+        <h1 id="artist-name"></h1>
+        <!-- For example, show the total number of albums -->
+        <p id="artist-stats"></p>
+      </div>
+      <!-- Queue Icon Button -->
+      <button id="queueIcon" class="queue-icon" aria-label="Download queue" aria-controls="downloadQueue" aria-expanded="false">
+        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="Queue Icon">
+      </button>
+    </div>
+    
+    <!-- Albums container -->
+    <div id="albums-container" class="hidden">
+      <!-- This container will hold one section per album type -->
+      <div id="album-groups"></div>
+    </div>
+
+    <div id="loading">Loading...</div>
+    <div id="error" class="hidden">Error loading artist info</div>
+  </div>
+
+  <!-- The download queue container will be inserted by queue.js -->
+  <script type="module" src="{{ url_for('static', filename='js/artist.js') }}"></script>
+</body>
+</html>

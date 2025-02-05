@@ -68,6 +68,11 @@ def create_app():
     def serve_track(id):
         # The id parameter is captured, but you can use it as needed.
         return render_template('track.html')
+    
+    @app.route('/artist/<id>')
+    def serve_artist(id):
+        # The id parameter is captured, but you can use it as needed.
+        return render_template('artist.html')
 
     @app.route('/static/<path:path>')
     def serve_static(path):

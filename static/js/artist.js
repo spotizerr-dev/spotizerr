@@ -109,7 +109,6 @@ function renderArtist(artistData) {
   // Group albums by album type.
   const albumGroups = {};
   artistData.items.forEach(album => {
-    // Normalize album type to lower-case for grouping.
     const type = album.album_type.toLowerCase();
     if (!albumGroups[type]) {
       albumGroups[type] = [];
@@ -119,7 +118,7 @@ function renderArtist(artistData) {
 
   // Render groups into the #album-groups container.
   const groupsContainer = document.getElementById('album-groups');
-  groupsContainer.innerHTML = ''; // clear any previous content
+  groupsContainer.innerHTML = ''; // Clear any previous content
 
   // For each album type, render a section header, a "Download All" button, and the album list.
   for (const [groupType, albums] of Object.entries(albumGroups)) {
@@ -150,7 +149,7 @@ function renderArtist(artistData) {
         <img class="track-image" src="${album.images[1]?.url || album.images[0]?.url || 'placeholder.jpg'}" alt="Album cover" style="width: 64px; height: 64px; border-radius: 4px; margin-right: 1rem;">
         <div class="track-info">
           <div class="track-name">${album.name}</div>
-          <div class="track-artist">${album.album_type}</div>
+          <div class="track-artist"></div>
         </div>
         <div class="track-album">${album.release_date}</div>
         <div class="track-duration">${album.total_tracks} tracks</div>
@@ -188,11 +187,11 @@ function showError(message) {
 }
 
 /**
- * Attaches event listeners to all individual album download buttons.
+ * Attaches event listeners to all individual download buttons.
  */
 function attachDownloadListeners() {
   document.querySelectorAll('.download-btn').forEach((btn) => {
-    // Skip group and whole artist download buttons.
+    // Skip the whole artist button and group download buttons.
     if (btn.id === 'downloadArtistBtn' || btn.classList.contains('group-download-btn')) return;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -268,7 +267,7 @@ async function startDownload(url, type, item, albumType) {
     // Use the dedicated artist download endpoint.
     apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
   } else {
-    // Default: track or other type.
+    // Default: use a generic endpoint.
     apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
   }
 
