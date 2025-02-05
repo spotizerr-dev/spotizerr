@@ -40,13 +40,26 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request):
+    """
+    The download task writes out the original request data into the progress file
+    and then runs the album download.
+    """
     try:
         from routes.utils.album import download_album
         with open(prg_path, 'w') as f:
             flushing_file = FlushingFileWrapper(f)
             original_stdout = sys.stdout
             sys.stdout = flushing_file  # Redirect stdout
+
+            # Write the original request data into the progress file.
+            try:
+                flushing_file.write(json.dumps({"original_request": orig_request}) + "\n")
+            except Exception as e:
+                flushing_file.write(json.dumps({
+                    "status": "error",
+                    "message": f"Failed to write original request data: {str(e)}"
+                }) + "\n")
 
             try:
                 download_album(
@@ -158,10 +171,13 @@ def handle_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
     
+    # Capture the original request parameters as a dictionary.
+    orig_request = request.args.to_dict()
+
     # Create and start the download process, and track it in the global dictionary.
     process = Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path)
+        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request)
     )
     process.start()
     download_processes[filename] = process

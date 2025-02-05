@@ -44,9 +44,10 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_artist_task(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path):
+def download_artist_task(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path, orig_request):
     """
-    This function wraps the call to download_artist_albums and writes JSON status to the prg file.
+    This function wraps the call to download_artist_albums, writes the original
+    request data to the progress file, and then writes JSON status updates.
     """
     try:
         from routes.utils.artist import download_artist_albums
@@ -54,6 +55,15 @@ def download_artist_task(service, artist_url, main, fallback, quality, fall_qual
             flushing_file = FlushingFileWrapper(f)
             original_stdout = sys.stdout
             sys.stdout = flushing_file  # Redirect stdout to our flushing file wrapper
+
+            # Write the original request data to the progress file.
+            try:
+                flushing_file.write(json.dumps({"original_request": orig_request}) + "\n")
+            except Exception as e:
+                flushing_file.write(json.dumps({
+                    "status": "error",
+                    "message": f"Failed to write original request data: {str(e)}"
+                }) + "\n")
 
             try:
                 download_artist_albums(
@@ -179,10 +189,13 @@ def handle_artist_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
 
+    # Capture the original request parameters as a dictionary.
+    orig_request = request.args.to_dict()
+
     # Create and start the download process.
     process = Process(
         target=download_artist_task,
-        args=(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path)
+        args=(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path, orig_request)
     )
     process.start()
     download_processes[filename] = process

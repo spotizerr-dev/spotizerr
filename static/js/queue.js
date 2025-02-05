@@ -48,9 +48,12 @@ class DownloadQueue {
     this.dispatchEvent('queueVisibilityChanged', { visible: queueSidebar.classList.contains('active') });
   }
 
-  addDownload(item, type, prgFile) {
+  /**
+   * Now accepts an extra argument "requestUrl" which is the same API call used to initiate the download.
+   */
+  addDownload(item, type, prgFile, requestUrl = null) {
     const queueId = this.generateQueueId();
-    const entry = this.createQueueEntry(item, type, prgFile, queueId);
+    const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
 
     this.downloadQueue[queueId] = entry;
     document.getElementById('queueItems').appendChild(entry.element);
@@ -73,6 +76,14 @@ class DownloadQueue {
       try {
         const response = await fetch(`/api/prgs/${entry.prgFile}`);
         const data = await response.json();
+
+        // If the prg file info contains the original_request parameters and we haven't stored a retry URL yet,
+        // build one using the type and original_request parameters.
+        if (!entry.requestUrl && data.original_request) {
+          const params = new URLSearchParams(data.original_request).toString();
+          entry.requestUrl = `/api/${entry.type}/download?${params}`;
+        }
+
         const progress = data.last_line;
 
         if (!progress) {
@@ -80,6 +91,7 @@ class DownloadQueue {
           return;
         }
 
+        // If the new progress is the same as the last, also treat it as inactivity.
         if (JSON.stringify(entry.lastStatus) === JSON.stringify(progress)) {
           this.handleInactivity(entry, queueId, logElement);
           return;
@@ -108,11 +120,15 @@ class DownloadQueue {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
   }
 
-  createQueueEntry(item, type, prgFile, queueId) {
+  /**
+   * Now accepts a fifth parameter "requestUrl" and stores it in the entry.
+   */
+  createQueueEntry(item, type, prgFile, queueId, requestUrl) {
     return {
       item,
       type,
       prgFile,
+      requestUrl, // store the original API request URL so we can retry later
       element: this.createQueueItem(item, type, prgFile, queueId),
       lastStatus: null,
       lastUpdated: Date.now(),
@@ -174,6 +190,7 @@ class DownloadQueue {
         const prgResponse = await fetch(`/api/prgs/${prgFile}`);
         const prgData = await prgResponse.json();
         const dummyItem = { name: prgData.name || prgFile, external_urls: {} };
+        // In this case, no original request URL is available.
         this.addDownload(dummyItem, prgData.type || "unknown", prgFile);
       }
     } catch (error) {
@@ -210,13 +227,11 @@ class DownloadQueue {
 
     // Helper function for a simple pluralization:
     function pluralize(word) {
-      // If the word already ends with an "s", assume it's plural.
       return word.endsWith('s') ? word : word + 's';
     }
 
     switch (data.status) {
       case 'downloading':
-        // For track downloads only.
         if (data.type === 'track') {
           return `Downloading track "${data.song}" by ${data.artist}...`;
         }
@@ -229,12 +244,9 @@ class DownloadQueue {
           return `Initializing album download "${data.album}" by ${data.artist}...`;
         } else if (data.type === 'artist') {
           let subsets = [];
-          // Prefer an explicit subsets array if available.
           if (data.subsets && Array.isArray(data.subsets) && data.subsets.length > 0) {
             subsets = data.subsets;
-          }
-          // Otherwise, if album_type is provided, split it into an array.
-          else if (data.album_type) {
+          } else if (data.album_type) {
             subsets = data.album_type
               .split(',')
               .map(item => item.trim())
@@ -244,15 +256,12 @@ class DownloadQueue {
             const subsetsMessage = formatList(subsets);
             return `Initializing download for ${data.artist}'s ${subsetsMessage}`;
           }
-          // Fallback message if neither subsets nor album_type are provided.
           return `Initializing download for ${data.artist} with ${data.total_albums} album(s) [${data.album_type}]...`;
         }
         return `Initializing ${data.type} download...`;
 
       case 'progress':
-        // Expect progress messages for playlists, albums (or artist’s albums) to include a "track" and "current_track".
         if (data.track && data.current_track) {
-          // current_track is a string in the format "current/total"
           const parts = data.current_track.split('/');
           const current = parts[0];
           const total = parts[1] || '?';
@@ -260,8 +269,6 @@ class DownloadQueue {
           if (data.type === 'playlist') {
             return `Downloading playlist: Track ${current} of ${total} - ${data.track}`;
           } else if (data.type === 'album') {
-            // For album progress, the "album" and "artist" fields may be available on a done message.
-            // In some cases (like artist downloads) only track info is passed.
             if (data.album && data.artist) {
               return `Downloading album "${data.album}" by ${data.artist}: track ${current} of ${total} - ${data.track}`;
             } else {
@@ -269,7 +276,6 @@ class DownloadQueue {
             }
           }
         }
-        // Fallback if fields are missing:
         return `Progress: ${data.status}...`;
 
       case 'done':
@@ -297,7 +303,6 @@ class DownloadQueue {
         return `Track "${data.song}" skipped, it already exists!`;
 
       case 'real_time': {
-        // Convert milliseconds to minutes and seconds.
         const totalMs = data.time_elapsed;
         const minutes = Math.floor(totalMs / 60000);
         const seconds = Math.floor((totalMs % 60000) / 1000);
@@ -313,19 +318,80 @@ class DownloadQueue {
   /* New Methods to Handle Terminal State and Inactivity */
 
   handleTerminalState(entry, queueId, progress) {
-    // Mark the entry as ended and clear its monitoring interval
+    // Mark the entry as ended and clear its monitoring interval.
     entry.hasEnded = true;
     clearInterval(entry.intervalId);
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    if (logElement) {
+    if (!logElement) return;
+  
+    // If the terminal state is an error, hide the cancel button and add error buttons.
+    if (progress.status === 'error') {
+      // Hide the cancel button.
+      const cancelBtn = entry.element.querySelector('.cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.style.display = 'none';
+      }
+  
+      logElement.innerHTML = `
+        <div class="error-message">${this.getStatusMessage(progress)}</div>
+        <div class="error-buttons">
+          <button class="close-error-btn" title="Close">&times;</button>
+          <button class="retry-btn" title="Retry">Retry</button>
+        </div>
+      `;
+      
+      // Close (X) button: immediately remove the queue entry.
+      logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+        this.cleanupEntry(queueId);
+      });
+      
+      // Retry button: re-send the original API request.
+      logElement.querySelector('.retry-btn').addEventListener('click', async () => {
+        logElement.textContent = 'Retrying download...';
+        if (!entry.requestUrl) {
+          logElement.textContent = 'Retry not available: missing original request information.';
+          return;
+        }
+        try {
+          const retryResponse = await fetch(entry.requestUrl);
+          const retryData = await retryResponse.json();
+          if (retryData.prg_file) {
+            // Delete the failed prg file before updating to the new one.
+            const oldPrgFile = entry.prgFile;
+            await fetch(`/api/prgs/delete/${encodeURIComponent(oldPrgFile)}`, { method: 'DELETE' });
+            
+            // Update the log element's id to reflect the new prg_file.
+            const logEl = entry.element.querySelector('.log');
+            logEl.id = `log-${entry.uniqueId}-${retryData.prg_file}`;
+            
+            // Update the entry with the new prg_file and reset its state.
+            entry.prgFile = retryData.prg_file;
+            entry.lastStatus = null;
+            entry.hasEnded = false;
+            entry.lastUpdated = Date.now();
+            logEl.textContent = 'Retry initiated...';
+            
+            // Restart monitoring using the new prg_file.
+            this.startEntryMonitoring(queueId);
+          } else {
+            logElement.textContent = 'Retry failed: invalid response from server';
+          }
+        } catch (error) {
+          logElement.textContent = 'Retry failed: ' + error.message;
+        }
+      });
+      // Do not automatically clean up if an error occurred.
+      return;
+    } else {
+      // For non-error terminal states, update the message and then clean up after 5 seconds.
       logElement.textContent = this.getStatusMessage(progress);
+      setTimeout(() => this.cleanupEntry(queueId), 5000);
     }
-    // Optionally, perform cleanup after a delay
-    setTimeout(() => this.cleanupEntry(queueId), 5000);
   }
+  
 
   handleInactivity(entry, queueId, logElement) {
-    // Check if a significant time has elapsed since the last update (e.g., 10 seconds)
+    // If no update in 10 seconds, treat as an error.
     const now = Date.now();
     if (now - entry.lastUpdated > 10000) {
       const progress = { status: 'error', message: 'Inactivity timeout' };
