@@ -168,7 +168,7 @@ function renderArtist(artistData, artistId) {
         <div class="track-duration">${album.total_tracks} tracks</div>
         <button class="download-btn download-btn--circle" 
                 data-url="${album.external_urls.spotify}" 
-                data-type="artist"
+                data-type="album"
                 data-album-type="${album.album_type}"
                 data-name="${album.name}">
           Download
@@ -189,6 +189,7 @@ function renderArtist(artistData, artistId) {
   // Attach event listeners for group download buttons.
   attachGroupDownloadListeners();
 }
+
 
 /**
  * Displays an error message in the UI.
@@ -300,12 +301,23 @@ async function startDownload(url, type, item, albumType) {
   try {
     const response = await fetch(apiUrl);
     const data = await response.json();
+
+    // Determine the proper type for the queue entry.
+    // For example, if the API URL used the artist endpoint, then the type should be 'artist';
+    // if using an album endpoint then 'album'; otherwise fall back to the passed type.
+    const downloadType = apiUrl.includes('/artist/download')
+      ? 'artist'
+      : apiUrl.includes('/album/download')
+        ? 'album'
+        : type;
+
     // Add the download to the queue using the working queue implementation.
-    downloadQueue.addDownload(item, type, data.prg_file);
+    downloadQueue.addDownload(item, downloadType, data.prg_file);
   } catch (error) {
     showError('Download failed: ' + error.message);
   }
 }
+
 
 /**
  * A helper function to extract a display name from the URL.

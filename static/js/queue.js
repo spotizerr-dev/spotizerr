@@ -67,6 +67,7 @@ class DownloadQueue {
     if (!entry || entry.hasEnded) return;
 
     entry.intervalId = setInterval(async () => {
+      // Note: use the current prgFile value stored in the entry to build the log element id.
       const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (entry.hasEnded) {
         clearInterval(entry.intervalId);
@@ -77,8 +78,13 @@ class DownloadQueue {
         const response = await fetch(`/api/prgs/${entry.prgFile}`);
         const data = await response.json();
 
+        // Update the entry type from the API response if available.
+        if (data.type) {
+          entry.type = data.type;
+        }
+
         // If the prg file info contains the original_request parameters and we haven't stored a retry URL yet,
-        // build one using the type and original_request parameters.
+        // build one using the updated type and original_request parameters.
         if (!entry.requestUrl && data.original_request) {
           const params = new URLSearchParams(data.original_request).toString();
           entry.requestUrl = `/api/${entry.type}/download?${params}`;
@@ -323,7 +329,7 @@ class DownloadQueue {
     clearInterval(entry.intervalId);
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
     if (!logElement) return;
-  
+
     // If the terminal state is an error, hide the cancel button and add error buttons.
     if (progress.status === 'error') {
       // Hide the cancel button.
@@ -331,7 +337,7 @@ class DownloadQueue {
       if (cancelBtn) {
         cancelBtn.style.display = 'none';
       }
-  
+
       logElement.innerHTML = `
         <div class="error-message">${this.getStatusMessage(progress)}</div>
         <div class="error-buttons">
@@ -388,7 +394,6 @@ class DownloadQueue {
       setTimeout(() => this.cleanupEntry(queueId), 5000);
     }
   }
-  
 
   handleInactivity(entry, queueId, logElement) {
     // If no update in 10 seconds, treat as an error.
