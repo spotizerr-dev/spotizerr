@@ -1,0 +1,299 @@
+/* GENERAL STYLING & UTILITIES */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+  
+  body {
+    /* Use a subtle dark gradient for a modern feel */
+    background: linear-gradient(135deg, #121212, #1e1e1e);
+    color: #ffffff;
+    min-height: 100vh;
+  }
+  
+  /* Main container for page content */
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    position: relative;
+    z-index: 1;
+  }
+  
+  /* LOADING & ERROR STATES */
+  .loading,
+  .error {
+    width: 100%;
+    text-align: center;
+    font-size: 1rem;
+    padding: 1rem;
+  }
+  
+  .error {
+    color: #c0392b;
+  }
+  
+  /* SEARCH HEADER COMPONENT */
+  .search-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 30px;
+    position: sticky;
+    top: 0;
+    background: rgba(18, 18, 18, 1);
+    backdrop-filter: blur(10px);
+    padding: 20px 0;
+    z-index: 100;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  
+  
+  .search-input {
+    flex: 1;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 25px;
+    background: #2a2a2a;
+    color: #ffffff;
+    font-size: 16px;
+    outline: none;
+    transition: background-color 0.3s ease;
+  }
+  
+  .search-input:focus {
+    background: #333333;
+  }
+  
+  .search-type {
+    padding: 12px 15px;
+    background: #2a2a2a;
+    border: none;
+    border-radius: 25px;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  .search-type:hover {
+    background: #3a3a3a;
+  }
+  
+  .search-button {
+    padding: 12px 30px;
+    background-color: #1db954;
+    border: none;
+    border-radius: 25px;
+    color: #ffffff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+  }
+  
+  .search-button:hover {
+    background-color: #1ed760;
+    transform: translateY(-2px);
+  }
+  
+  /* RESULTS GRID COMPONENT */
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+  }
+  
+  /* Each result card gets a modern look with subtle borders, shadows, and transitions */
+  .result-card {
+    background: #181818;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    max-width: 100%;
+  }
+  
+  .result-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
+  }
+  
+  /* Album/Art image wrapper maintains aspect ratio */
+  .album-art-wrapper {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 4px;
+    margin-bottom: 15px;
+  }
+  
+  .album-art-wrapper::before {
+    content: "";
+    display: block;
+    padding-top: 100%;
+  }
+  
+  .album-art {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+  
+  .album-art:hover {
+    transform: scale(1.02);
+  }
+  
+  /* Result text details */
+  .track-title {
+    padding: 0.5rem 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: linear-gradient(90deg, #1db954, #17a44b);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  
+  .track-artist {
+    padding: 0 1rem;
+    font-size: 0.95rem;
+    color: #b3b3b3;
+    margin-bottom: 0.5rem;
+  }
+  
+  /* Track details (e.g., duration, extra info) */
+  .track-details {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    color: #ccc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #2a2a2a;
+  }
+  
+  .duration {
+    font-style: italic;
+    color: #999;
+  }
+  
+  /* Centered Download Button styling */
+  .download-btn {
+    margin: 0.75rem 1rem 1rem;
+    padding: 0.5rem 1rem;
+    background-color: #1db954;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    display: block;
+    text-align: center;
+    width: calc(100% - 2rem);
+  }
+  
+  .download-btn:hover {
+    background-color: #17a44b;
+    transform: scale(1.02);
+  }
+  
+  /* ARTIST DOWNLOAD OPTIONS */
+  .artist-download-buttons {
+    border-top: 1px solid #2a2a2a;
+    padding: 0.5rem 1rem;
+  }
+  
+  .options-toggle {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #b3b3b3;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  
+  .options-toggle:hover {
+    color: #ffffff;
+  }
+  
+  .download-options-container {
+    margin-top: 0.5rem;
+  }
+  
+  .secondary-options {
+    display: none;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  
+  .secondary-options.expanded {
+    display: flex;
+  }
+  
+  .option-btn {
+    flex: 1;
+    background-color: #2a2a2a;
+    color: #ffffff;
+    padding: 0.4rem 0.6rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+  }
+  
+  .option-btn:hover {
+    background-color: #3a3a3a;
+    transform: translateY(-1px);
+  }
+  
+  /* MOBILE RESPONSIVENESS */
+  @media (max-width: 600px) {
+    .search-header {
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 10px 0;
+    }
+    
+    .search-input,
+    .search-type,
+    .search-button {
+      flex: 1 1 100%;
+      margin-bottom: 10px;
+    }
+    
+    .search-type,
+    .search-button {
+      padding: 10px;
+      font-size: 15px;
+    }
+    
+    .results-grid {
+      justify-content: center;
+    }
+    
+    .result-card {
+      width: 90%;
+      margin: 0 auto;
+    }
+  }
+  
