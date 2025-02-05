@@ -103,15 +103,27 @@ function renderPlaylist(playlist) {
 
   playlist.tracks.items.forEach((item, index) => {
     const track = item.track;
+    // Create links for track, artist, and album using their IDs.
+    // Ensure that track.id, track.artists[0].id, and track.album.id are available.
+    const trackLink = `/track/${track.id}`;
+    const artistLink = `/artist/${track.artists[0].id}`;
+    const albumLink = `/album/${track.album.id}`;
+
     const trackElement = document.createElement('div');
     trackElement.className = 'track';
     trackElement.innerHTML = `
       <div class="track-number">${index + 1}</div>
       <div class="track-info">
-        <div class="track-name">${track.name}</div>
-        <div class="track-artist">${track.artists[0].name}</div>
+        <div class="track-name">
+          <a href="${trackLink}" title="View track details">${track.name}</a>
+        </div>
+        <div class="track-artist">
+          <a href="${artistLink}" title="View artist details">${track.artists[0].name}</a>
+        </div>
       </div>
-      <div class="track-album">${track.album.name}</div>
+      <div class="track-album">
+        <a href="${albumLink}" title="View album details">${track.album.name}</a>
+      </div>
       <div class="track-duration">${msToTime(track.duration_ms)}</div>
       <button class="download-btn download-btn--circle" 
               data-url="${track.external_urls.spotify}" 

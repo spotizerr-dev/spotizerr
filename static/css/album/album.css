@@ -403,3 +403,16 @@
     }
   }
   
+  /* Prevent anchor links from appearing all blue */
+a {
+    color: inherit;         /* Inherit color from the parent */
+    text-decoration: none;  /* Remove default underline */
+    transition: color 0.2s ease;
+  }
+  
+  a:hover,
+  a:focus {
+    color: #1db954;         /* Change to a themed green on hover/focus */
+    text-decoration: underline;
+  }
+  

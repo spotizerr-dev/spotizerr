@@ -32,15 +32,22 @@ function renderAlbum(album) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
-  // Album header info
-  document.getElementById('album-name').textContent = album.name;
-  document.getElementById('album-artist').textContent = 
-    `By ${album.artists.map(artist => artist.name).join(', ')}`;
-  
+  const baseUrl = window.location.origin;
+
+  // Album header info with embedded links
+
+  // Album name becomes a link to the album page.
+  document.getElementById('album-name').innerHTML = 
+    `<a href="${baseUrl}/album/${album.id}">${album.name}</a>`;
+
+  // Album artists become links to their artist pages.
+  document.getElementById('album-artist').innerHTML = 
+    `By ${album.artists.map(artist => `<a href="${baseUrl}/artist/${artist.id}">${artist.name}</a>`).join(', ')}`;
+
   const releaseYear = new Date(album.release_date).getFullYear();
   document.getElementById('album-stats').textContent =
     `${releaseYear} • ${album.total_tracks} songs • ${album.label}`;
-  
+
   document.getElementById('album-copyright').textContent =
     album.copyrights.map(c => c.text).join(' • ');
 
@@ -97,8 +104,12 @@ function renderAlbum(album) {
     trackElement.innerHTML = `
       <div class="track-number">${index + 1}</div>
       <div class="track-info">
-        <div class="track-name">${track.name}</div>
-        <div class="track-artist">${track.artists.map(a => a.name).join(', ')}</div>
+        <div class="track-name">
+          <a href="${baseUrl}/track/${track.id}">${track.name}</a>
+        </div>
+        <div class="track-artist">
+          ${track.artists.map(a => `<a href="${baseUrl}/artist/${a.id}">${a.name}</a>`).join(', ')}
+        </div>
       </div>
       <div class="track-duration">${msToTime(track.duration_ms)}</div>
       <button class="download-btn download-btn--circle" 
@@ -134,22 +145,22 @@ function showError(message) {
 }
 
 function attachDownloadListeners() {
-    document.querySelectorAll('.download-btn').forEach((btn) => {
-      if (btn.id === 'downloadAlbumBtn') return;
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const url = e.currentTarget.dataset.url;
-        const type = e.currentTarget.dataset.type;
-        const name = e.currentTarget.dataset.name || extractName(url);
-        const albumType = e.currentTarget.dataset.albumType;
-  
-        // Remove the button after click
-        e.currentTarget.remove();
-  
-        // Start the download for this track.
-        startDownload(url, type, { name }, albumType);
-      });
+  document.querySelectorAll('.download-btn').forEach((btn) => {
+    if (btn.id === 'downloadAlbumBtn') return;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const url = e.currentTarget.dataset.url;
+      const type = e.currentTarget.dataset.type;
+      const name = e.currentTarget.dataset.name || extractName(url);
+      const albumType = e.currentTarget.dataset.albumType;
+
+      // Remove the button after click
+      e.currentTarget.remove();
+
+      // Start the download for this track.
+      startDownload(url, type, { name }, albumType);
     });
+  });
 }
 
 async function startDownload(url, type, item, albumType) {

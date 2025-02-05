@@ -50,14 +50,23 @@ function renderTrack(track) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
-  // Update header info
-  document.getElementById('track-name').textContent = track.name;
-  // Display the first artist’s name (or join multiple if needed)
-  document.getElementById('track-artist').textContent = `By ${track.artists.map(a => a.name).join(', ')}`;
-  // Display album name and type
-  document.getElementById('track-album').textContent = `Album: ${track.album.name} (${track.album.album_type})`;
+  // Update header info with embedded links
+
+  // Track name: linking to its own page (for consistency)
+  document.getElementById('track-name').innerHTML = `<a href="/track/${track.id}" title="View track details">${track.name}</a>`;
+
+  // Artist names: wrap each artist in a link to the artist page
+  document.getElementById('track-artist').innerHTML = `By ${track.artists
+    .map(a => `<a href="/artist/${a.id}" title="View artist details">${a.name}</a>`)
+    .join(', ')}`;
+
+  // Album: embed a link to the album page.
+  document.getElementById('track-album').innerHTML =
+    `Album: <a href="/album/${track.album.id}" title="View album details">${track.album.name}</a> (${track.album.album_type})`;
+
   // Display track duration converted from milliseconds
   document.getElementById('track-duration').textContent = `Duration: ${msToTime(track.duration_ms)}`;
+
   // Show if the track is explicit
   document.getElementById('track-explicit').textContent = track.explicit ? 'Explicit' : 'Clean';
 

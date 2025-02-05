@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
     })
-    .then(data => renderArtist(data))
+    .then(data => renderArtist(data, artistId))  // Pass artistId along
     .catch(error => {
       console.error('Error:', error);
       showError('Failed to load artist info.');
@@ -44,8 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
  *   "total": 5,
  *   "items": [ { album object }, { album object }, ... ]
  * }
+ *
+ * @param {Object} artistData - the artist data from the API.
+ * @param {string} artistId - the artist id from the URL.
  */
-function renderArtist(artistData) {
+function renderArtist(artistData, artistId) {
   // Hide loading and error messages
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
@@ -54,7 +57,10 @@ function renderArtist(artistData) {
   const firstAlbum = artistData.items[0];
   const artistName = firstAlbum?.artists[0]?.name || 'Unknown Artist';
   const artistImage = firstAlbum?.images[0]?.url || 'placeholder.jpg';
-  document.getElementById('artist-name').textContent = artistName;
+
+  // --- Embed the artist name in a link ---
+  document.getElementById('artist-name').innerHTML =
+    `<a href="/artist/${artistId}" class="artist-link">${artistName}</a>`;
   document.getElementById('artist-stats').textContent = `${artistData.total} albums`;
   document.getElementById('artist-image').src = artistImage;
 
@@ -144,11 +150,18 @@ function renderArtist(artistData) {
     albums.forEach((album, index) => {
       const albumElement = document.createElement('div');
       albumElement.className = 'track'; // reusing the same CSS classes as in the playlist view
+
+      // --- Embed links for the album ---
+      // Wrap the album image and album name in an <a> that points to /album/{album.id}
       albumElement.innerHTML = `
         <div class="track-number">${index + 1}</div>
-        <img class="track-image" src="${album.images[1]?.url || album.images[0]?.url || 'placeholder.jpg'}" alt="Album cover" style="width: 64px; height: 64px; border-radius: 4px; margin-right: 1rem;">
+        <a href="/album/${album.id}" class="album-link">
+          <img class="track-image" src="${album.images[1]?.url || album.images[0]?.url || 'placeholder.jpg'}" 
+               alt="Album cover" 
+               style="width: 64px; height: 64px; border-radius: 4px; margin-right: 1rem;">
+        </a>
         <div class="track-info">
-          <div class="track-name">${album.name}</div>
+          <a href="/album/${album.id}" class="track-name">${album.name}</a>
           <div class="track-artist"></div>
         </div>
         <div class="track-album">${album.release_date}</div>
