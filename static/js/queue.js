@@ -398,12 +398,12 @@ class DownloadQueue {
   handleInactivity(entry, queueId, logElement) {
     // If no update in 10 seconds, treat as an error.
     const now = Date.now();
-    if (now - entry.lastUpdated > 10000) {
+    if (now - entry.lastUpdated > 300000) {
       const progress = { status: 'error', message: 'Inactivity timeout' };
       this.handleTerminalState(entry, queueId, progress);
     } else {
       if (logElement) {
-        logElement.textContent = 'Waiting for progress update...';
+        logElement.textContent = this.getStatusMessage(entry.lastStatus)
       }
     }
   }
