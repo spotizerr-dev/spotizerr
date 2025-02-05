@@ -1,0 +1,390 @@
+/* Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: #121212;
+    color: #ffffff;
+    min-height: 100vh;
+    line-height: 1.4;
+}
+
+/* Main App Container */
+#app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Album Header */
+#album-header {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 2rem;
+    align-items: center;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #2a2a2a;
+    flex-wrap: wrap;
+}
+
+#album-image {
+    width: 200px;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+#album-info {
+    flex: 1;
+    min-width: 0;
+}
+
+#album-name {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+#album-artist,
+#album-stats,
+#album-copyright {
+    font-size: 1rem;
+    color: #b3b3b3;
+    margin-bottom: 0.5rem;
+}
+
+#album-copyright {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+/* Playlist Header */
+#playlist-header {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 2rem;
+    align-items: center;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #2a2a2a;
+    flex-wrap: wrap;
+}
+
+#playlist-image {
+    width: 200px;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+#playlist-info {
+    flex: 1;
+    min-width: 0;
+}
+
+#playlist-name {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+#playlist-owner,
+#playlist-stats,
+#playlist-description {
+    font-size: 1rem;
+    color: #b3b3b3;
+    margin-bottom: 0.5rem;
+}
+
+/* Tracks Container */
+#tracks-container {
+    margin-top: 2rem;
+}
+
+#tracks-container h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #2a2a2a;
+    padding-bottom: 0.5rem;
+}
+
+/* Tracks List */
+#tracks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Individual Track Styling */
+.track {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: #181818;
+    border-radius: 8px;
+    transition: background 0.3s ease;
+    flex-wrap: wrap;
+}
+
+.track:hover {
+    background: #2a2a2a;
+}
+
+.track-number {
+    width: 30px;
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+    margin-right: 1rem;
+    flex-shrink: 0;
+}
+
+.track-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    align-items: flex-start;
+}
+
+.track-name {
+    font-size: 1rem;
+    font-weight: bold;
+    word-wrap: break-word;
+}
+
+.track-artist {
+    font-size: 0.9rem;
+    color: #b3b3b3;
+}
+
+.track-album {
+    max-width: 200px;
+    font-size: 0.9rem;
+    color: #b3b3b3;
+    margin-left: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.track-duration {
+    width: 60px;
+    text-align: right;
+    font-size: 0.9rem;
+    color: #b3b3b3;
+    margin-left: 1rem;
+    flex-shrink: 0;
+}
+
+/* Loading and Error States */
+.loading,
+.error {
+    width: 100%;
+    text-align: center;
+    font-size: 1rem;
+    padding: 1rem;
+}
+
+.error {
+    color: #c0392b;
+}
+
+/* Utility Classes */
+.hidden {
+    display: none !important;
+}
+
+/* Unified Download Button Base Style */
+.download-btn {
+    background-color: #1db954;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0.5rem;
+}
+
+.download-btn:hover {
+    background-color: #17a44b;
+}
+
+.download-btn:active {
+    transform: scale(0.98);
+}
+
+/* Circular Variant for Compact Areas (e.g., in a queue list) */
+.download-btn--circle {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+}
+
+.download-btn--circle::before {
+    content: "↓";
+    font-size: 16px;
+    color: #fff;
+    display: inline-block;
+}
+
+/* Icon next to text */
+.download-btn .btn-icon {
+    margin-right: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* Back Button Styling */
+.back-btn {
+    background-color: #333;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    margin-right: 1rem;
+}
+
+.back-btn:hover {
+    background-color: #444;
+}
+
+.back-btn:active {
+    transform: scale(0.98);
+}
+
+/* Download Queue Toggle Button */
+.queue-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #1db954;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    z-index: 1002;
+}
+
+.queue-toggle:hover {
+    background: #1ed760;
+    transform: scale(1.05);
+}
+
+.queue-toggle:active {
+    transform: scale(1);
+}
+
+/* Responsive Styles */
+
+/* Medium Devices (Tablets) */
+@media (max-width: 768px) {
+    #playlist-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    #playlist-image {
+        width: 100%;
+        height: auto;
+        margin-bottom: 1rem;
+    }
+    
+    .track {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .track-album,
+    .track-duration {
+        margin-left: 0;
+        margin-top: 0.5rem;
+        width: 100%;
+        text-align: left;
+    }
+}
+
+/* Small Devices (Mobile Phones) */
+@media (max-width: 480px) {
+    #app {
+        padding: 10px;
+    }
+    
+    #playlist-name {
+        font-size: 1.5rem;
+    }
+    
+    .track {
+        padding: 0.8rem;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .track-number {
+        font-size: 0.9rem;
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    .track-info {
+        align-items: center;
+    }
+    
+    .track-album,
+    .track-duration {
+        margin-left: 0;
+        margin-top: 0.5rem;
+        width: 100%;
+        text-align: center;
+    }
+    
+    /* Mobile-specific styles for Album Info */
+    #album-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    #album-image {
+        width: 150px;
+        height: 150px;
+        margin-bottom: 1rem;
+    }
+    
+    #album-info {
+        width: 100%;
+    }
+    
+    #album-name {
+        font-size: 1.5rem;
+    }
+    
+    #album-artist,
+    #album-stats,
+    #album-copyright {
+        font-size: 0.9rem;
+    }
+}

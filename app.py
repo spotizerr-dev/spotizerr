@@ -58,6 +58,11 @@ def create_app():
     def serve_playlist(id):
         # The id parameter is captured, but you can use it as needed.
         return render_template('playlist.html')
+        # New route: Serve playlist.html under /playlist/<id>
+    @app.route('/album/<id>')
+    def serve_album(id):
+        # The id parameter is captured, but you can use it as needed.
+        return render_template('album.html')
 
     @app.route('/static/<path:path>')
     def serve_static(path):
