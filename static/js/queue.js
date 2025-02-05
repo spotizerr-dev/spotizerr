@@ -67,7 +67,7 @@ class DownloadQueue {
     if (!entry || entry.hasEnded) return;
 
     entry.intervalId = setInterval(async () => {
-      // Note: use the current prgFile value stored in the entry to build the log element id.
+      // Use the current prgFile value stored in the entry to build the log element id.
       const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (entry.hasEnded) {
         clearInterval(entry.intervalId);
@@ -140,7 +140,9 @@ class DownloadQueue {
       lastUpdated: Date.now(),
       hasEnded: false,
       intervalId: null,
-      uniqueId: queueId
+      uniqueId: queueId,
+      retryCount: 0,         // <== Initialize retry counter
+      autoRetryInterval: null // <== To store the countdown interval ID for auto retry
     };
   }
 
@@ -208,6 +210,9 @@ class DownloadQueue {
     const entry = this.downloadQueue[queueId];
     if (entry) {
       clearInterval(entry.intervalId);
+      if (entry.autoRetryInterval) {
+        clearInterval(entry.autoRetryInterval);
+      }
       entry.element.remove();
       delete this.downloadQueue[queueId];
       fetch(`/api/prgs/delete/${encodeURIComponent(entry.prgFile)}`, { method: 'DELETE' })
@@ -297,7 +302,7 @@ class DownloadQueue {
         return `Finished ${data.type}`;
 
       case 'retrying':
-        return `Track "${data.song}" by ${data.artist}" failed, retrying (${data.retry_count}/10) in ${data.seconds_left}s`;
+        return `Track "${data.song}" by ${data.artist}" failed, retrying (${data.retry_count}/3) in ${data.seconds_left}s`;
 
       case 'error':
         return `Error: ${data.message || 'Unknown error'}`;
@@ -321,7 +326,7 @@ class DownloadQueue {
     }
   }
 
-  /* New Methods to Handle Terminal State and Inactivity */
+  /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
 
   handleTerminalState(entry, queueId, progress) {
     // Mark the entry as ended and clear its monitoring interval.
@@ -330,7 +335,6 @@ class DownloadQueue {
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
     if (!logElement) return;
 
-    // If the terminal state is an error, hide the cancel button and add error buttons.
     if (progress.status === 'error') {
       // Hide the cancel button.
       const cancelBtn = entry.element.querySelector('.cancel-btn');
@@ -338,6 +342,7 @@ class DownloadQueue {
         cancelBtn.style.display = 'none';
       }
 
+      // Display error message with retry buttons.
       logElement.innerHTML = `
         <div class="error-message">${this.getStatusMessage(progress)}</div>
         <div class="error-buttons">
@@ -345,47 +350,49 @@ class DownloadQueue {
           <button class="retry-btn" title="Retry">Retry</button>
         </div>
       `;
-      
+
       // Close (X) button: immediately remove the queue entry.
       logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+        // If an auto-retry countdown is running, clear it.
+        if (entry.autoRetryInterval) {
+          clearInterval(entry.autoRetryInterval);
+          entry.autoRetryInterval = null;
+        }
         this.cleanupEntry(queueId);
       });
-      
-      // Retry button: re-send the original API request.
+
+      // Manual Retry button: cancel the auto-retry timer (if running) and retry immediately.
       logElement.querySelector('.retry-btn').addEventListener('click', async () => {
-        logElement.textContent = 'Retrying download...';
-        if (!entry.requestUrl) {
-          logElement.textContent = 'Retry not available: missing original request information.';
-          return;
+        if (entry.autoRetryInterval) {
+          clearInterval(entry.autoRetryInterval);
+          entry.autoRetryInterval = null;
         }
-        try {
-          const retryResponse = await fetch(entry.requestUrl);
-          const retryData = await retryResponse.json();
-          if (retryData.prg_file) {
-            // Delete the failed prg file before updating to the new one.
-            const oldPrgFile = entry.prgFile;
-            await fetch(`/api/prgs/delete/${encodeURIComponent(oldPrgFile)}`, { method: 'DELETE' });
-            
-            // Update the log element's id to reflect the new prg_file.
-            const logEl = entry.element.querySelector('.log');
-            logEl.id = `log-${entry.uniqueId}-${retryData.prg_file}`;
-            
-            // Update the entry with the new prg_file and reset its state.
-            entry.prgFile = retryData.prg_file;
-            entry.lastStatus = null;
-            entry.hasEnded = false;
-            entry.lastUpdated = Date.now();
-            logEl.textContent = 'Retry initiated...';
-            
-            // Restart monitoring using the new prg_file.
-            this.startEntryMonitoring(queueId);
-          } else {
-            logElement.textContent = 'Retry failed: invalid response from server';
-          }
-        } catch (error) {
-          logElement.textContent = 'Retry failed: ' + error.message;
-        }
+        this.retryDownload(queueId, logElement);
       });
+
+      // --- Auto-Retry Logic ---
+      // Only auto-retry if we have a requestUrl.
+      if (entry.requestUrl) {
+        const maxRetries = 10;
+        if (entry.retryCount < maxRetries) {
+          const autoRetryDelay = 300; // seconds (5 minutes)
+          let secondsLeft = autoRetryDelay;
+
+          // Start a countdown that updates the error message every second.
+          entry.autoRetryInterval = setInterval(() => {
+            secondsLeft--;
+            const errorMsgEl = logElement.querySelector('.error-message');
+            if (errorMsgEl) {
+              errorMsgEl.textContent = `Error: ${progress.message || 'Unknown error'}. Retrying in ${secondsLeft} seconds... (attempt ${entry.retryCount + 1}/${maxRetries})`;
+            }
+            if (secondsLeft <= 0) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+              this.retryDownload(queueId, logElement);
+            }
+          }, 1000);
+        }
+      }
       // Do not automatically clean up if an error occurred.
       return;
     } else {
@@ -396,15 +403,57 @@ class DownloadQueue {
   }
 
   handleInactivity(entry, queueId, logElement) {
-    // If no update in 10 seconds, treat as an error.
+    // If no update in 5 minutes (300,000ms), treat as an error.
     const now = Date.now();
     if (now - entry.lastUpdated > 300000) {
       const progress = { status: 'error', message: 'Inactivity timeout' };
       this.handleTerminalState(entry, queueId, progress);
     } else {
       if (logElement) {
-        logElement.textContent = this.getStatusMessage(entry.lastStatus)
+        logElement.textContent = this.getStatusMessage(entry.lastStatus);
       }
+    }
+  }
+
+  /**
+   * retryDownload() handles both manual and automatic retries.
+   */
+  async retryDownload(queueId, logElement) {
+    const entry = this.downloadQueue[queueId];
+    if (!entry) return;
+
+    logElement.textContent = 'Retrying download...';
+    if (!entry.requestUrl) {
+      logElement.textContent = 'Retry not available: missing original request information.';
+      return;
+    }
+    try {
+      const retryResponse = await fetch(entry.requestUrl);
+      const retryData = await retryResponse.json();
+      if (retryData.prg_file) {
+        // Delete the failed prg file before updating to the new one.
+        const oldPrgFile = entry.prgFile;
+        await fetch(`/api/prgs/delete/${encodeURIComponent(oldPrgFile)}`, { method: 'DELETE' });
+
+        // Update the log element's id to reflect the new prg_file.
+        const logEl = entry.element.querySelector('.log');
+        logEl.id = `log-${entry.uniqueId}-${retryData.prg_file}`;
+
+        // Update the entry with the new prg_file and reset its state.
+        entry.prgFile = retryData.prg_file;
+        entry.lastStatus = null;
+        entry.hasEnded = false;
+        entry.lastUpdated = Date.now();
+        entry.retryCount = (entry.retryCount || 0) + 1;
+        logEl.textContent = 'Retry initiated...';
+
+        // Restart monitoring using the new prg_file.
+        this.startEntryMonitoring(queueId);
+      } else {
+        logElement.textContent = 'Retry failed: invalid response from server';
+      }
+    } catch (error) {
+      logElement.textContent = 'Retry failed: ' + error.message;
     }
   }
 }
