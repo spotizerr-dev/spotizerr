@@ -26,15 +26,16 @@ async function performSearch() {
         return;
     }
 
+    // If the query is a Spotify URL for a supported resource, redirect to our route.
     if (isSpotifyUrl(query)) {
         try {
-            const type = getResourceTypeFromUrl(query);
+            const { type, id } = getSpotifyResourceDetails(query);
             const supportedTypes = ['track', 'album', 'playlist', 'artist'];
-            if (!supportedTypes.includes(type)) throw new Error('Unsupported URL type');
+            if (!supportedTypes.includes(type))
+                throw new Error('Unsupported URL type');
             
-            const item = { name: `Direct URL (${type})`, external_urls: { spotify: query } };
-            startDownload(query, type, item, type === 'artist' ? 'album,single,compilation' : undefined);
-            document.getElementById('searchInput').value = '';
+            // Redirect to {base_url}/{type}/{id}
+            window.location.href = `${window.location.origin}/${type}/${id}`;
             return;
         } catch (error) {
             showError(`Invalid Spotify URL: ${error.message}`);
@@ -127,9 +128,21 @@ function isSpotifyUrl(url) {
     return url.startsWith('https://open.spotify.com/');
 }
 
-function getResourceTypeFromUrl(url) {
-    const pathParts = new URL(url).pathname.split('/');
-    return pathParts[1];
+/**
+ * Extracts the resource type and ID from a Spotify URL.
+ * Expected URL format: https://open.spotify.com/{type}/{id}
+ */
+function getSpotifyResourceDetails(url) {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/');
+    // Expecting ['', type, id, ...]
+    if (pathParts.length < 3 || !pathParts[1] || !pathParts[2]) {
+        throw new Error('Invalid Spotify URL');
+    }
+    return {
+        type: pathParts[1],
+        id: pathParts[2]
+    };
 }
 
 function msToMinutesSeconds(ms) {
