@@ -64,6 +64,11 @@ def create_app():
         # The id parameter is captured, but you can use it as needed.
         return render_template('album.html')
 
+    @app.route('/track/<id>')
+    def serve_track(id):
+        # The id parameter is captured, but you can use it as needed.
+        return render_template('track.html')
+
     @app.route('/static/<path:path>')
     def serve_static(path):
         return send_from_directory('static', path)
