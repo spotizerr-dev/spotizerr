@@ -194,7 +194,9 @@ async function startDownload(url, type, item, albumType) {
     deezer = '',
     spotifyQuality = 'NORMAL',
     deezerQuality = 'MP3_128',
-    realTime = false
+    realTime = false,
+    customDirFormat = '',
+    customTrackFormat = ''
   } = config;
 
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
@@ -218,6 +220,14 @@ async function startDownload(url, type, item, albumType) {
 
   if (realTime) {
     apiUrl += '&real_time=true';
+  }
+
+  // Append custom directory and file format settings if provided.
+  if (customDirFormat) {
+    apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
+  }
+  if (customTrackFormat) {
+    apiUrl += `&custom_file_format=${encodeURIComponent(customTrackFormat)}`;
   }
 
   try {
