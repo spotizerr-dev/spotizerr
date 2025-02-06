@@ -300,8 +300,8 @@ function loadConfig() {
   document.getElementById('deezerQualitySelect').value = saved.deezerQuality || 'MP3_128';
   document.getElementById('realTimeToggle').checked = !!saved.realTime;
   // Load the new formatting settings. If not set, you can choose to default to an empty string or a specific format.
-  document.getElementById('customDirFormat').value = saved.customDirFormat || '';
-  document.getElementById('customTrackFormat').value = saved.customTrackFormat || '';
+  document.getElementById('customDirFormat').value = saved.customDirFormat || '%ar_album%/%album%';
+  document.getElementById('customTrackFormat').value = saved.customTrackFormat || '%tracknum%. %music%';
 }
 
 function showConfigError(message) {

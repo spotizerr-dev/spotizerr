@@ -140,6 +140,23 @@ body {
   background: #1db954;
 }
 
+/* New Input Styling for Custom Format Fields */
+.config-item input[type="text"] {
+  width: 100%;
+  padding: 0.8rem;
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 0.95rem;
+  transition: border-color 0.3s ease;
+}
+
+.config-item input[type="text"]:focus {
+  outline: none;
+  border-color: #1db954;
+}
+
 /* Improved Toggle Switches */
 .switch {
   position: relative;
