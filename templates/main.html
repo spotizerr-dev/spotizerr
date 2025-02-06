@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spotizerr</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main/main.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main/icons.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/queue/queue.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="search-header">
+      <!-- Settings icon linking to the config page -->
+      <a href="/config" class="settings-icon">
+        <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings" />
+      </a>
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search tracks, albums, playlists or artists... (Or paste in a spotify url)"
+        id="searchInput"
+      />
+      <select class="search-type" id="searchType">
+        <option value="track">Tracks</option>
+        <option value="album">Albums</option>
+        <option value="playlist">Playlists</option>
+        <option value="artist">Artists</option>
+      </select>
+      <button class="search-button" id="searchButton" aria-label="Search">
+        Search
+      </button>
+      <!-- Queue icon button; event is attached in main.js -->
+      <button
+        id="queueIcon"
+        class="queue-icon"
+        aria-label="Download queue"
+        aria-controls="downloadQueue"
+        aria-expanded="false"
+      >
+        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="" />
+      </button>
+    </div>
+    <div id="resultsContainer" class="results-grid"></div>
+  </div>
+  <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

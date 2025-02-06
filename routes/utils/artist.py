@@ -68,7 +68,7 @@ def download_artist_albums(service, artist_url, main, fallback=None, quality=Non
         })
         return
 
-    log_json({"status": "initializing", "type": "artist", "artist": artist_name, "total_albums": len(albums)})
+    log_json({"status": "initializing", "type": "artist", "artist": artist_name, "total_albums": len(albums), "album_type": album_type})
 
     for album in albums:
         try:

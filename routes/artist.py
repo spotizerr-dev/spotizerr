@@ -44,9 +44,10 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_artist_task(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path):
+def download_artist_task(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path, orig_request):
     """
-    This function wraps the call to download_artist_albums and writes JSON status to the prg file.
+    This function wraps the call to download_artist_albums, writes the original
+    request data to the progress file, and then writes JSON status updates.
     """
     try:
         from routes.utils.artist import download_artist_albums
@@ -54,6 +55,15 @@ def download_artist_task(service, artist_url, main, fallback, quality, fall_qual
             flushing_file = FlushingFileWrapper(f)
             original_stdout = sys.stdout
             sys.stdout = flushing_file  # Redirect stdout to our flushing file wrapper
+
+            # Write the original request data to the progress file.
+            try:
+                flushing_file.write(json.dumps({"original_request": orig_request}) + "\n")
+            except Exception as e:
+                flushing_file.write(json.dumps({
+                    "status": "error",
+                    "message": f"Failed to write original request data: {str(e)}"
+                }) + "\n")
 
             try:
                 download_artist_albums(
@@ -179,10 +189,13 @@ def handle_artist_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
 
+    # Capture the original request parameters as a dictionary.
+    orig_request = request.args.to_dict()
+
     # Create and start the download process.
     process = Process(
         target=download_artist_task,
-        args=(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path)
+        args=(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path, orig_request)
     )
     process.start()
     download_processes[filename] = process
@@ -234,5 +247,41 @@ def cancel_artist_download():
         return Response(
             json.dumps({"error": "Process not found or already terminated"}),
             status=404,
+            mimetype='application/json'
+        )
+
+# NEW ENDPOINT: Get Artist Information
+@artist_bp.route('/info', methods=['GET'])
+def get_artist_info():
+    """
+    Retrieve Spotify artist metadata given a Spotify ID.
+    Expects a query parameter 'id' that contains the Spotify artist ID.
+    """
+    spotify_id = request.args.get('id')
+    if not spotify_id:
+        return Response(
+            json.dumps({"error": "Missing parameter: id"}),
+            status=400,
+            mimetype='application/json'
+        )
+    
+    try:
+        # Import the get_spotify_info function from the utility module.
+        from routes.utils.get_info import get_spotify_info
+        # Call the function with the artist type.
+        artist_info = get_spotify_info(spotify_id, "artist")
+        return Response(
+            json.dumps(artist_info),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        error_data = {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        return Response(
+            json.dumps(error_data),
+            status=500,
             mimetype='application/json'
         )

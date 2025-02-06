@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Album Viewer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/queue/queue.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main/icons.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/album/album.css') }}" />
+</head>
+<body>
+  <div id="app">
+    <div id="album-header" class="hidden">
+      <img id="album-image" alt="Album cover">
+      <div id="album-info">
+        <h1 id="album-name"></h1>
+        <p id="album-artist"></p>
+        <p id="album-stats"></p>
+        <p id="album-copyright"></p>
+      </div>
+      <button id="queueIcon" class="queue-icon" aria-label="Download queue" aria-controls="downloadQueue" aria-expanded="false">
+        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="Queue Icon">
+      </button>
+    </div>
+    
+    <div id="tracks-container" class="hidden">
+      <h2>Tracks</h2>
+      <div id="tracks-list"></div>
+    </div>
+
+    <div id="loading">Loading...</div>
+    <div id="error" class="hidden">Error loading album</div>
+  </div>
+
+  <script type="module" src="{{ url_for('static', filename='js/album.js') }}"></script>
+</body>
+</html>

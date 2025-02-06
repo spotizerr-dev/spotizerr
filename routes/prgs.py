@@ -10,8 +10,11 @@ PRGS_DIR = os.path.join(os.getcwd(), 'prgs')
 @prgs_bp.route('/<filename>', methods=['GET'])
 def get_prg_file(filename):
     """
-    Return a JSON object with the resource type, its name (title) and the last line (progress update) of the PRG file.
-    If the file is empty, return default values.
+    Return a JSON object with the resource type, its name (title),
+    the last progress update (last line) of the PRG file, and, if available,
+    the original request parameters (from the first line of the file).
+    
+    For resource type and name, the second line of the file is used.
     """
     try:
         # Security check to prevent path traversal attacks.
@@ -29,41 +32,53 @@ def get_prg_file(filename):
             return jsonify({
                 "type": "",
                 "name": "",
-                "last_line": None
+                "last_line": None,
+                "original_request": None
             })
 
-        # Process the initialization line (first line) to extract type and name.
+        # Attempt to extract the original request from the first line.
+        original_request = None
         try:
-            init_data = json.loads(lines[0])
-        except Exception as e:
-            # If parsing fails, use defaults.
-            init_data = {}
+            first_line = json.loads(lines[0])
+            if "original_request" in first_line:
+                original_request = first_line["original_request"]
+        except Exception:
+            original_request = None
 
-        resource_type = init_data.get("type", "")
-        # Determine the name based on type.
-        if resource_type == "track":
-            resource_name = init_data.get("song", "")
-        elif resource_type == "album":
-            resource_name = init_data.get("album", "")
-        elif resource_type == "playlist":
-            resource_name = init_data.get("name", "")
-        elif resource_type == "artist":
-            resource_name = init_data.get("artist", "")
+        # For resource type and name, use the second line if available.
+        if len(lines) > 1:
+            try:
+                second_line = json.loads(lines[1])
+                resource_type = second_line.get("type", "")
+                if resource_type == "track":
+                    resource_name = second_line.get("song", "")
+                elif resource_type == "album":
+                    resource_name = second_line.get("album", "")
+                elif resource_type == "playlist":
+                    resource_name = second_line.get("name", "")
+                elif resource_type == "artist":
+                    resource_name = second_line.get("artist", "")
+                else:
+                    resource_name = ""
+            except Exception:
+                resource_type = ""
+                resource_name = ""
         else:
+            resource_type = ""
             resource_name = ""
 
         # Get the last line from the file.
         last_line_raw = lines[-1]
-        # Try to parse the last line as JSON.
         try:
             last_line_parsed = json.loads(last_line_raw)
         except Exception:
-            last_line_parsed = last_line_raw  # Fallback to returning raw string if JSON parsing fails.
+            last_line_parsed = last_line_raw  # Fallback to raw string if JSON parsing fails.
 
         return jsonify({
             "type": resource_type,
             "name": resource_name,
-            "last_line": last_line_parsed
+            "last_line": last_line_parsed,
+            "original_request": original_request
         })
     except FileNotFoundError:
         abort(404, "File not found")

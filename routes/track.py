@@ -30,14 +30,23 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request):
     try:
         from routes.utils.track import download_track
         with open(prg_path, 'w') as f:
             flushing_file = FlushingFileWrapper(f)
             original_stdout = sys.stdout
             sys.stdout = flushing_file  # Redirect stdout for this process
-            
+
+            # Write the original request data into the progress file.
+            try:
+                flushing_file.write(json.dumps({"original_request": orig_request}) + "\n")
+            except Exception as e:
+                flushing_file.write(json.dumps({
+                    "status": "error",
+                    "message": f"Failed to write original request data: {str(e)}"
+                }) + "\n")
+
             try:
                 download_track(
                     service=service,
@@ -148,9 +157,12 @@ def handle_download():
     os.makedirs(prg_dir, exist_ok=True)
     prg_path = os.path.join(prg_dir, filename)
     
+    # Capture the original request parameters as a dictionary.
+    orig_request = request.args.to_dict()
+
     process = Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path)
+        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request)
     )
     process.start()
     # Track the running process using the generated filename.
@@ -206,5 +218,41 @@ def cancel_download():
         return Response(
             json.dumps({"error": "Process not found or already terminated"}),
             status=404,
+            mimetype='application/json'
+        )
+
+# NEW ENDPOINT: Get Track Information
+@track_bp.route('/info', methods=['GET'])
+def get_track_info():
+    """
+    Retrieve Spotify track metadata given a Spotify track ID.
+    Expects a query parameter 'id' that contains the Spotify track ID.
+    """
+    spotify_id = request.args.get('id')
+    if not spotify_id:
+        return Response(
+            json.dumps({"error": "Missing parameter: id"}),
+            status=400,
+            mimetype='application/json'
+        )
+    
+    try:
+        # Import the get_spotify_info function from the utility module.
+        from routes.utils.get_info import get_spotify_info
+        # Call the function with the track type.
+        track_info = get_spotify_info(spotify_id, "track")
+        return Response(
+            json.dumps(track_info),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        error_data = {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+        return Response(
+            json.dumps(error_data),
+            status=500,
             mimetype='application/json'
         )
