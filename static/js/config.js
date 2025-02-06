@@ -70,6 +70,10 @@ function setupEventListeners() {
   // Account select changes
   document.getElementById('spotifyAccountSelect').addEventListener('change', saveConfig);
   document.getElementById('deezerAccountSelect').addEventListener('change', saveConfig);
+
+  // New formatting settings change listeners
+  document.getElementById('customDirFormat').addEventListener('change', saveConfig);
+  document.getElementById('customTrackFormat').addEventListener('change', saveConfig);
 }
 
 async function updateAccountSelectors() {
@@ -279,7 +283,10 @@ function saveConfig() {
     fallback: document.getElementById('fallbackToggle').checked,
     spotifyQuality: document.getElementById('spotifyQualitySelect').value,
     deezerQuality: document.getElementById('deezerQualitySelect').value,
-    realTime: document.getElementById('realTimeToggle').checked
+    realTime: document.getElementById('realTimeToggle').checked,
+    // Save the new formatting settings
+    customDirFormat: document.getElementById('customDirFormat').value,
+    customTrackFormat: document.getElementById('customTrackFormat').value
   };
   localStorage.setItem('activeConfig', JSON.stringify(config));
 }
@@ -292,6 +299,9 @@ function loadConfig() {
   document.getElementById('spotifyQualitySelect').value = saved.spotifyQuality || 'NORMAL';
   document.getElementById('deezerQualitySelect').value = saved.deezerQuality || 'MP3_128';
   document.getElementById('realTimeToggle').checked = !!saved.realTime;
+  // Load the new formatting settings. If not set, you can choose to default to an empty string or a specific format.
+  document.getElementById('customDirFormat').value = saved.customDirFormat || '';
+  document.getElementById('customTrackFormat').value = saved.customTrackFormat || '';
 }
 
 function showConfigError(message) {
