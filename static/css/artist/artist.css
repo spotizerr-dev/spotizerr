@@ -98,7 +98,49 @@ body {
   gap: 1rem;
 }
 
-/* Track Card (for Albums) */
+/* Unified Album Card (Desktop & Mobile) */
+.album-card {
+  background: #181818;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+}
+
+.album-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+/* Album Cover Image */
+.album-cover {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-right: 1rem;
+}
+
+/* Album Info */
+.album-info {
+  flex: 1;
+}
+
+.album-title {
+  font-size: 1rem;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+}
+
+.album-artist {
+  font-size: 0.9rem;
+  color: #b3b3b3;
+}
+
+/* Track Card (for Albums or Songs) */
 .track {
   display: flex;
   align-items: center;
@@ -221,7 +263,6 @@ body {
   margin: 0.5rem;
 }
 
-/* Image inside circular download button */
 .download-btn--circle img {
   width: 20px;
   height: 20px;
@@ -302,7 +343,6 @@ body {
     font-size: 1.75rem;
   }
   
-  /* Adjust album card layout */
   .track {
     padding: 0.8rem;
     flex-direction: column;
@@ -326,6 +366,38 @@ body {
     margin-top: 0.5rem;
     width: 100%;
     text-align: center;
+  }
+  
+  /* Mobile Album Grid Styles Inspired by Spotify */
+  .albums-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+  
+  /* Adjust album card for mobile grid */
+  .album-card {
+    flex-direction: column;
+    padding: 0;
+  }
+  
+  .album-cover {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    margin: 0;
+  }
+  
+  .album-info {
+    padding: 0.5rem;
+    text-align: center;
+  }
+  
+  .album-title {
+    font-size: 1rem;
+  }
+  
+  .album-artist {
+    font-size: 0.9rem;
   }
 }
 

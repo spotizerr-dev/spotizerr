@@ -85,12 +85,14 @@ function renderArtist(artistData, artistId) {
     downloadArtistBtn.disabled = true;
     downloadArtistBtn.textContent = 'Queueing...';
 
-    downloadWholeArtist(artistData).then(() => {
-      downloadArtistBtn.textContent = 'Queued!';
-    }).catch(err => {
-      showError('Failed to queue artist download: ' + err.message);
-      downloadArtistBtn.disabled = false;
-    });
+    downloadWholeArtist(artistData)
+      .then(() => {
+        downloadArtistBtn.textContent = 'Queued!';
+      })
+      .catch(err => {
+        showError('Failed to queue artist download: ' + err.message);
+        downloadArtistBtn.disabled = false;
+      });
   });
 
   // Group albums by album type.
@@ -128,24 +130,20 @@ function renderArtist(artistData, artistId) {
     // Container for individual albums in this group.
     const albumsContainer = document.createElement('div');
     albumsContainer.className = 'albums-list';
-    albums.forEach((album, index) => {
+    albums.forEach(album => {
       const albumElement = document.createElement('div');
-      albumElement.className = 'track'; // reusing styling from the playlist view
-
-      // Use an <a> around the album image and name.
+      // Build a unified album card markup that works for both desktop and mobile.
+      albumElement.className = 'album-card';
       albumElement.innerHTML = `
-        <div class="track-number">${index + 1}</div>
         <a href="/album/${album.id}" class="album-link">
-          <img class="track-image" src="${album.images[1]?.url || album.images[0]?.url || 'placeholder.jpg'}" 
+          <img src="${album.images[1]?.url || album.images[0]?.url || 'placeholder.jpg'}" 
                alt="Album cover" 
-               style="width: 64px; height: 64px; border-radius: 4px; margin-right: 1rem;">
+               class="album-cover">
         </a>
-        <div class="track-info">
-          <a href="/album/${album.id}" class="track-name">${album.name}</a>
-          <div class="track-artist"></div>
+        <div class="album-info">
+          <div class="album-title">${album.name}</div>
+          <div class="album-artist">${album.artists.map(a => a.name).join(', ')}</div>
         </div>
-        <div class="track-album">${album.release_date}</div>
-        <div class="track-duration">${album.total_tracks} tracks</div>
         <button class="download-btn download-btn--circle" 
                 data-url="${album.external_urls.spotify}" 
                 data-type="album"
