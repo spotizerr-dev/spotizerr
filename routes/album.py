@@ -40,7 +40,8 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request,
+                  custom_dir_format, custom_track_format):
     """
     The download task writes out the original request data into the progress file
     and then runs the album download.
@@ -69,7 +70,9 @@ def download_task(service, url, main, fallback, quality, fall_quality, real_time
                     fallback=fallback,
                     quality=quality,
                     fall_quality=fall_quality,
-                    real_time=real_time
+                    real_time=real_time,
+                    custom_dir_format=custom_dir_format,
+                    custom_track_format=custom_track_format
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -102,6 +105,10 @@ def handle_download():
     # Retrieve and normalize the real_time parameter; defaults to False.
     real_time_arg = request.args.get('real_time', 'false')
     real_time = real_time_arg.lower() in ['true', '1', 'yes']
+
+    # New custom formatting parameters (with defaults)
+    custom_dir_format = request.args.get('custom_dir_format', "%ar_album%/%album%")
+    custom_track_format = request.args.get('custom_track_format', "%tracknum%. %music% - %artist%")
 
     # Sanitize main and fallback to prevent directory traversal
     if main:
@@ -177,7 +184,19 @@ def handle_download():
     # Create and start the download process, and track it in the global dictionary.
     process = Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request)
+        args=(
+            service,
+            url,
+            main,
+            fallback,
+            quality,
+            fall_quality,
+            real_time,
+            prg_path,
+            orig_request,
+            custom_dir_format,
+            custom_track_format
+        )
     )
     process.start()
     download_processes[filename] = process

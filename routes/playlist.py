@@ -1,11 +1,12 @@
-from flask import Blueprint, Response, request
-import json
 import os
+import json
+import traceback
+from deezspot.spotloader import SpoLogin
+from deezspot.deezloader import DeeLogin
+from multiprocessing import Process
 import random
 import string
 import sys
-import traceback
-from multiprocessing import Process
 
 playlist_bp = Blueprint('playlist', __name__)
 
@@ -40,7 +41,8 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time,
+                  prg_path, orig_request, custom_dir_format, custom_track_format):
     try:
         from routes.utils.playlist import download_playlist
         with open(prg_path, 'w') as f:
@@ -65,7 +67,9 @@ def download_task(service, url, main, fallback, quality, fall_quality, real_time
                     fallback=fallback,
                     quality=quality,
                     fall_quality=fall_quality,
-                    real_time=real_time
+                    real_time=real_time,
+                    custom_dir_format=custom_dir_format,
+                    custom_track_format=custom_track_format
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -100,6 +104,10 @@ def handle_download():
     real_time_str = request.args.get('real_time', 'false').lower()
     real_time = real_time_str in ['true', '1', 'yes']
     
+    # New custom formatting parameters, with defaults.
+    custom_dir_format = request.args.get('custom_dir_format', "%ar_album%/%album%/%copyright%")
+    custom_track_format = request.args.get('custom_track_format', "%tracknum%. %music% - %artist%")
+    
     if not all([service, url, main]):
         return Response(
             json.dumps({"error": "Missing parameters"}),
@@ -117,7 +125,10 @@ def handle_download():
     
     process = Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request)
+        args=(
+            service, url, main, fallback, quality, fall_quality, real_time,
+            prg_path, orig_request, custom_dir_format, custom_track_format
+        )
     )
     process.start()
     # Track the running process using the generated filename.

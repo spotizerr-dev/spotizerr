@@ -44,7 +44,8 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_artist_task(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path, orig_request):
+def download_artist_task(service, artist_url, main, fallback, quality, fall_quality, real_time,
+                         album_type, prg_path, orig_request, custom_dir_format, custom_track_format):
     """
     This function wraps the call to download_artist_albums, writes the original
     request data to the progress file, and then writes JSON status updates.
@@ -75,6 +76,8 @@ def download_artist_task(service, artist_url, main, fallback, quality, fall_qual
                     fall_quality=fall_quality,
                     real_time=real_time,
                     album_type=album_type,
+                    custom_dir_format=custom_dir_format,
+                    custom_track_format=custom_track_format
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -108,6 +111,8 @@ def handle_artist_download():
       - fall_quality: string (optional, e.g., "HIGH")
       - real_time: bool (e.g., "true" or "false")
       - album_type: string(s); one or more of "album", "single", "appears_on", "compilation" (if multiple, comma-separated)
+      - custom_dir_format: string (optional, default: "%ar_album%/%album%/%copyright%")
+      - custom_track_format: string (optional, default: "%tracknum%. %music% - %artist%")
     """
     service = request.args.get('service')
     artist_url = request.args.get('artist_url')
@@ -118,6 +123,10 @@ def handle_artist_download():
     album_type = request.args.get('album_type')
     real_time_arg = request.args.get('real_time', 'false')
     real_time = real_time_arg.lower() in ['true', '1', 'yes']
+
+    # New query parameters for custom formatting.
+    custom_dir_format = request.args.get('custom_dir_format', "%ar_album%/%album%")
+    custom_track_format = request.args.get('custom_track_format', "%tracknum%. %music% - %artist%")
 
     # Sanitize main and fallback to prevent directory traversal
     if main:
@@ -195,7 +204,20 @@ def handle_artist_download():
     # Create and start the download process.
     process = Process(
         target=download_artist_task,
-        args=(service, artist_url, main, fallback, quality, fall_quality, real_time, album_type, prg_path, orig_request)
+        args=(
+            service,
+            artist_url,
+            main,
+            fallback,
+            quality,
+            fall_quality,
+            real_time,
+            album_type,
+            prg_path,
+            orig_request,
+            custom_dir_format,
+            custom_track_format
+        )
     )
     process.start()
     download_processes[filename] = process

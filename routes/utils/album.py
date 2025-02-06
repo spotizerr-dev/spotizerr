@@ -4,7 +4,17 @@ import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 
-def download_album(service, url, main, fallback=None, quality=None, fall_quality=None, real_time=False):
+def download_album(
+    service,
+    url,
+    main,
+    fallback=None,
+    quality=None,
+    fall_quality=None,
+    real_time=False,
+    custom_dir_format="%ar_album%/%album%/%copyright%",
+    custom_track_format="%tracknum%. %music% - %artist%"
+):
     try:
         if service == 'spotify':
             if fallback:
@@ -23,7 +33,7 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
                     )
-                    # Download using download_albumspo; pass real_time_dl accordingly
+                    # Download using download_albumspo; pass real_time_dl accordingly and the custom formatting
                     dl.download_albumspo(
                         link_album=url,
                         output_dir="./downloads",
@@ -32,7 +42,9 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                         recursive_download=False,
                         not_interface=False,
                         make_zip=False,
-                        method_save=1
+                        method_save=1,
+                        custom_dir_format=custom_dir_format,
+                        custom_track_format=custom_track_format
                     )
                 except Exception as e:
                     # Load fallback Spotify credentials and attempt download
@@ -49,7 +61,9 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                             not_interface=False,
                             method_save=1,
                             make_zip=False,
-                            real_time_dl=real_time
+                            real_time_dl=real_time,
+                            custom_dir_format=custom_dir_format,
+                            custom_track_format=custom_track_format
                         )
                     except Exception as e2:
                         # If fallback also fails, raise an error indicating both attempts failed
@@ -73,7 +87,9 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                     not_interface=False,
                     method_save=1,
                     make_zip=False,
-                    real_time_dl=real_time
+                    real_time_dl=real_time,
+                    custom_dir_format=custom_dir_format,
+                    custom_track_format=custom_track_format
                 )
         elif service == 'deezer':
             if quality is None:
@@ -93,7 +109,9 @@ def download_album(service, url, main, fallback=None, quality=None, fall_quality
                 recursive_quality=True,
                 recursive_download=False,
                 method_save=1,
-                make_zip=False
+                make_zip=False,
+                custom_dir_format=custom_dir_format,
+                custom_track_format=custom_track_format
             )
         else:
             raise ValueError(f"Unsupported service: {service}")

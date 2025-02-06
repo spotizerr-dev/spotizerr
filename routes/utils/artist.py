@@ -43,15 +43,17 @@ def get_artist_discography(url, album_type='album,single,compilation,appears_on'
 
 
 def download_artist_albums(service, artist_url, main, fallback=None, quality=None,
-                           fall_quality=None, real_time=False, album_type='album,single,compilation,appears_on'):
+                           fall_quality=None, real_time=False, album_type='album,single,compilation,appears_on',
+                           custom_dir_format="%ar_album%/%album%/%copyright%",
+                           custom_track_format="%tracknum%. %music% - %artist%"):
     try:
         discography = get_artist_discography(artist_url, album_type=album_type)
     except Exception as e:
         log_json({"status": "error", "message": f"Error retrieving artist discography: {e}"})
         raise
     albums = discography.get('items', [])
-    # Extract artist name from the first album's artists
-    artist_name = artist_url  # default fallback
+    # Extract artist name from the first album's artists as fallback.
+    artist_name = artist_url  
     if albums:
         first_album = albums[0]
         artists = first_album.get('artists', [])
@@ -68,7 +70,13 @@ def download_artist_albums(service, artist_url, main, fallback=None, quality=Non
         })
         return
 
-    log_json({"status": "initializing", "type": "artist", "artist": artist_name, "total_albums": len(albums), "album_type": album_type})
+    log_json({
+        "status": "initializing",
+        "type": "artist",
+        "artist": artist_name,
+        "total_albums": len(albums),
+        "album_type": album_type
+    })
 
     for album in albums:
         try:
@@ -95,7 +103,9 @@ def download_artist_albums(service, artist_url, main, fallback=None, quality=Non
                 fallback=fallback,
                 quality=quality,
                 fall_quality=fall_quality,
-                real_time=real_time
+                real_time=real_time,
+                custom_dir_format=custom_dir_format,
+                custom_track_format=custom_track_format
             )
 
         except Exception as album_error:
