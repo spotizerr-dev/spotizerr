@@ -21,7 +21,7 @@ class FlushingFileWrapper:
         self.file = file
 
     def write(self, text):
-        # Write only lines that start with a JSON object
+        # Write only lines that start with a JSON object.
         for line in text.split('\n'):
             if line.startswith('{'):
                 self.file.write(line + '\n')
@@ -30,7 +30,8 @@ class FlushingFileWrapper:
     def flush(self):
         self.file.flush()
 
-def download_task(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request):
+def download_task(service, url, main, fallback, quality, fall_quality, real_time,
+                  prg_path, orig_request, custom_dir_format, custom_track_format):
     try:
         from routes.utils.track import download_track
         with open(prg_path, 'w') as f:
@@ -55,7 +56,9 @@ def download_task(service, url, main, fallback, quality, fall_quality, real_time
                     fallback=fallback,
                     quality=quality,
                     fall_quality=fall_quality,
-                    real_time=real_time
+                    real_time=real_time,
+                    custom_dir_format=custom_dir_format,
+                    custom_track_format=custom_track_format
                 )
                 flushing_file.write(json.dumps({"status": "complete"}) + "\n")
             except Exception as e:
@@ -89,6 +92,10 @@ def handle_download():
     real_time_arg = request.args.get('real_time', 'false')
     real_time = real_time_arg.lower() in ['true', '1', 'yes']
 
+    # New query parameters for custom formatting.
+    custom_dir_format = request.args.get('custom_dir_format', "%ar_album%/%album%/%copyright%")
+    custom_track_format = request.args.get('custom_track_format', "%tracknum%. %music% - %artist%")
+
     # Sanitize main and fallback to prevent directory traversal
     if main:
         main = os.path.basename(main)
@@ -106,7 +113,7 @@ def handle_download():
     try:
         if service == 'spotify':
             if fallback:
-                # Validate Deezer main credentials and Spotify fallback credentials
+                # Validate Deezer main credentials and Spotify fallback credentials.
                 deezer_creds_path = os.path.abspath(os.path.join('./creds/deezer', main, 'credentials.json'))
                 if not os.path.isfile(deezer_creds_path):
                     return Response(
@@ -122,7 +129,7 @@ def handle_download():
                         mimetype='application/json'
                     )
             else:
-                # Validate Spotify main credentials
+                # Validate Spotify main credentials.
                 spotify_creds_path = os.path.abspath(os.path.join('./creds/spotify', main, 'credentials.json'))
                 if not os.path.isfile(spotify_creds_path):
                     return Response(
@@ -131,7 +138,7 @@ def handle_download():
                         mimetype='application/json'
                     )
         elif service == 'deezer':
-            # Validate Deezer main credentials
+            # Validate Deezer main credentials.
             deezer_creds_path = os.path.abspath(os.path.join('./creds/deezer', main, 'credentials.json'))
             if not os.path.isfile(deezer_creds_path):
                 return Response(
@@ -162,7 +169,10 @@ def handle_download():
 
     process = Process(
         target=download_task,
-        args=(service, url, main, fallback, quality, fall_quality, real_time, prg_path, orig_request)
+        args=(
+            service, url, main, fallback, quality, fall_quality, real_time,
+            prg_path, orig_request, custom_dir_format, custom_track_format
+        )
     )
     process.start()
     # Track the running process using the generated filename.
