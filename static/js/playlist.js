@@ -104,7 +104,6 @@ function renderPlaylist(playlist) {
   playlist.tracks.items.forEach((item, index) => {
     const track = item.track;
     // Create links for track, artist, and album using their IDs.
-    // Ensure that track.id, track.artists[0].id, and track.album.id are available.
     const trackLink = `/track/${track.id}`;
     const artistLink = `/artist/${track.artists[0].id}`;
     const albumLink = `/album/${track.album.id}`;
@@ -208,7 +207,9 @@ async function startDownload(url, type, item, albumType) {
     deezer = '',
     spotifyQuality = 'NORMAL',
     deezerQuality = 'MP3_128',
-    realTime = false
+    realTime = false,
+    customTrackFormat = '',
+    customDirFormat = ''
   } = config;
 
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
@@ -236,6 +237,14 @@ async function startDownload(url, type, item, albumType) {
 
   if (realTime) {
     apiUrl += '&real_time=true';
+  }
+
+  // Append custom formatting parameters.
+  if (customTrackFormat) {
+    apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
+  }
+  if (customDirFormat) {
+    apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
   }
 
   try {

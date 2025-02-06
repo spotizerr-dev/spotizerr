@@ -98,6 +98,7 @@ function attachDownloadListeners(items) {
 }
 
 async function startDownload(url, type, item, albumType) {
+    // Retrieve configuration (if any) from localStorage
     const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
     const {
         fallback = false,
@@ -105,7 +106,9 @@ async function startDownload(url, type, item, albumType) {
         deezer = '',
         spotifyQuality = 'NORMAL',
         deezerQuality = 'MP3_128',
-        realTime = false
+        realTime = false,
+        customTrackFormat = '',
+        customDirFormat = ''
     } = config;
 
     let service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
@@ -124,6 +127,14 @@ async function startDownload(url, type, item, albumType) {
     }
 
     if (realTime) apiUrl += '&real_time=true';
+
+    // Append custom formatting parameters if present.
+    if (customTrackFormat) {
+        apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
+    }
+    if (customDirFormat) {
+        apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
+    }
 
     try {
         const response = await fetch(apiUrl);
