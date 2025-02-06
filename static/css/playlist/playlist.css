@@ -216,25 +216,34 @@ body {
   align-items: center;
 }
 
-/* Back Button Styling */
-.back-btn {
-  background-color: #333;
-  color: #fff;
+/* Home Button Styling */
+.home-btn {
+  background-color: transparent;
   border: none;
-  border-radius: 4px;
-  padding: 0.6rem 1.2rem;
-  font-size: 1rem;
   cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
   margin-right: 1rem;
+  padding: 0;
 }
 
-.back-btn:hover {
-  background-color: #444;
+.home-btn img {
+  width: 32px;
+  height: 32px;
+  filter: invert(1); /* Makes the SVG icon appear white */
+  transition: transform 0.2s ease;
 }
 
-.back-btn:active {
+.home-btn:hover img {
+  transform: scale(1.05);
+}
+
+.home-btn:active img {
   transform: scale(0.98);
+}
+
+/* Home Icon (SVG) */
+.home-icon {
+  width: 24px;
+  height: 24px;
 }
 
 /* Download Queue Toggle Button */
@@ -342,4 +351,44 @@ a:hover,
 a:focus {
   color: #1db954;         /* Change to a themed green on hover/focus */
   text-decoration: underline;
+}
+
+/* Override for the circular download button variant */
+.download-btn--circle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0; /* Hide any text */
+  background-color: #1db954; /* Use the same green as the base button */
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  margin: 0.5rem;
+}
+
+/* Remove the default pseudo-element that inserts an arrow */
+.download-btn--circle::before {
+  content: none;
+}
+
+/* Style the image inside the circular download button */
+.download-btn--circle img {
+  width: 20px;   /* Control icon size */
+  height: 20px;
+  filter: brightness(0) invert(1);  /* Ensure the icon appears white */
+  display: block;
+}
+
+/* Hover and active states for the circular download button */
+.download-btn--circle:hover {
+  background-color: #17a44b;
+  transform: scale(1.05);
+}
+
+.download-btn--circle:active {
+  transform: scale(0.98);
 }

@@ -29,18 +29,16 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function renderAlbum(album) {
+  // Hide loading and error messages.
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
   const baseUrl = window.location.origin;
 
-  // Album header info with embedded links
-
-  // Album name becomes a link to the album page.
+  // Set album header info.
   document.getElementById('album-name').innerHTML = 
     `<a href="${baseUrl}/album/${album.id}">${album.name}</a>`;
 
-  // Album artists become links to their artist pages.
   document.getElementById('album-artist').innerHTML = 
     `By ${album.artists.map(artist => `<a href="${baseUrl}/artist/${artist.id}">${artist.name}</a>`).join(', ')}`;
 
@@ -54,21 +52,27 @@ function renderAlbum(album) {
   const image = album.images[0]?.url || 'placeholder.jpg';
   document.getElementById('album-image').src = image;
 
-  // Back Button
-  let backButton = document.getElementById('backButton');
-  if (!backButton) {
-    backButton = document.createElement('button');
-    backButton.id = 'backButton';
-    backButton.textContent = 'Back';
-    backButton.className = 'back-btn';
+  // Create (if needed) the Home Button.
+  let homeButton = document.getElementById('homeButton');
+  if (!homeButton) {
+    homeButton = document.createElement('button');
+    homeButton.id = 'homeButton';
+    homeButton.className = 'home-btn';
+
+    const homeIcon = document.createElement('img');
+    homeIcon.src = '/static/images/home.svg';
+    homeIcon.alt = 'Home';
+    homeButton.appendChild(homeIcon);
+
+    // Insert as first child of album-header.
     const headerContainer = document.getElementById('album-header');
-    headerContainer.insertBefore(backButton, headerContainer.firstChild);
+    headerContainer.insertBefore(homeButton, headerContainer.firstChild);
   }
-  backButton.addEventListener('click', () => {
+  homeButton.addEventListener('click', () => {
     window.location.href = window.location.origin;
   });
 
-  // Download Album Button
+  // Create (if needed) the Download Album Button.
   let downloadAlbumBtn = document.getElementById('downloadAlbumBtn');
   if (!downloadAlbumBtn) {
     downloadAlbumBtn = document.createElement('button');
@@ -79,6 +83,7 @@ function renderAlbum(album) {
   }
   
   downloadAlbumBtn.addEventListener('click', () => {
+    // Remove any other download buttons (keeping the full-album button in place).
     document.querySelectorAll('.download-btn').forEach(btn => {
       if (btn.id !== 'downloadAlbumBtn') btn.remove();
     });
@@ -86,15 +91,17 @@ function renderAlbum(album) {
     downloadAlbumBtn.disabled = true;
     downloadAlbumBtn.textContent = 'Queueing...';
 
-    downloadWholeAlbum(album).then(() => {
-      downloadAlbumBtn.textContent = 'Queued!';
-    }).catch(err => {
-      showError('Failed to queue album download: ' + err.message);
-      downloadAlbumBtn.disabled = false;
-    });
+    downloadWholeAlbum(album)
+      .then(() => {
+        downloadAlbumBtn.textContent = 'Queued!';
+      })
+      .catch(err => {
+        showError('Failed to queue album download: ' + err.message);
+        downloadAlbumBtn.disabled = false;
+      });
   });
 
-  // Render tracks
+  // Render each track.
   const tracksList = document.getElementById('tracks-list');
   tracksList.innerHTML = '';
 
@@ -115,21 +122,41 @@ function renderAlbum(album) {
       <button class="download-btn download-btn--circle" 
               data-url="${track.external_urls.spotify}" 
               data-type="track"
-              data-name="${track.name}">
-        Download
+              data-name="${track.name}"
+              title="Download">
+        <img src="/static/images/download.svg" alt="Download">
       </button>
     `;
     tracksList.appendChild(trackElement);
   });
 
+  // Reveal header and track list.
   document.getElementById('album-header').classList.remove('hidden');
   document.getElementById('tracks-container').classList.remove('hidden');
   attachDownloadListeners();
+
+  // If on a small screen, re-arrange the action buttons.
+  if (window.innerWidth <= 480) {
+    let actionsContainer = document.getElementById('album-actions');
+    if (!actionsContainer) {
+      actionsContainer = document.createElement('div');
+      actionsContainer.id = 'album-actions';
+      document.getElementById('album-header').appendChild(actionsContainer);
+    }
+    // Append in the desired order: Home, Download, then Queue Toggle (if exists).
+    actionsContainer.innerHTML = ''; // Clear any previous content
+    actionsContainer.appendChild(document.getElementById('homeButton'));
+    actionsContainer.appendChild(document.getElementById('downloadAlbumBtn'));
+    const queueToggle = document.querySelector('.queue-toggle');
+    if (queueToggle) {
+      actionsContainer.appendChild(queueToggle);
+    }
+  }
 }
 
 async function downloadWholeAlbum(album) {
   const url = album.external_urls.spotify;
-  startDownload(url, 'album', { name: album.name });
+  return startDownload(url, 'album', { name: album.name });
 }
 
 function msToTime(duration) {
@@ -152,19 +179,14 @@ function attachDownloadListeners() {
       const url = e.currentTarget.dataset.url;
       const type = e.currentTarget.dataset.type;
       const name = e.currentTarget.dataset.name || extractName(url);
-      const albumType = e.currentTarget.dataset.albumType;
-
-      // Remove the button after click
+      // Remove the button immediately after click.
       e.currentTarget.remove();
-
-      // Start the download for this track.
-      startDownload(url, type, { name }, albumType);
+      startDownload(url, type, { name });
     });
   });
 }
 
 async function startDownload(url, type, item, albumType) {
-  // Retrieve configuration (if any) from localStorage
   const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
   const {
     fallback = false,
@@ -178,17 +200,14 @@ async function startDownload(url, type, item, albumType) {
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
   let apiUrl = '';
 
-  // Build API URL based on the download type.
   if (type === 'album') {
     apiUrl = `/api/album/download?service=${service}&url=${encodeURIComponent(url)}`;
   } else if (type === 'artist') {
     apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
   } else {
-    // Default is track download.
     apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
   }
 
-  // Append account and quality details.
   if (fallback && service === 'spotify') {
     apiUrl += `&main=${deezer}&fallback=${spotify}`;
     apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
@@ -204,9 +223,12 @@ async function startDownload(url, type, item, albumType) {
   try {
     const response = await fetch(apiUrl);
     const data = await response.json();
-    // Add the download to the queue using the working queue implementation.
     downloadQueue.addDownload(item, type, data.prg_file);
   } catch (error) {
     showError('Download failed: ' + error.message);
   }
+}
+
+function extractName(url) {
+  return url;
 }
