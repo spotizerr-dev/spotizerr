@@ -20,6 +20,17 @@ class DownloadQueue {
       </div>
     `;
     document.body.insertAdjacentHTML('beforeend', queueHTML);
+
+    // Restore the sidebar visibility from LocalStorage
+    const savedVisibility = localStorage.getItem('downloadQueueVisible');
+    const queueSidebar = document.getElementById('downloadQueue');
+    if (savedVisibility === 'true') {
+      queueSidebar.classList.add('active');
+      queueSidebar.hidden = false;
+    } else {
+      queueSidebar.classList.remove('active');
+      queueSidebar.hidden = true;
+    }
   }
 
   /* Event Handling */
@@ -45,6 +56,10 @@ class DownloadQueue {
     const queueSidebar = document.getElementById('downloadQueue');
     queueSidebar.classList.toggle('active');
     queueSidebar.hidden = !queueSidebar.classList.contains('active');
+
+    // Save the current visibility state to LocalStorage.
+    localStorage.setItem('downloadQueueVisible', queueSidebar.classList.contains('active'));
+
     this.dispatchEvent('queueVisibilityChanged', { visible: queueSidebar.classList.contains('active') });
   }
 

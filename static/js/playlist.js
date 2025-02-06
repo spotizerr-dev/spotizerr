@@ -48,20 +48,20 @@ function renderPlaylist(playlist) {
   const image = playlist.images[0]?.url || 'placeholder.jpg';
   document.getElementById('playlist-image').src = image;
 
-  // --- Add Back Button ---
-  let backButton = document.getElementById('backButton');
-  if (!backButton) {
-    backButton = document.createElement('button');
-    backButton.id = 'backButton';
-    backButton.textContent = 'Back';
-    backButton.className = 'back-btn';
-    // Insert the back button at the beginning of the header container.
+  // --- Add Home Button ---
+  let homeButton = document.getElementById('homeButton');
+  if (!homeButton) {
+    homeButton = document.createElement('button');
+    homeButton.id = 'homeButton';
+    homeButton.className = 'home-btn';
+    // Use an <img> tag to display the SVG icon.
+    homeButton.innerHTML = `<img src="/static/images/home.svg" alt="Home">`;
+    // Insert the home button at the beginning of the header container.
     const headerContainer = document.getElementById('playlist-header');
-    headerContainer.insertBefore(backButton, headerContainer.firstChild);
+    headerContainer.insertBefore(homeButton, headerContainer.firstChild);
   }
-  backButton.addEventListener('click', () => {
-    // Navigate to the site's base URL. For example, if the current URL is
-    // cool.com/bla/bla, this will take you to cool.com.
+  homeButton.addEventListener('click', () => {
+    // Navigate to the site's base URL.
     window.location.href = window.location.origin;
   });
 
@@ -128,8 +128,9 @@ function renderPlaylist(playlist) {
       <button class="download-btn download-btn--circle" 
               data-url="${track.external_urls.spotify}" 
               data-type="track"
-              data-name="${track.name}">
-        Download
+              data-name="${track.name}"
+              title="Download">
+        <img src="/static/images/download.svg" alt="Download">
       </button>
     `;
     tracksList.appendChild(trackElement);

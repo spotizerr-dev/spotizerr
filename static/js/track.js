@@ -20,10 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
     .then(data => renderTrack(data))
     .catch(error => {
       console.error('Error:', error);
-      showError('Failed to load track.');
+      showError('Error loading track');
     });
 
-  // Attach event listener to the queue icon to toggle download queue
+  // Attach event listener to the queue icon to toggle the download queue
   const queueIcon = document.getElementById('queueIcon');
   if (queueIcon) {
     queueIcon.addEventListener('click', () => {
@@ -34,85 +34,84 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /**
  * Renders the track header information.
- * The API response structure is assumed to be similar to:
- * {
- *    "album": { ... },
- *    "artists": [ ... ],
- *    "duration_ms": 149693,
- *    "explicit": false,
- *    "external_urls": { "spotify": "https://open.spotify.com/track/..." },
- *    "name": "Track Name",
- *    ... other track info
- * }
  */
 function renderTrack(track) {
-  // Hide loading and error messages
+  // Hide the loading and error messages.
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
-  // Update header info with embedded links
-
-  // Track name: linking to its own page (for consistency)
-  document.getElementById('track-name').innerHTML = `<a href="/track/${track.id}" title="View track details">${track.name}</a>`;
-
-  // Artist names: wrap each artist in a link to the artist page
-  document.getElementById('track-artist').innerHTML = `By ${track.artists
-    .map(a => `<a href="/artist/${a.id}" title="View artist details">${a.name}</a>`)
-    .join(', ')}`;
-
-  // Album: embed a link to the album page.
+  // Update track information fields.
+  document.getElementById('track-name').innerHTML =
+    `<a href="/track/${track.id}" title="View track details">${track.name}</a>`;
+    
+  document.getElementById('track-artist').innerHTML =
+    `By ${track.artists.map(a =>
+      `<a href="/artist/${a.id}" title="View artist details">${a.name}</a>`
+    ).join(', ')}`;
+    
   document.getElementById('track-album').innerHTML =
     `Album: <a href="/album/${track.album.id}" title="View album details">${track.album.name}</a> (${track.album.album_type})`;
+    
+  document.getElementById('track-duration').textContent =
+    `Duration: ${msToTime(track.duration_ms)}`;
+    
+  document.getElementById('track-explicit').textContent =
+    track.explicit ? 'Explicit' : 'Clean';
 
-  // Display track duration converted from milliseconds
-  document.getElementById('track-duration').textContent = `Duration: ${msToTime(track.duration_ms)}`;
-
-  // Show if the track is explicit
-  document.getElementById('track-explicit').textContent = track.explicit ? 'Explicit' : 'Clean';
-
-  // Use the album cover image if available; otherwise, fall back to a placeholder
-  const imageUrl = track.album.images && track.album.images[0] ? track.album.images[0].url : 'placeholder.jpg';
+  const imageUrl = (track.album.images && track.album.images[0])
+    ? track.album.images[0].url
+    : 'placeholder.jpg';
   document.getElementById('track-album-image').src = imageUrl;
 
-  // --- Add Back Button (if not already added) ---
-  let backButton = document.getElementById('backButton');
-  if (!backButton) {
-    backButton = document.createElement('button');
-    backButton.id = 'backButton';
-    backButton.textContent = 'Back';
-    backButton.className = 'back-btn';
-    // Insert the back button at the beginning of the header container.
-    const headerContainer = document.getElementById('track-header');
-    headerContainer.insertBefore(backButton, headerContainer.firstChild);
+  // --- Insert Home Button (if not already present) ---
+  let homeButton = document.getElementById('homeButton');
+  if (!homeButton) {
+    homeButton = document.createElement('button');
+    homeButton.id = 'homeButton';
+    homeButton.className = 'home-btn';
+    homeButton.innerHTML = `<img src="/static/images/home.svg" alt="Home" />`;
+    // Prepend the home button into the header.
+    document.getElementById('track-header').insertBefore(homeButton, document.getElementById('track-header').firstChild);
   }
-  backButton.addEventListener('click', () => {
-    // Navigate to the site's base URL.
+  homeButton.addEventListener('click', () => {
     window.location.href = window.location.origin;
   });
 
-  // --- Attach Download Button Listener ---
-  const downloadBtn = document.getElementById('downloadTrackBtn');
+  // --- Move the Download Button from #actions into #track-header ---
+  let downloadBtn = document.getElementById('downloadTrackBtn');
   if (downloadBtn) {
-    downloadBtn.addEventListener('click', () => {
-      // Disable the button to prevent repeated clicks.
-      downloadBtn.disabled = true;
-      downloadBtn.textContent = 'Queueing...';
-
-      // Start the download for the track.
-      startDownload(track.external_urls.spotify, 'track', { name: track.name })
-        .then(() => {
-          downloadBtn.textContent = 'Queued!';
-        })
-        .catch(err => {
-          showError('Failed to queue track download: ' + err.message);
-          downloadBtn.disabled = false;
-        });
-    });
+    // Remove the parent container (#actions) if needed.
+    const actionsContainer = document.getElementById('actions');
+    if (actionsContainer) {
+      actionsContainer.parentNode.removeChild(actionsContainer);
+    }
+    // Set the inner HTML to use the download.svg icon.
+    downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
+    // Append the download button to the track header so it appears at the right.
+    document.getElementById('track-header').appendChild(downloadBtn);
   }
 
-  // Reveal the header and actions container
+  // Attach a click listener to the download button.
+  downloadBtn.addEventListener('click', () => {
+    downloadBtn.disabled = true;
+    // Save the original icon markup in case we need to revert.
+    downloadBtn.dataset.originalHtml = `<img src="/static/images/download.svg" alt="Download">`;
+    downloadBtn.innerHTML = `<span>Queueing...</span>`;
+
+    // Start the download for this track.
+    startDownload(track.external_urls.spotify, 'track', { name: track.name })
+      .then(() => {
+        downloadBtn.innerHTML = `<span>Queued!</span>`;
+      })
+      .catch(err => {
+        showError('Failed to queue track download: ' + err.message);
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = downloadBtn.dataset.originalHtml;
+      });
+  });
+
+  // Reveal the header now that track info is loaded.
   document.getElementById('track-header').classList.remove('hidden');
-  document.getElementById('actions').classList.remove('hidden');
 }
 
 /**
@@ -129,8 +128,10 @@ function msToTime(duration) {
  */
 function showError(message) {
   const errorEl = document.getElementById('error');
-  errorEl.textContent = message;
-  errorEl.classList.remove('hidden');
+  if (errorEl) {
+    errorEl.textContent = message;
+    errorEl.classList.remove('hidden');
+  }
 }
 
 /**
@@ -138,7 +139,6 @@ function showError(message) {
  * fetching download details, and then adding the download to the queue.
  */
 async function startDownload(url, type, item) {
-  // Retrieve configuration (if any) from localStorage
   const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
   const {
     fallback = false,
@@ -150,12 +150,8 @@ async function startDownload(url, type, item) {
   } = config;
 
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-  let apiUrl = '';
+  let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
 
-  // For a track, we use the default track download endpoint.
-  apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
-
-  // Append account and quality details.
   if (fallback && service === 'spotify') {
     apiUrl += `&main=${deezer}&fallback=${spotify}`;
     apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
@@ -171,7 +167,6 @@ async function startDownload(url, type, item) {
   try {
     const response = await fetch(apiUrl);
     const data = await response.json();
-    // Add the download to the queue using the working queue implementation.
     downloadQueue.addDownload(item, type, data.prg_file);
   } catch (error) {
     showError('Download failed: ' + error.message);

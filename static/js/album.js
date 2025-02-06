@@ -54,17 +54,23 @@ function renderAlbum(album) {
   const image = album.images[0]?.url || 'placeholder.jpg';
   document.getElementById('album-image').src = image;
 
-  // Back Button
-  let backButton = document.getElementById('backButton');
-  if (!backButton) {
-    backButton = document.createElement('button');
-    backButton.id = 'backButton';
-    backButton.textContent = 'Back';
-    backButton.className = 'back-btn';
+  // Home Button using SVG icon
+  let homeButton = document.getElementById('homeButton');
+  if (!homeButton) {
+    homeButton = document.createElement('button');
+    homeButton.id = 'homeButton';
+    homeButton.className = 'home-btn';
+
+    // Create an image element for the home icon.
+    const homeIcon = document.createElement('img');
+    homeIcon.src = '/static/images/home.svg';
+    homeIcon.alt = 'Home';
+    homeButton.appendChild(homeIcon);
+
     const headerContainer = document.getElementById('album-header');
-    headerContainer.insertBefore(backButton, headerContainer.firstChild);
+    headerContainer.insertBefore(homeButton, headerContainer.firstChild);
   }
-  backButton.addEventListener('click', () => {
+  homeButton.addEventListener('click', () => {
     window.location.href = window.location.origin;
   });
 
@@ -102,23 +108,25 @@ function renderAlbum(album) {
     const trackElement = document.createElement('div');
     trackElement.className = 'track';
     trackElement.innerHTML = `
-      <div class="track-number">${index + 1}</div>
-      <div class="track-info">
-        <div class="track-name">
-          <a href="${baseUrl}/track/${track.id}">${track.name}</a>
-        </div>
-        <div class="track-artist">
-          ${track.artists.map(a => `<a href="${baseUrl}/artist/${a.id}">${a.name}</a>`).join(', ')}
-        </div>
+    <div class="track-number">${index + 1}</div>
+    <div class="track-info">
+      <div class="track-name">
+        <a href="${baseUrl}/track/${track.id}">${track.name}</a>
       </div>
-      <div class="track-duration">${msToTime(track.duration_ms)}</div>
-      <button class="download-btn download-btn--circle" 
-              data-url="${track.external_urls.spotify}" 
-              data-type="track"
-              data-name="${track.name}">
-        Download
-      </button>
-    `;
+      <div class="track-artist">
+        ${track.artists.map(a => `<a href="${baseUrl}/artist/${a.id}">${a.name}</a>`).join(', ')}
+      </div>
+    </div>
+    <div class="track-duration">${msToTime(track.duration_ms)}</div>
+    <button class="download-btn download-btn--circle" 
+            data-url="${track.external_urls.spotify}" 
+            data-type="track"
+            data-name="${track.name}"
+            title="Download">
+      <img src="/static/images/download.svg" alt="Download">
+    </button>
+  `;
+  
     tracksList.appendChild(trackElement);
   });
 

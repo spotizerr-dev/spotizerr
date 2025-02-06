@@ -39,30 +39,80 @@
     margin-right: 0.3rem;
 }
 
-/* Base styles for View buttons */
-.view-btn {
-    background-color: #4CAF50; /* Same green tone as other buttons */
-    color: #fff;
-    border: none;
-    padding: 4px 8px;          /* Smaller padding than the download button */
-    margin: 4px 4px 4px 8px;    /* Adjust margins to keep spacing neat */
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;           /* Smaller font size */
-    transition: background-color 0.3s ease, transform 0.2s ease;
+/* Container for Title and Buttons */
+.title-and-view {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 1rem; /* Extra right padding so buttons don't touch the edge */
 }
 
-/* Hover effect */
-.view-btn:hover {
-    background-color: #45a049;
+/* Container for the buttons next to the title */
+.title-buttons {
+    display: flex;
+    align-items: center;
+}
+
+/* Small Download Button Styles */
+.download-btn-small {
+    background-color: #1db954;      /* White background */
+    border: none;
+    border-radius: 50%;             /* Circular shape */
+    padding: 6px;                   /* Adjust padding for desired size */
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    margin-left: 8px;               /* Space between adjacent buttons */
+}
+
+.download-btn-small img {
+    width: 20px;                    /* Slightly bigger icon */
+    height: 20px;
+    filter: brightness(0) invert(1); /* Makes the icon white */
+}
+
+.download-btn-small:hover {
+    background-color: #1db954b4;      /* Light gray on hover */
     transform: translateY(-1px);
 }
 
-/* Focus outline for accessibility */
-.view-btn:focus {
-    outline: 2px solid #2e7d32;
-    outline-offset: 2px;
+/* View Button Styles (unchanged) */
+.view-btn {
+    background-color: #1db954;
+    border: none;
+    border-radius: 50%;
+    padding: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    margin-left: 8px;
 }
+
+.view-btn img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) invert(1);
+}
+
+.view-btn:hover {
+    background-color: #1db954b0;
+    transform: translateY(-1px);
+}
+
+/* Mobile Compatibility Tweaks */
+@media (max-width: 600px) {
+    .view-btn,
+    .download-btn-small {
+        padding: 6px 10px;
+        font-size: 13px;
+        margin: 4px;
+    }
+}
+
 
 /* Mobile compatibility tweaks */
 @media (max-width: 600px) {
