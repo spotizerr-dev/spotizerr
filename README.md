@@ -7,17 +7,17 @@ As of 2025, Spotify pays an average of $0.005 per stream to the artist. That mea
 Music downloader which combines the best of two worlds: Spotify's catalog and Deezer's quality. Search for a track using Spotify search api, click download and, depending on your preferences, it will download directly from Spotify or firstly try to download from Deezer, if it fails, it'll fallback to Spotify.
 
 ## Desktop interface
-![image](https://github.com/user-attachments/assets/e367fdd2-6a06-4103-b5f8-badc7a5d0b24)
+![image](https://github.com/user-attachments/assets/183ea9f6-58b9-42ea-af11-d97ecdf47587)
 
+![image](https://github.com/user-attachments/assets/d849c6d1-6d24-467c-86b8-e7873c19b1e2)
 
-## Mobile interface
-![image](https://github.com/user-attachments/assets/0224adc6-5a24-4334-8e15-db0f376096b7)
+![image](https://github.com/user-attachments/assets/69e2d022-3641-46bd-92c8-c410e567b0f9)
 
-
-
+![image](https://github.com/user-attachments/assets/ccec6567-253a-4f3d-a5fc-6e5fa15b13c0)
 
 ## Features
 
+- Browse through artist, albums, playlists and tracks and jump between them
 - Dual-service integration (Spotify & Deezer)
 - Direct URL downloads for Spotify tracks/albums/playlists/artists
 - Search using spotify's catalog
