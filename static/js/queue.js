@@ -107,8 +107,21 @@ class DownloadQueue {
 
         const progress = data.last_line;
 
+        // NEW: If the progress data exists but has no "status" parameter, ignore it.
+        if (progress && typeof progress.status === 'undefined') {
+          if (entry.type === 'playlist') {
+            logElement.textContent = "Reading tracks list...";
+          }
+          return;
+        }
+        // If there's no progress at all, treat as inactivity.
         if (!progress) {
-          this.handleInactivity(entry, queueId, logElement);
+          // For playlists, set the default message.
+          if (entry.type === 'playlist') {
+            logElement.textContent = "Reading tracks list...";
+          } else {
+            this.handleInactivity(entry, queueId, logElement);
+          }
           return;
         }
 
@@ -162,6 +175,8 @@ class DownloadQueue {
   }
 
   createQueueItem(item, type, prgFile, queueId) {
+    // Use "Reading track list" as the default message for playlists.
+    const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
     const div = document.createElement('article');
     div.className = 'queue-item';
     div.setAttribute('aria-live', 'polite');
@@ -169,7 +184,7 @@ class DownloadQueue {
     div.innerHTML = `
       <div class="title">${item.name}</div>
       <div class="type">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
-      <div class="log" id="log-${queueId}-${prgFile}">Initializing download...</div>
+      <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
       <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
         <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Cancel Download">
       </button>
@@ -317,7 +332,7 @@ class DownloadQueue {
         return `Finished ${data.type}`;
 
       case 'retrying':
-        return `Track "${data.song}" by ${data.artist}" failed, retrying (${data.retry_count}/3) in ${data.seconds_left}s`;
+        return `Track "${data.song}" by ${data.artist}" failed, retrying (${data.retry_count}/5) in ${data.seconds_left}s`;
 
       case 'error':
         return `Error: ${data.message || 'Unknown error'}`;
