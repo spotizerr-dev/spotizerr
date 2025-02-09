@@ -32,6 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
+ * A helper function to delay execution for a given number of milliseconds.
+ */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Renders playlist header and tracks.
  */
 function renderPlaylist(playlist) {
@@ -79,7 +86,7 @@ function renderPlaylist(playlist) {
   downloadPlaylistBtn.addEventListener('click', () => {
     // Remove individual track download buttons (but leave the whole playlist button).
     document.querySelectorAll('.download-btn').forEach(btn => {
-      if (btn.id !== 'downloadPlaylistBtn') {
+      if (btn.id !== 'downloadPlaylistBtn' && btn.id !== 'downloadAlbumPlaylistBtn') {
         btn.remove();
       }
     });
@@ -95,6 +102,55 @@ function renderPlaylist(playlist) {
       showError('Failed to queue playlist download: ' + err.message);
       downloadPlaylistBtn.disabled = false;
     });
+  });
+
+  // --- Add "Download Album's Playlist" Button ---
+  let downloadAlbumPlaylistBtn = document.getElementById('downloadAlbumPlaylistBtn');
+  if (!downloadAlbumPlaylistBtn) {
+    downloadAlbumPlaylistBtn = document.createElement('button');
+    downloadAlbumPlaylistBtn.id = 'downloadAlbumPlaylistBtn';
+    downloadAlbumPlaylistBtn.textContent = "Download Album's Playlist";
+    downloadAlbumPlaylistBtn.className = 'download-btn download-btn--main';
+    // Insert the button into the header container.
+    const headerContainer = document.getElementById('playlist-header');
+    headerContainer.appendChild(downloadAlbumPlaylistBtn);
+  }
+  downloadAlbumPlaylistBtn.addEventListener('click', () => {
+    // Remove individual track download buttons (but leave the whole playlist and album buttons).
+    document.querySelectorAll('.download-btn').forEach(btn => {
+      if (btn.id !== 'downloadPlaylistBtn' && btn.id !== 'downloadAlbumPlaylistBtn') {
+        btn.remove();
+      }
+    });
+
+    // Disable the album download button to prevent repeated clicks.
+    downloadAlbumPlaylistBtn.disabled = true;
+    downloadAlbumPlaylistBtn.textContent = 'Queueing...';
+
+    // Extract unique album external URLs from the playlist info.
+    const uniqueAlbums = new Map();
+    playlist.tracks.items.forEach(item => {
+      const album = item.track.album;
+      // Use the album's external URL if available.
+      const albumUrl = album.external_urls?.spotify;
+      if (albumUrl && !uniqueAlbums.has(albumUrl)) {
+        uniqueAlbums.set(albumUrl, album.name);
+      }
+    });
+
+    // Queue a download request for each unique album with a 20 ms delay between requests.
+    (async () => {
+      try {
+        for (const [url, name] of uniqueAlbums.entries()) {
+          await startDownload(url, 'album', { name });
+          await delay(20); // 20 ms delay between each request
+        }
+        downloadAlbumPlaylistBtn.textContent = 'Queued!';
+      } catch (err) {
+        showError('Failed to queue album downloads: ' + err.message);
+        downloadAlbumPlaylistBtn.disabled = false;
+      }
+    })();
   });
 
   // Render tracks list
@@ -166,8 +222,8 @@ function showError(message) {
  */
 function attachDownloadListeners() {
   document.querySelectorAll('.download-btn').forEach((btn) => {
-    // Skip the whole playlist button.
-    if (btn.id === 'downloadPlaylistBtn') return;
+    // Skip the whole playlist and album buttons.
+    if (btn.id === 'downloadPlaylistBtn' || btn.id === 'downloadAlbumPlaylistBtn') return;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const url = e.currentTarget.dataset.url;
@@ -222,7 +278,7 @@ async function startDownload(url, type, item, albumType) {
   } else if (type === 'artist') {
     apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
   } else {
-    // Default is track download.
+    // For album (and track) download, use the endpoint based on type.
     apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
   }
 
