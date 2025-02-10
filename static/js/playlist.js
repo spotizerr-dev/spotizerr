@@ -224,7 +224,8 @@ async function downloadWholePlaylist(playlist) {
 }
 
 /**
- * Initiates album downloads for each unique album in the playlist.
+ * Initiates album downloads for each unique album in the playlist,
+ * adding a 20ms delay between each album download.
  */
 async function downloadPlaylistAlbums(playlist) {
   // Use a Map to ensure each album is processed only once (by album ID).
@@ -243,18 +244,21 @@ async function downloadPlaylistAlbums(playlist) {
   }
 
   try {
-    // Start album downloads concurrently.
-    await Promise.all(uniqueAlbums.map(album =>
-      downloadQueue.startAlbumDownload(
+    // Process each album sequentially.
+    for (const album of uniqueAlbums) {
+      await downloadQueue.startAlbumDownload(
         album.external_urls.spotify,
         { name: album.name }
-      )
-    ));
+      );
+      // Wait 20 milliseconds before proceeding to the next album.
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
   } catch (error) {
-    // Propagate any errors.
+    // Propagate any errors encountered.
     throw error;
   }
 }
+
 
 /**
  * Starts the download process by building the API URL,
