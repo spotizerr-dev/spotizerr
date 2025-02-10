@@ -4,6 +4,7 @@ services:
   spotizerr:
     volumes:
       - ./creds:/app/creds
+      - ./config:/app/config
       - ./downloads:/app/downloads  # <-- Change this for your music library dir
     ports:
       - 7171:7171

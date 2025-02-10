@@ -57,7 +57,7 @@ function renderArtist(artistData, artistId) {
     downloadArtistBtn = document.createElement('button');
     downloadArtistBtn.id = 'downloadArtistBtn';
     downloadArtistBtn.className = 'download-btn download-btn--main';
-    downloadArtistBtn.textContent = 'Download All Albums';
+    downloadArtistBtn.textContent = 'Download All Discography';
     document.getElementById('artist-header').appendChild(downloadArtistBtn);
   }
 
