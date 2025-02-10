@@ -12,8 +12,18 @@ from queue import Queue, Empty
 # ------------------------------------------------------------------------------
 # Configuration
 # ------------------------------------------------------------------------------
-MAX_CONCURRENT_DL = 3  # maximum number of concurrent download processes
-PRG_DIR = './prgs'       # directory where .prg files will be stored
+
+# Load configuration from ./config/main.json and get the max_concurrent_dl value.
+CONFIG_PATH = './config/main.json'
+try:
+    with open(CONFIG_PATH, 'r') as f:
+        config_data = json.load(f)
+    MAX_CONCURRENT_DL = config_data.get("maxConcurrentDownloads", 3)
+except Exception as e:
+    # Fallback to a default value if there's an error reading the config.
+    MAX_CONCURRENT_DL = 3
+
+PRG_DIR = './prgs'  # directory where .prg files will be stored
 
 # ------------------------------------------------------------------------------
 # Utility Functions and Classes
@@ -124,7 +134,8 @@ class DownloadQueueManager:
 
         self.pending_tasks = Queue()    # holds tasks waiting to run
         self.running_downloads = {}     # maps prg_filename -> Process instance
-        self.lock = threading.Lock()    # protects access to running_downloads
+        self.cancelled_tasks = set()    # holds prg_filenames of tasks that have been cancelled
+        self.lock = threading.Lock()    # protects access to running_downloads and cancelled_tasks
         self.worker_thread = threading.Thread(target=self.queue_worker, daemon=True)
         self.running = False
 
@@ -185,19 +196,20 @@ class DownloadQueueManager:
 
     def cancel_task(self, prg_filename):
         """
-        Cancel a running download task by terminating its process.
-        If the task is found and alive, it is terminated and a cancellation
-        status is appended to its .prg file.
+        Cancel a download task (either queued or running) by marking it as cancelled or terminating its process.
+        If the task is running, its process is terminated.
+        If the task is queued, it is marked as cancelled so that it won't be started.
+        In either case, a cancellation status is appended to its .prg file.
         
         Returns a dictionary indicating the result.
         """
+        prg_path = os.path.join(self.prg_dir, prg_filename)
         with self.lock:
             process = self.running_downloads.get(prg_filename)
             if process and process.is_alive():
                 process.terminate()
                 process.join()
                 del self.running_downloads[prg_filename]
-                prg_path = os.path.join(self.prg_dir, prg_filename)
                 try:
                     with open(prg_path, 'a') as f:
                         f.write(json.dumps({"status": "cancel"}) + "\n")
@@ -205,7 +217,14 @@ class DownloadQueueManager:
                     return {"error": f"Failed to write cancel status: {str(e)}"}
                 return {"status": "cancelled"}
             else:
-                return {"error": "Task not found or already terminated"}
+                # Task is not running; mark it as cancelled if it's still pending.
+                self.cancelled_tasks.add(prg_filename)
+                try:
+                    with open(prg_path, 'a') as f:
+                        f.write(json.dumps({"status": "cancel"}) + "\n")
+                except Exception as e:
+                    return {"error": f"Failed to write cancel status: {str(e)}"}
+                return {"status": "cancelled"}
 
     def queue_worker(self):
         """
@@ -217,7 +236,7 @@ class DownloadQueueManager:
             # First, clean up any finished processes.
             with self.lock:
                 finished = []
-                for prg_filename, process in self.running_downloads.items():
+                for prg_filename, process in list(self.running_downloads.items()):
                     if not process.is_alive():
                         finished.append(prg_filename)
                 for prg_filename in finished:
@@ -230,6 +249,13 @@ class DownloadQueueManager:
                 except Empty:
                     time.sleep(0.5)
                     continue
+
+                # Check if the task was cancelled while it was still queued.
+                with self.lock:
+                    if prg_filename in self.cancelled_tasks:
+                        # Task has been cancelled; remove it from the set and skip processing.
+                        self.cancelled_tasks.remove(prg_filename)
+                        continue
 
                 prg_path = task.get('prg_path')
                 # Create and start a new process for the task.

@@ -13,8 +13,12 @@
     padding: 20px;
     transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1001;
-    overflow-y: auto;
+    /* Remove overflow-y here to delegate scrolling to the queue items container */
     box-shadow: -20px 0 30px rgba(0, 0, 0, 0.4);
+    
+    /* Added for flex layout */
+    display: flex;
+    flex-direction: column;
 }
 
 /* When active, the sidebar slides into view */
@@ -65,8 +69,10 @@
 
 /* Container for all queue items */
 #queueItems {
-    max-height: 60vh;
+    /* Allow the container to fill all available space in the sidebar */
+    flex: 1;
     overflow-y: auto;
+    /* Removed max-height: 60vh; */
 }
 
 /* Each download queue item */

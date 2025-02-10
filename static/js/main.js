@@ -1,4 +1,4 @@
-// Import the downloadQueue singleton from your working queue.js implementation.
+// main.js
 import { downloadQueue } from './queue.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -97,49 +97,35 @@ function attachDownloadListeners(items) {
     });
 }
 
+/**
+ * Calls the appropriate downloadQueue method based on the type.
+ * Before calling, it also enriches the item object with a proper "artist" value.
+ */
 async function startDownload(url, type, item, albumType) {
-    // Retrieve configuration (if any) from localStorage
-    const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
-    const {
-        fallback = false,
-        spotify = '',
-        deezer = '',
-        spotifyQuality = 'NORMAL',
-        deezerQuality = 'MP3_128',
-        realTime = false,
-        customTrackFormat = '',
-        customDirFormat = ''
-    } = config;
-
-    let service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-    let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
-
-    if (type === 'artist') {
-        apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
+    // Enrich the item object with the artist property.
+    // This ensures the new "name" and "artist" parameters are sent with the API call.
+    if (type === 'track') {
+        item.artist = item.artists.map(a => a.name).join(', ');
+    } else if (type === 'album') {
+        item.artist = item.artists.map(a => a.name).join(', ');
+    } else if (type === 'playlist') {
+        item.artist = item.owner.display_name;
+    } else if (type === 'artist') {
+        item.artist = item.name;
     }
-
-    if (fallback && service === 'spotify') {
-        apiUrl += `&main=${deezer}&fallback=${spotify}`;
-        apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
-    } else {
-        const mainAccount = service === 'spotify' ? spotify : deezer;
-        apiUrl += `&main=${mainAccount}&quality=${service === 'spotify' ? spotifyQuality : deezerQuality}`;
-    }
-
-    if (realTime) apiUrl += '&real_time=true';
-
-    // Append custom formatting parameters if present.
-    if (customTrackFormat) {
-        apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
-    }
-    if (customDirFormat) {
-        apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
-    }
-
+    
     try {
-        const response = await fetch(apiUrl);
-        const data = await response.json();
-        downloadQueue.addDownload(item, type, data.prg_file);
+        if (type === 'track') {
+            await downloadQueue.startTrackDownload(url, item);
+        } else if (type === 'playlist') {
+            await downloadQueue.startPlaylistDownload(url, item);
+        } else if (type === 'album') {
+            await downloadQueue.startAlbumDownload(url, item);
+        } else if (type === 'artist') {
+            await downloadQueue.startArtistDownload(url, item, albumType);
+        } else {
+            throw new Error(`Unsupported type: ${type}`);
+        }
     } catch (error) {
         showError('Download failed: ' + error.message);
     }

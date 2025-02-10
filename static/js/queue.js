@@ -1,15 +1,45 @@
 // queue.js
+
+// --- NEW: Custom URLSearchParams class that does not encode specified keys ---
+class CustomURLSearchParams {
+  constructor(noEncodeKeys = []) {
+    this.params = {};
+    this.noEncodeKeys = noEncodeKeys;
+  }
+  append(key, value) {
+    this.params[key] = value;
+  }
+  toString() {
+    return Object.entries(this.params)
+      .map(([key, value]) => {
+        if (this.noEncodeKeys.includes(key)) {
+          // Do not encode keys specified in noEncodeKeys.
+          return `${key}=${value}`;
+        } else {
+          return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+        }
+      })
+      .join('&');
+  }
+}
+
+// --- END NEW ---
+
 class DownloadQueue {
   constructor() {
     this.downloadQueue = {};
     this.prgInterval = null;
-    this.initDOM();
-    this.initEventListeners();
-    this.loadExistingPrgFiles();
+    this.currentConfig = {}; // Cache for current config
+
+    // Wait for initDOM to complete before setting up event listeners and loading existing PRG files.
+    this.initDOM().then(() => {
+      this.initEventListeners();
+      this.loadExistingPrgFiles();
+    });
   }
 
   /* DOM Management */
-  initDOM() {
+  async initDOM() {
     const queueHTML = `
       <div id="downloadQueue" class="sidebar right" hidden>
         <div class="sidebar-header">
@@ -21,46 +51,62 @@ class DownloadQueue {
     `;
     document.body.insertAdjacentHTML('beforeend', queueHTML);
 
-    // Restore the sidebar visibility from LocalStorage
-    const savedVisibility = localStorage.getItem('downloadQueueVisible');
+    // Load initial visibility from server config
+    await this.loadConfig();
     const queueSidebar = document.getElementById('downloadQueue');
-    if (savedVisibility === 'true') {
-      queueSidebar.classList.add('active');
-      queueSidebar.hidden = false;
-    } else {
-      queueSidebar.classList.remove('active');
-      queueSidebar.hidden = true;
-    }
+    queueSidebar.hidden = !this.currentConfig.downloadQueueVisible;
+    queueSidebar.classList.toggle('active', this.currentConfig.downloadQueueVisible);
   }
 
   /* Event Handling */
   initEventListeners() {
-    // Escape key handler
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', async (e) => {
       const queueSidebar = document.getElementById('downloadQueue');
       if (e.key === 'Escape' && queueSidebar.classList.contains('active')) {
-        this.toggleVisibility();
+        await this.toggleVisibility();
       }
     });
 
-    // Close button handler
-    document.getElementById('downloadQueue').addEventListener('click', (e) => {
-      if (e.target.closest('.close-btn')) {
-        this.toggleVisibility();
-      }
-    });
+    const queueSidebar = document.getElementById('downloadQueue');
+    if (queueSidebar) {
+      queueSidebar.addEventListener('click', async (e) => {
+        if (e.target.closest('.close-btn')) {
+          await this.toggleVisibility();
+        }
+      });
+    }
   }
 
   /* Public API */
-  toggleVisibility() {
+  async toggleVisibility() {
     const queueSidebar = document.getElementById('downloadQueue');
-    queueSidebar.classList.toggle('active');
-    queueSidebar.hidden = !queueSidebar.classList.contains('active');
+    const isVisible = !queueSidebar.classList.contains('active');
+    
+    queueSidebar.classList.toggle('active', isVisible);
+    queueSidebar.hidden = !isVisible;
 
-    // Save the current visibility state to LocalStorage.
-    localStorage.setItem('downloadQueueVisible', queueSidebar.classList.contains('active'));
+    try {
+      // Update config on server
+      await this.loadConfig();
+      const updatedConfig = { ...this.currentConfig, downloadQueueVisible: isVisible };
+      await this.saveConfig(updatedConfig);
+      this.dispatchEvent('queueVisibilityChanged', { visible: isVisible });
+    } catch (error) {
+      console.error('Failed to save queue visibility:', error);
+      // Revert UI if save failed
+      queueSidebar.classList.toggle('active', !isVisible);
+      queueSidebar.hidden = isVisible;
+      this.dispatchEvent('queueVisibilityChanged', { visible: !isVisible });
+      this.showError('Failed to save queue visibility');
+    }
+  }
 
-    this.dispatchEvent('queueVisibilityChanged', { visible: queueSidebar.classList.contains('active') });
+  showError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'queue-error';
+    errorDiv.textContent = message;
+    document.getElementById('queueItems').prepend(errorDiv);
+    setTimeout(() => errorDiv.remove(), 3000);
   }
 
   /**
@@ -76,7 +122,6 @@ class DownloadQueue {
     this.dispatchEvent('downloadAdded', { queueId, item, type });
   }
 
-  /* Core Functionality */
   async startEntryMonitoring(queueId) {
     const entry = this.downloadQueue[queueId];
     if (!entry || entry.hasEnded) return;
@@ -112,22 +157,24 @@ class DownloadQueue {
           if (entry.type === 'playlist') {
             logElement.textContent = "Reading tracks list...";
           }
+          this.updateQueueOrder();
           return;
         }
         // If there's no progress at all, treat as inactivity.
         if (!progress) {
-          // For playlists, set the default message.
           if (entry.type === 'playlist') {
             logElement.textContent = "Reading tracks list...";
           } else {
             this.handleInactivity(entry, queueId, logElement);
           }
+          this.updateQueueOrder();
           return;
         }
 
         // If the new progress is the same as the last, also treat it as inactivity.
         if (JSON.stringify(entry.lastStatus) === JSON.stringify(progress)) {
           this.handleInactivity(entry, queueId, logElement);
+          this.updateQueueOrder();
           return;
         }
 
@@ -146,8 +193,11 @@ class DownloadQueue {
           message: 'Status check error' 
         });
       }
+      // Reorder the queue display after updating the entry status.
+      this.updateQueueOrder();
     }, 2000);
   }
+
 
   /* Helper Methods */
   generateQueueId() {
@@ -169,8 +219,8 @@ class DownloadQueue {
       hasEnded: false,
       intervalId: null,
       uniqueId: queueId,
-      retryCount: 0,         // <== Initialize retry counter
-      autoRetryInterval: null // <== To store the countdown interval ID for auto retry
+      retryCount: 0,         // Initialize retry counter
+      autoRetryInterval: null // To store the countdown interval ID for auto retry
     };
   }
 
@@ -262,7 +312,6 @@ class DownloadQueue {
       if (!items || items.length === 0) return '';
       if (items.length === 1) return items[0];
       if (items.length === 2) return `${items[0]} and ${items[1]}`;
-      // For three or more items: join all but the last with commas, then " and " the last item.
       return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
     }
 
@@ -272,6 +321,19 @@ class DownloadQueue {
     }
 
     switch (data.status) {
+      case 'queued':
+        // Display a friendly message for queued items.
+        if (data.type === 'album' || data.type === 'playlist') {
+          // Show the name and queue position if provided.
+          return `Queued ${data.type} "${data.name}"${data.position ? ` (position ${data.position})` : ''}`;
+        } else if (data.type === 'track') {
+          return `Queued track "${data.name}"${data.artist ? ` by ${data.artist}` : ''}`;
+        }
+        return `Queued ${data.type} "${data.name}"`;
+
+      case 'cancel':
+        return 'Download cancelled';
+
       case 'downloading':
         if (data.type === 'track') {
           return `Downloading track "${data.song}" by ${data.artist}...`;
@@ -355,6 +417,7 @@ class DownloadQueue {
         return data.status;
     }
   }
+
 
   /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
 
@@ -486,6 +549,224 @@ class DownloadQueue {
       logElement.textContent = 'Retry failed: ' + error.message;
     }
   }
+
+  /**
+   * Builds common URL parameters for download API requests.
+   * 
+   * Correction: When fallback is enabled for Spotify downloads, the active accounts
+   * are now used correctly as follows:
+   * 
+   * - When fallback is true:
+   *    • main = config.deezer  
+   *    • fallback = config.spotify  
+   *    • quality = config.deezerQuality  
+   *    • fall_quality = config.spotifyQuality
+   * 
+   * - When fallback is false:
+   *    • main = config.spotify  
+   *    • quality = config.spotifyQuality
+   * 
+   * For Deezer downloads, always use:
+   *    • main = config.deezer  
+   *    • quality = config.deezerQuality
+   */
+  _buildCommonParams(url, service, config) {
+    // --- MODIFIED: Use our custom parameter builder for Spotify ---
+    let params;
+    if (service === 'spotify') {
+      params = new CustomURLSearchParams(['url']); // Do not encode the "url" parameter.
+    } else {
+      params = new URLSearchParams();
+    }
+    // --- END MODIFIED ---
+
+    params.append('service', service);
+    params.append('url', url);
+  
+    if (service === 'spotify') {
+      if (config.fallback) {
+        // Fallback enabled: use the active Deezer account as main and Spotify as fallback.
+        params.append('main', config.deezer);
+        params.append('fallback', config.spotify);
+        params.append('quality', config.deezerQuality);
+        params.append('fall_quality', config.spotifyQuality);
+      } else {
+        // Fallback disabled: use only the Spotify active account.
+        params.append('main', config.spotify);
+        params.append('quality', config.spotifyQuality);
+      }
+    } else {
+      // For Deezer, always use the active Deezer account.
+      params.append('main', config.deezer);
+      params.append('quality', config.deezerQuality);
+    }
+  
+    if (config.realTime) {
+      params.append('real_time', 'true');
+    }
+  
+    if (config.customTrackFormat) {
+      params.append('custom_track_format', config.customTrackFormat);
+    }
+  
+    if (config.customDirFormat) {
+      params.append('custom_dir_format', config.customDirFormat);
+    }
+  
+    return params;
+  }
+
+  async startTrackDownload(url, item) {
+    await this.loadConfig();
+    const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
+    const params = this._buildCommonParams(url, service, this.currentConfig);
+    // Add the extra parameters "name" and "artist"
+    params.append('name', item.name || '');
+    params.append('artist', item.artist || '');
+    const apiUrl = `/api/track/download?${params.toString()}`;
+
+    try {
+      const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error('Network error');
+      const data = await response.json();
+      this.addDownload(item, 'track', data.prg_file, apiUrl);
+    } catch (error) {
+      this.dispatchEvent('downloadError', { error, item });
+      throw error;
+    }
+  }
+
+  async startPlaylistDownload(url, item) {
+    await this.loadConfig();
+    const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
+    const params = this._buildCommonParams(url, service, this.currentConfig);
+    // Add the extra parameters "name" and "artist"
+    params.append('name', item.name || '');
+    params.append('artist', item.artist || '');
+    const apiUrl = `/api/playlist/download?${params.toString()}`;
+
+    try {
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      this.addDownload(item, 'playlist', data.prg_file, apiUrl);
+    } catch (error) {
+      this.dispatchEvent('downloadError', { error, item });
+      throw error;
+    }
+  }
+
+  async startAlbumDownload(url, item) {
+    await this.loadConfig();
+    const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
+    const params = this._buildCommonParams(url, service, this.currentConfig);
+    // Add the extra parameters "name" and "artist"
+    params.append('name', item.name || '');
+    params.append('artist', item.artist || '');
+    const apiUrl = `/api/album/download?${params.toString()}`;
+
+    try {
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      this.addDownload(item, 'album', data.prg_file, apiUrl);
+    } catch (error) {
+      this.dispatchEvent('downloadError', { error, item });
+      throw error;
+    }
+  }
+  
+  async startArtistDownload(url, item, albumType = 'album,single,compilation') {
+    await this.loadConfig();
+    const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
+    const params = this._buildCommonParams(url, service, this.currentConfig);
+    params.append('album_type', albumType);
+    // Add the extra parameters "name" and "artist"
+    params.append('name', item.name || '');
+    params.append('artist', item.artist || '');
+    const apiUrl = `/api/artist/download?${params.toString()}`;
+
+    try {
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      this.addDownload(item, 'artist', data.prg_file, apiUrl);
+    } catch (error) {
+      this.dispatchEvent('downloadError', { error, item });
+      throw error;
+    }
+  }
+
+  async loadConfig() {
+    try {
+      const response = await fetch('/api/config');
+      if (!response.ok) throw new Error('Failed to fetch config');
+      this.currentConfig = await response.json();
+    } catch (error) {
+      console.error('Error loading config:', error);
+      this.currentConfig = {};
+    }
+  }
+
+  // Placeholder for saveConfig; implement as needed.
+  async saveConfig(updatedConfig) {
+    try {
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedConfig)
+      });
+      if (!response.ok) throw new Error('Failed to save config');
+      this.currentConfig = await response.json();
+    } catch (error) {
+      console.error('Error saving config:', error);
+      throw error;
+    }
+  }
+    /**
+   * Reorders the download queue display so that:
+   *   - Errored (or canceled) downloads come first (Group 0)
+   *   - Ongoing downloads come next (Group 1)
+   *   - Queued downloads come last (Group 2), ordered by their position value.
+   */
+    updateQueueOrder() {
+      const container = document.getElementById('queueItems');
+      const entries = Object.values(this.downloadQueue);
+  
+      entries.sort((a, b) => {
+        // Define groups:
+        // Group 0: Errored or canceled downloads
+        // Group 2: Queued downloads
+        // Group 1: All others (ongoing)
+        const getGroup = (entry) => {
+          if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
+            return 0;
+          } else if (entry.lastStatus && entry.lastStatus.status === "queued") {
+            return 2;
+          } else {
+            return 1;
+          }
+        };
+  
+        const groupA = getGroup(a);
+        const groupB = getGroup(b);
+        if (groupA !== groupB) {
+          return groupA - groupB;
+        } else {
+          // For queued downloads, order by their "position" value (smallest first)
+          if (groupA === 2) {
+            const posA = a.lastStatus && a.lastStatus.position ? a.lastStatus.position : Infinity;
+            const posB = b.lastStatus && b.lastStatus.position ? b.lastStatus.position : Infinity;
+            return posA - posB;
+          }
+          // For errored or ongoing downloads, order by last update time (oldest first)
+          return a.lastUpdated - b.lastUpdated;
+        }
+      });
+  
+      // Clear the container and re-append entries in sorted order.
+      container.innerHTML = '';
+      for (const entry of entries) {
+        container.appendChild(entry.element);
+      }
+    }  
 }
 
 // Singleton instance

@@ -49,17 +49,9 @@ def get_prg_file(filename):
         if len(lines) > 1:
             try:
                 second_line = json.loads(lines[1])
+                # Directly extract 'type' and 'name' from the JSON
                 resource_type = second_line.get("type", "")
-                if resource_type == "track":
-                    resource_name = second_line.get("song", "")
-                elif resource_type == "album":
-                    resource_name = second_line.get("album", "")
-                elif resource_type == "playlist":
-                    resource_name = second_line.get("name", "")
-                elif resource_type == "artist":
-                    resource_name = second_line.get("artist", "")
-                else:
-                    resource_name = ""
+                resource_name = second_line.get("name", "")
             except Exception:
                 resource_type = ""
                 resource_name = ""

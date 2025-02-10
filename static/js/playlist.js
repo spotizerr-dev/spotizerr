@@ -187,11 +187,15 @@ function attachDownloadListeners() {
 /**
  * Initiates the whole playlist download by calling the playlist endpoint.
  */
+// playlist.js
 async function downloadWholePlaylist(playlist) {
-  // Use the playlist external URL (assumed available) for the download.
   const url = playlist.external_urls.spotify;
-  // Queue the whole playlist download with the descriptive playlist name.
-  startDownload(url, 'playlist', { name: playlist.name });
+  try {
+    await downloadQueue.startPlaylistDownload(url, { name: playlist.name });
+  } catch (error) {
+    showError('Playlist download failed: ' + error.message);
+    throw error;
+  }
 }
 
 /**

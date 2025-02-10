@@ -1,8 +1,7 @@
-// Import the downloadQueue singleton from your working queue.js implementation.
+// Import the downloadQueue singleton
 import { downloadQueue } from './queue.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Parse artist ID from the URL (expected route: /artist/{id})
   const pathSegments = window.location.pathname.split('/');
   const artistId = pathSegments[pathSegments.indexOf('artist') + 1];
 
@@ -11,13 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Fetch the artist info (which includes a list of albums)
   fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
     })
-    .then(data => renderArtist(data, artistId))  // Pass artistId along
+    .then(data => renderArtist(data, artistId))
     .catch(error => {
       console.error('Error:', error);
       showError('Failed to load artist info.');
@@ -25,114 +23,82 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const queueIcon = document.getElementById('queueIcon');
   if (queueIcon) {
-    queueIcon.addEventListener('click', () => {
-      downloadQueue.toggleVisibility();
-    });
+    queueIcon.addEventListener('click', () => downloadQueue.toggleVisibility());
   }
 });
 
-/**
- * Renders the artist header and groups the albums by type.
- */
 function renderArtist(artistData, artistId) {
-  // Hide loading and error messages
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
-  // Use the first album to extract artist details
   const firstAlbum = artistData.items[0];
   const artistName = firstAlbum?.artists[0]?.name || 'Unknown Artist';
   const artistImage = firstAlbum?.images[0]?.url || 'placeholder.jpg';
 
-  // Embed the artist name in a link
   document.getElementById('artist-name').innerHTML =
     `<a href="/artist/${artistId}" class="artist-link">${artistName}</a>`;
   document.getElementById('artist-stats').textContent = `${artistData.total} albums`;
   document.getElementById('artist-image').src = artistImage;
 
-  // --- Add Home Button ---
+  // Home Button
   let homeButton = document.getElementById('homeButton');
   if (!homeButton) {
     homeButton = document.createElement('button');
     homeButton.id = 'homeButton';
     homeButton.className = 'home-btn';
-    homeButton.innerHTML = `<img src="/static/images/home.svg" alt="Home" class="home-icon">`;
-    const headerContainer = document.getElementById('artist-header');
-    headerContainer.insertBefore(homeButton, headerContainer.firstChild);
+    homeButton.innerHTML = `<img src="/static/images/home.svg" alt="Home">`;
+    document.getElementById('artist-header').prepend(homeButton);
   }
-  homeButton.addEventListener('click', () => {
-    window.location.href = window.location.origin;
-  });
+  homeButton.addEventListener('click', () => window.location.href = window.location.origin);
 
-  // --- Add "Download Whole Artist" Button ---
+  // Download Whole Artist Button
   let downloadArtistBtn = document.getElementById('downloadArtistBtn');
   if (!downloadArtistBtn) {
     downloadArtistBtn = document.createElement('button');
     downloadArtistBtn.id = 'downloadArtistBtn';
-    downloadArtistBtn.textContent = 'Download Whole Artist';
     downloadArtistBtn.className = 'download-btn download-btn--main';
-    const headerContainer = document.getElementById('artist-header');
-    headerContainer.appendChild(downloadArtistBtn);
+    downloadArtistBtn.textContent = 'Download All Albums';
+    document.getElementById('artist-header').appendChild(downloadArtistBtn);
   }
-  downloadArtistBtn.addEventListener('click', () => {
-    // Remove individual album and group download buttons (but leave the whole artist button).
-    document.querySelectorAll('.download-btn').forEach(btn => {
-      if (btn.id !== 'downloadArtistBtn') {
-        btn.remove();
-      }
-    });
 
+  downloadArtistBtn.addEventListener('click', () => {
+    document.querySelectorAll('.download-btn:not(#downloadArtistBtn)').forEach(btn => btn.remove());
     downloadArtistBtn.disabled = true;
     downloadArtistBtn.textContent = 'Queueing...';
 
-    downloadWholeArtist(artistData)
-      .then(() => {
-        downloadArtistBtn.textContent = 'Queued!';
-      })
-      .catch(err => {
-        showError('Failed to queue artist download: ' + err.message);
-        downloadArtistBtn.disabled = false;
-      });
+    queueAllAlbums(artistData.items, downloadArtistBtn);
   });
 
-  // Group albums by album type.
-  const albumGroups = {};
-  artistData.items.forEach(album => {
+  // Group albums by type
+  const albumGroups = artistData.items.reduce((groups, album) => {
     const type = album.album_type.toLowerCase();
-    if (!albumGroups[type]) {
-      albumGroups[type] = [];
-    }
-    albumGroups[type].push(album);
-  });
+    if (!groups[type]) groups[type] = [];
+    groups[type].push(album);
+    return groups;
+  }, {});
 
-  // Render groups into the #album-groups container.
+  // Render album groups
   const groupsContainer = document.getElementById('album-groups');
-  groupsContainer.innerHTML = ''; // Clear previous content
+  groupsContainer.innerHTML = '';
 
-  // For each album type, render a section header, a "Download All" button, and the album list.
   for (const [groupType, albums] of Object.entries(albumGroups)) {
     const groupSection = document.createElement('section');
     groupSection.className = 'album-group';
-
-    // Header with a download-all button.
-    const header = document.createElement('div');
-    header.className = 'album-group-header';
-    header.innerHTML = `
-      <h3>${capitalize(groupType)}s</h3>
-      <button class="download-btn download-btn--main group-download-btn" 
-              data-album-type="${groupType}" 
-              data-artist-url="${firstAlbum.artists[0].external_urls.spotify}">
-        Download All ${capitalize(groupType)}s
-      </button>
+    
+    groupSection.innerHTML = `
+      <div class="album-group-header">
+        <h3>${capitalize(groupType)}s</h3>
+        <button class="download-btn download-btn--main group-download-btn" 
+                data-group-type="${groupType}">
+          Download All ${capitalize(groupType)}s
+        </button>
+      </div>
+      <div class="albums-list"></div>
     `;
-    groupSection.appendChild(header);
 
-    // Container for individual albums in this group.
-    const albumsContainer = document.createElement('div');
-    albumsContainer.className = 'albums-list';
+    const albumsContainer = groupSection.querySelector('.albums-list');
     albums.forEach(album => {
       const albumElement = document.createElement('div');
-      // Build a unified album card markup that works for both desktop and mobile.
       albumElement.className = 'album-card';
       albumElement.innerHTML = `
         <a href="/album/${album.id}" class="album-link">
@@ -147,7 +113,6 @@ function renderArtist(artistData, artistId) {
         <button class="download-btn download-btn--circle" 
                 data-url="${album.external_urls.spotify}" 
                 data-type="album"
-                data-album-type="${album.album_type}"
                 data-name="${album.name}"
                 title="Download">
           <img src="/static/images/download.svg" alt="Download">
@@ -155,148 +120,89 @@ function renderArtist(artistData, artistId) {
       `;
       albumsContainer.appendChild(albumElement);
     });
-    groupSection.appendChild(albumsContainer);
+
     groupsContainer.appendChild(groupSection);
   }
 
-  // Reveal header and albums container.
   document.getElementById('artist-header').classList.remove('hidden');
   document.getElementById('albums-container').classList.remove('hidden');
-
-  // Attach event listeners for individual album download buttons.
   attachDownloadListeners();
-  // Attach event listeners for group download buttons.
   attachGroupDownloadListeners();
 }
 
-/**
- * Displays an error message in the UI.
- */
+// Helper to queue multiple albums
+async function queueAllAlbums(albums, button) {
+  try {
+    const results = await Promise.allSettled(
+      albums.map(album => 
+        downloadQueue.startAlbumDownload(
+          album.external_urls.spotify, 
+          { name: album.name }
+        )
+      )
+    );
+
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    button.textContent = `Queued ${successful}/${albums.length} albums`;
+  } catch (error) {
+    button.textContent = 'Download All Albums';
+    button.disabled = false;
+    showError('Failed to queue some albums: ' + error.message);
+  }
+}
+
+// Event listeners for group downloads
+function attachGroupDownloadListeners() {
+  document.querySelectorAll('.group-download-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const groupSection = e.target.closest('.album-group');
+      const albums = Array.from(groupSection.querySelectorAll('.album-card'))
+        .map(card => ({
+          url: card.querySelector('.download-btn').dataset.url,
+          name: card.querySelector('.album-title').textContent
+        }));
+
+      e.target.disabled = true;
+      e.target.textContent = `Queueing ${albums.length} albums...`;
+
+      try {
+        const results = await Promise.allSettled(
+          albums.map(album => 
+            downloadQueue.startAlbumDownload(album.url, { name: album.name })
+          )
+        );
+
+        const successful = results.filter(r => r.status === 'fulfilled').length;
+        e.target.textContent = `Queued ${successful}/${albums.length} albums`;
+      } catch (error) {
+        e.target.textContent = `Download All ${capitalize(e.target.dataset.groupType)}s`;
+        e.target.disabled = false;
+        showError('Failed to queue some albums: ' + error.message);
+      }
+    });
+  });
+}
+
+// Individual download handlers
+function attachDownloadListeners() {
+  document.querySelectorAll('.download-btn:not(.group-download-btn)').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { url, name } = e.currentTarget.dataset;
+      e.currentTarget.remove();
+      downloadQueue.startAlbumDownload(url, { name })
+        .catch(err => showError('Download failed: ' + err.message));
+    });
+  });
+}
+
+// UI Helpers
 function showError(message) {
   const errorEl = document.getElementById('error');
   errorEl.textContent = message;
   errorEl.classList.remove('hidden');
 }
 
-/**
- * Attaches event listeners to all individual download buttons.
- */
-function attachDownloadListeners() {
-  document.querySelectorAll('.download-btn').forEach((btn) => {
-    // Skip the whole artist and group download buttons.
-    if (btn.id === 'downloadArtistBtn' || btn.classList.contains('group-download-btn')) return;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const url = e.currentTarget.dataset.url;
-      const type = e.currentTarget.dataset.type;
-      const name = e.currentTarget.dataset.name || extractName(url);
-      const albumType = e.currentTarget.dataset.albumType;
-      // Remove button after click.
-      e.currentTarget.remove();
-      startDownload(url, type, { name }, albumType);
-    });
-  });
-}
-
-/**
- * Attaches event listeners to all group download buttons.
- */
-function attachGroupDownloadListeners() {
-  document.querySelectorAll('.group-download-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const albumType = e.currentTarget.dataset.albumType;
-      const artistUrl = e.currentTarget.dataset.artistUrl;
-      e.currentTarget.disabled = true;
-      e.currentTarget.textContent = `Queueing ${capitalize(albumType)}s...`;
-      startDownload(artistUrl, 'artist', { name: `All ${capitalize(albumType)}s` }, albumType)
-        .then(() => {
-          e.currentTarget.textContent = `Queued!`;
-        })
-        .catch(err => {
-          showError('Failed to queue group download: ' + err.message);
-          e.currentTarget.disabled = false;
-        });
-    });
-  });
-}
-
-/**
- * Initiates the whole artist download by calling the artist endpoint.
- */
-async function downloadWholeArtist(artistData) {
-  const artistUrl = artistData.items[0]?.artists[0]?.external_urls.spotify;
-  if (!artistUrl) throw new Error('Artist URL not found.');
-  startDownload(artistUrl, 'artist', { name: artistData.items[0]?.artists[0]?.name || 'Artist' });
-}
-
-/**
- * Starts the download process by building the API URL,
- * fetching download details, and then adding the download to the queue.
- */
-async function startDownload(url, type, item, albumType) {
-  const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
-  const {
-    fallback = false,
-    spotify = '',
-    deezer = '',
-    spotifyQuality = 'NORMAL',
-    deezerQuality = 'MP3_128',
-    realTime = false,
-    customDirFormat = '%ar_album%/%album%', // Default directory format
-    customTrackFormat = '%tracknum%. %music%' // Default track format
-  } = config;
-
-  const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-  let apiUrl = '';
-
-  if (type === 'artist') {
-    apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
-  } else {
-    apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
-  }
-
-  if (fallback && service === 'spotify') {
-    apiUrl += `&main=${deezer}&fallback=${spotify}`;
-    apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
-  } else {
-    const mainAccount = service === 'spotify' ? spotify : deezer;
-    apiUrl += `&main=${mainAccount}&quality=${service === 'spotify' ? spotifyQuality : deezerQuality}`;
-  }
-
-  if (realTime) {
-    apiUrl += '&real_time=true';
-  }
-
-  // Add custom formatting parameters to the API request
-  apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
-  apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
-
-  try {
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-    const downloadType = apiUrl.includes('/artist/download')
-      ? 'artist'
-      : apiUrl.includes('/album/download')
-        ? 'album'
-        : type;
-    downloadQueue.addDownload(item, downloadType, data.prg_file);
-  } catch (error) {
-    showError('Download failed: ' + error.message);
-  }
-}
-
-/**
- * A helper function to extract a display name from the URL.
- */
-function extractName(url) {
-  return url;
-}
-
-/**
- * Helper to capitalize the first letter of a string.
- */
 function capitalize(str) {
-  if (!str) return '';
-  return str.charAt(0).toUpperCase() + str.slice(1);
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
 }

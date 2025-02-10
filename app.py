@@ -6,6 +6,8 @@ from routes.album import album_bp
 from routes.track import track_bp
 from routes.playlist import playlist_bp
 from routes.prgs import prgs_bp
+from routes.config import config_bp
+from routes.artist import artist_bp
 import logging
 import time
 from pathlib import Path
@@ -34,12 +36,15 @@ def create_app():
     CORS(app)
 
     # Register blueprints
+    app.register_blueprint(config_bp, url_prefix='/api')
     app.register_blueprint(search_bp, url_prefix='/api')
     app.register_blueprint(credentials_bp, url_prefix='/api/credentials')
     app.register_blueprint(album_bp, url_prefix='/api/album')
     app.register_blueprint(track_bp, url_prefix='/api/track') 
     app.register_blueprint(playlist_bp, url_prefix='/api/playlist')
+    app.register_blueprint(artist_bp, url_prefix='/api/artist')
     app.register_blueprint(prgs_bp, url_prefix='/api/prgs')  
+    
 
     # Serve frontend
     @app.route('/')
