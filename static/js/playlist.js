@@ -225,10 +225,11 @@ async function downloadWholePlaylist(playlist) {
 
 /**
  * Initiates album downloads for each unique album in the playlist,
- * adding a 20ms delay between each album download.
+ * adding a 20ms delay between each album download and updating the button
+ * with the progress (queued_albums/total_albums).
  */
 async function downloadPlaylistAlbums(playlist) {
-  // Use a Map to ensure each album is processed only once (by album ID).
+  // Build a map of unique albums (using album ID as the key).
   const albumMap = new Map();
   playlist.tracks.items.forEach(item => {
     const album = item.track.album;
@@ -238,26 +239,47 @@ async function downloadPlaylistAlbums(playlist) {
   });
 
   const uniqueAlbums = Array.from(albumMap.values());
-  if (uniqueAlbums.length === 0) {
+  const totalAlbums = uniqueAlbums.length;
+  if (totalAlbums === 0) {
     showError('No albums found in this playlist.');
     return;
   }
 
+  // Get a reference to the "Download Playlist's Albums" button.
+  const downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn');
+  if (downloadAlbumsBtn) {
+    // Initialize the progress display.
+    downloadAlbumsBtn.textContent = `0/${totalAlbums}`;
+  }
+
   try {
     // Process each album sequentially.
-    for (const album of uniqueAlbums) {
+    for (let i = 0; i < totalAlbums; i++) {
+      const album = uniqueAlbums[i];
       await downloadQueue.startAlbumDownload(
         album.external_urls.spotify,
         { name: album.name }
       );
-      // Wait 20 milliseconds before proceeding to the next album.
-      await new Promise(resolve => setTimeout(resolve, 2));
+
+      // Update button text with current progress.
+      if (downloadAlbumsBtn) {
+        downloadAlbumsBtn.textContent = `${i + 1}/${totalAlbums}`;
+      }
+
+      // Wait 20 milliseconds before processing the next album.
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    // Once all albums have been queued, update the button text.
+    if (downloadAlbumsBtn) {
+      downloadAlbumsBtn.textContent = 'Queued!';
     }
   } catch (error) {
     // Propagate any errors encountered.
     throw error;
   }
 }
+
 
 
 /**
