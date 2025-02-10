@@ -74,7 +74,7 @@ function renderArtist(artistData, artistId) {
     downloadQueue.startArtistDownload(
       artistUrl,
       { name: artistName, artist: artistName },
-      'album,single,compilation,appears_on'
+      'album,single,compilation'
     )
       .then(() => {
         downloadArtistBtn.textContent = 'Artist queued';
