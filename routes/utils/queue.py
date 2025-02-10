@@ -154,20 +154,32 @@ class DownloadQueueManager:
         Adds a new download task to the queue.
         The task is expected to be a dictionary with all necessary parameters,
         including a "download_type" key (album, track, or playlist).
+
         A .prg file is created for progress logging with an initial two entries:
           1. The original request (merged with the extra keys: type, name, artist)
           2. A queued status entry (including type, name, artist, and the task's position in the queue)
-        
-        Returns the generated prg filename so that the caller can later
-        check the status or request cancellation.
-        """
-        # Determine the download type, defaulting to 'unknown' if not provided.
-        download_type = task.get("download_type", "unknown")
-        # Compute the overall position in the queue:
-        # position = (number of running tasks) + (number of pending tasks) + 1.
-        position = len(self.running_downloads) + self.pending_tasks.qsize() + 1
 
-        # Generate the prg filename based on the download type and queue position.
+        The position in the queue is determined by scanning the PRG directory for existing files
+        that follow the naming scheme (download_type_<number>.prg). The new task gets the next available number.
+
+        Returns the generated prg filename so that the caller can later check the status or request cancellation.
+        """
+        download_type = task.get("download_type", "unknown")
+
+        # Determine the new task's position by scanning the PRG_DIR for files matching the naming scheme.
+        existing_positions = []
+        for filename in os.listdir(self.prg_dir):
+            if filename.startswith(f"{download_type}_") and filename.endswith(".prg"):
+                try:
+                    # Filename format: download_type_<number>.prg
+                    number_part = filename[len(download_type) + 1:-4]
+                    pos_num = int(number_part)
+                    existing_positions.append(pos_num)
+                except ValueError:
+                    continue  # Skip files that do not conform to the naming scheme.
+        position = max(existing_positions, default=0) + 1
+
+        # Generate the prg filename based on the download type and determined position.
         prg_filename = f"{download_type}_{position}.prg"
         prg_path = os.path.join(self.prg_dir, prg_filename)
         task['prg_path'] = prg_path
