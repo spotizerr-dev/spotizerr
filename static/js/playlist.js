@@ -251,7 +251,7 @@ async function downloadPlaylistAlbums(playlist) {
         { name: album.name }
       );
       // Wait 20 milliseconds before proceeding to the next album.
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await new Promise(resolve => setTimeout(resolve, 2));
     }
   } catch (error) {
     // Propagate any errors encountered.
