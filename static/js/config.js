@@ -24,23 +24,30 @@ const serviceConfig = {
 let currentService = 'spotify';
 let currentCredential = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-  initConfig();
-  setupServiceTabs();
-  setupEventListeners();
+// Global variables to hold the active accounts from the config response.
+let activeSpotifyAccount = '';
+let activeDeezerAccount = '';
 
-  // Attach click listener for the queue icon to toggle the download queue sidebar.
-  const queueIcon = document.getElementById('queueIcon');
-  if (queueIcon) {
-    queueIcon.addEventListener('click', () => {
-      downloadQueue.toggleVisibility();
-    });
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await initConfig();
+    setupServiceTabs();
+    setupEventListeners();
+
+    const queueIcon = document.getElementById('queueIcon');
+    if (queueIcon) {
+      queueIcon.addEventListener('click', () => {
+        downloadQueue.toggleVisibility();
+      });
+    }
+  } catch (error) {
+    showConfigError(error.message);
   }
 });
 
-function initConfig() {
-  loadConfig();
-  updateAccountSelectors();
+async function initConfig() {
+  await loadConfig();
+  await updateAccountSelectors();
   loadCredentials(currentService);
   updateFormFields();
 }
@@ -67,19 +74,26 @@ function setupEventListeners() {
   document.getElementById('spotifyQualitySelect').addEventListener('change', saveConfig);
   document.getElementById('deezerQualitySelect').addEventListener('change', saveConfig);
 
-  // Account select changes
-  document.getElementById('spotifyAccountSelect').addEventListener('change', saveConfig);
-  document.getElementById('deezerAccountSelect').addEventListener('change', saveConfig);
+  // Update active account globals when the account selector is changed.
+  document.getElementById('spotifyAccountSelect').addEventListener('change', (e) => {
+    activeSpotifyAccount = e.target.value;
+    saveConfig();
+  });
+  document.getElementById('deezerAccountSelect').addEventListener('change', (e) => {
+    activeDeezerAccount = e.target.value;
+    saveConfig();
+  });
 
-  // New formatting settings change listeners
+  // Formatting settings
   document.getElementById('customDirFormat').addEventListener('change', saveConfig);
   document.getElementById('customTrackFormat').addEventListener('change', saveConfig);
+
+  // New: Max concurrent downloads change listener
+  document.getElementById('maxConcurrentDownloads').addEventListener('change', saveConfig);
 }
 
 async function updateAccountSelectors() {
   try {
-    const saved = JSON.parse(localStorage.getItem('activeConfig')) || {};
-
     const [spotifyResponse, deezerResponse] = await Promise.all([
       fetch('/api/credentials/spotify'),
       fetch('/api/credentials/deezer')
@@ -88,32 +102,38 @@ async function updateAccountSelectors() {
     const spotifyAccounts = await spotifyResponse.json();
     const deezerAccounts = await deezerResponse.json();
 
-    // Update Spotify selector
+    // Get the select elements
     const spotifySelect = document.getElementById('spotifyAccountSelect');
-    const isValidSpotify = spotifyAccounts.includes(saved.spotify);
-    spotifySelect.innerHTML = spotifyAccounts.map(a => 
-      `<option value="${a}" ${a === saved.spotify ? 'selected' : ''}>${a}</option>`
-    ).join('');
-
-    if (!isValidSpotify && spotifyAccounts.length > 0) {
-      spotifySelect.value = spotifyAccounts[0];
-      saved.spotify = spotifyAccounts[0];
-      localStorage.setItem('activeConfig', JSON.stringify(saved));
-    }
-
-    // Update Deezer selector
     const deezerSelect = document.getElementById('deezerAccountSelect');
-    const isValidDeezer = deezerAccounts.includes(saved.deezer);
-    deezerSelect.innerHTML = deezerAccounts.map(a => 
-      `<option value="${a}" ${a === saved.deezer ? 'selected' : ''}>${a}</option>`
-    ).join('');
 
-    if (!isValidDeezer && deezerAccounts.length > 0) {
-      deezerSelect.value = deezerAccounts[0];
-      saved.deezer = deezerAccounts[0];
-      localStorage.setItem('activeConfig', JSON.stringify(saved));
+    // Rebuild the Spotify selector options
+    spotifySelect.innerHTML = spotifyAccounts
+      .map(a => `<option value="${a}">${a}</option>`)
+      .join('');
+
+    // Use the active account loaded from the config (activeSpotifyAccount)
+    if (spotifyAccounts.includes(activeSpotifyAccount)) {
+      spotifySelect.value = activeSpotifyAccount;
+    } else if (spotifyAccounts.length > 0) {
+      spotifySelect.value = spotifyAccounts[0];
+      activeSpotifyAccount = spotifyAccounts[0];
+      await saveConfig();
     }
 
+    // Rebuild the Deezer selector options
+    deezerSelect.innerHTML = deezerAccounts
+      .map(a => `<option value="${a}">${a}</option>`)
+      .join('');
+
+    if (deezerAccounts.includes(activeDeezerAccount)) {
+      deezerSelect.value = activeDeezerAccount;
+    } else if (deezerAccounts.length > 0) {
+      deezerSelect.value = deezerAccounts[0];
+      activeDeezerAccount = deezerAccounts[0];
+      await saveConfig();
+    }
+
+    // Handle empty account lists
     [spotifySelect, deezerSelect].forEach((select, index) => {
       const accounts = index === 0 ? spotifyAccounts : deezerAccounts;
       if (accounts.length === 0) {
@@ -137,15 +157,17 @@ async function loadCredentials(service) {
 
 function renderCredentialsList(service, credentials) {
   const list = document.querySelector('.credentials-list');
-  list.innerHTML = credentials.map(name => `
-    <div class="credential-item">
-      <span>${name}</span>
-      <div class="credential-actions">
-        <button class="edit-btn" data-name="${name}" data-service="${service}">Edit</button>
-        <button class="delete-btn" data-name="${name}" data-service="${service}">Delete</button>
-      </div>
-    </div>
-  `).join('');
+  list.innerHTML = credentials
+    .map(name =>
+      `<div class="credential-item">
+         <span>${name}</span>
+         <div class="credential-actions">
+           <button class="edit-btn" data-name="${name}" data-service="${service}">Edit</button>
+           <button class="delete-btn" data-name="${name}" data-service="${service}">Delete</button>
+         </div>
+       </div>`
+    )
+    .join('');
 
   list.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', handleDeleteCredential);
@@ -165,18 +187,24 @@ async function handleDeleteCredential(e) {
       throw new Error('Missing credential information');
     }
 
-    const response = await fetch(`/api/credentials/${service}/${name}`, { 
-      method: 'DELETE' 
+    const response = await fetch(`/api/credentials/${service}/${name}`, {
+      method: 'DELETE'
     });
 
     if (!response.ok) {
       throw new Error('Failed to delete credential');
     }
 
+    // If the deleted credential is the active account, clear the selection.
     const accountSelect = document.getElementById(`${service}AccountSelect`);
     if (accountSelect.value === name) {
       accountSelect.value = '';
-      saveConfig();
+      if (service === 'spotify') {
+        activeSpotifyAccount = '';
+      } else if (service === 'deezer') {
+        activeDeezerAccount = '';
+      }
+      await saveConfig();
     }
 
     loadCredentials(service);
@@ -191,7 +219,6 @@ async function handleEditCredential(e) {
   const name = e.target.dataset.name;
 
   try {
-    // Switch to the appropriate service tab
     document.querySelector(`[data-service="${service}"]`).click();
     await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -209,16 +236,18 @@ async function handleEditCredential(e) {
 
 function updateFormFields() {
   const serviceFields = document.getElementById('serviceFields');
-  serviceFields.innerHTML = serviceConfig[currentService].fields.map(field => `
-    <div class="form-group">
-      <label>${field.label}:</label>
-      <input type="${field.type}" 
-             id="${field.id}" 
-             name="${field.id}" 
-             required
-             ${field.type === 'password' ? 'autocomplete="new-password"' : ''}>
-    </div>
-  `).join('');
+  serviceFields.innerHTML = serviceConfig[currentService].fields
+    .map(field =>
+      `<div class="form-group">
+         <label>${field.label}:</label>
+         <input type="${field.type}" 
+                id="${field.id}" 
+                name="${field.id}" 
+                required
+                ${field.type === 'password' ? 'autocomplete="new-password"' : ''}>
+       </div>`
+    )
+    .join('');
 }
 
 function populateFormFields(service, data) {
@@ -260,7 +289,7 @@ async function handleCredentialSubmit(e) {
     }
 
     await updateAccountSelectors();
-    saveConfig();
+    await saveConfig();
     loadCredentials(service);
     resetForm();
   } catch (error) {
@@ -276,7 +305,8 @@ function resetForm() {
   document.getElementById('credentialForm').reset();
 }
 
-function saveConfig() {
+async function saveConfig() {
+  // Read active account values directly from the DOM (or from the globals which are kept in sync)
   const config = {
     spotify: document.getElementById('spotifyAccountSelect').value,
     deezer: document.getElementById('deezerAccountSelect').value,
@@ -284,28 +314,60 @@ function saveConfig() {
     spotifyQuality: document.getElementById('spotifyQualitySelect').value,
     deezerQuality: document.getElementById('deezerQualitySelect').value,
     realTime: document.getElementById('realTimeToggle').checked,
-    // Save the new formatting settings
     customDirFormat: document.getElementById('customDirFormat').value,
-    customTrackFormat: document.getElementById('customTrackFormat').value
+    customTrackFormat: document.getElementById('customTrackFormat').value,
+    maxConcurrentDownloads: parseInt(document.getElementById('maxConcurrentDownloads').value, 10) || 3
   };
-  localStorage.setItem('activeConfig', JSON.stringify(config));
+
+  try {
+    const response = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to save config');
+    }
+  } catch (error) {
+    showConfigError(error.message);
+  }
 }
 
-function loadConfig() {
-  const saved = JSON.parse(localStorage.getItem('activeConfig')) || {};
-  document.getElementById('spotifyAccountSelect').value = saved.spotify || '';
-  document.getElementById('deezerAccountSelect').value = saved.deezer || '';
-  document.getElementById('fallbackToggle').checked = !!saved.fallback;
-  document.getElementById('spotifyQualitySelect').value = saved.spotifyQuality || 'NORMAL';
-  document.getElementById('deezerQualitySelect').value = saved.deezerQuality || 'MP3_128';
-  document.getElementById('realTimeToggle').checked = !!saved.realTime;
-  // Load the new formatting settings. If not set, you can choose to default to an empty string or a specific format.
-  document.getElementById('customDirFormat').value = saved.customDirFormat || '%ar_album%/%album%';
-  document.getElementById('customTrackFormat').value = saved.customTrackFormat || '%tracknum%. %music%';
+async function loadConfig() {
+  try {
+    const response = await fetch('/api/config');
+    if (!response.ok) throw new Error('Failed to load config');
+
+    const savedConfig = await response.json();
+
+    // Use the "spotify" and "deezer" properties from the API response to set the active accounts.
+    activeSpotifyAccount = savedConfig.spotify || '';
+    activeDeezerAccount = savedConfig.deezer || '';
+
+    // (Optionally, if the account selects already exist you can set their values here,
+    // but updateAccountSelectors() will rebuild the options and set the proper values.)
+    const spotifySelect = document.getElementById('spotifyAccountSelect');
+    const deezerSelect = document.getElementById('deezerAccountSelect');
+    if (spotifySelect) spotifySelect.value = activeSpotifyAccount;
+    if (deezerSelect) deezerSelect.value = activeDeezerAccount;
+
+    // Update other configuration fields.
+    document.getElementById('fallbackToggle').checked = !!savedConfig.fallback;
+    document.getElementById('spotifyQualitySelect').value = savedConfig.spotifyQuality || 'NORMAL';
+    document.getElementById('deezerQualitySelect').value = savedConfig.deezerQuality || 'MP3_128';
+    document.getElementById('realTimeToggle').checked = !!savedConfig.realTime;
+    document.getElementById('customDirFormat').value = savedConfig.customDirFormat || '%ar_album%/%album%';
+    document.getElementById('customTrackFormat').value = savedConfig.customTrackFormat || '%tracknum%. %music%';
+    document.getElementById('maxConcurrentDownloads').value = savedConfig.maxConcurrentDownloads || '3';
+  } catch (error) {
+    showConfigError('Error loading config: ' + error.message);
+  }
 }
 
 function showConfigError(message) {
   const errorDiv = document.getElementById('configError');
   errorDiv.textContent = message;
-  setTimeout(() => errorDiv.textContent = '', 3000);
+  setTimeout(() => (errorDiv.textContent = ''), 3000);
 }

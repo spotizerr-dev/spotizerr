@@ -91,22 +91,18 @@ function renderTrack(track) {
     document.getElementById('track-header').appendChild(downloadBtn);
   }
 
-  // Attach a click listener to the download button.
   downloadBtn.addEventListener('click', () => {
     downloadBtn.disabled = true;
-    // Save the original icon markup in case we need to revert.
-    downloadBtn.dataset.originalHtml = `<img src="/static/images/download.svg" alt="Download">`;
     downloadBtn.innerHTML = `<span>Queueing...</span>`;
-
-    // Start the download for this track.
-    startDownload(track.external_urls.spotify, 'track', { name: track.name })
+    
+    downloadQueue.startTrackDownload(track.external_urls.spotify, { name: track.name })
       .then(() => {
         downloadBtn.innerHTML = `<span>Queued!</span>`;
       })
       .catch(err => {
         showError('Failed to queue track download: ' + err.message);
         downloadBtn.disabled = false;
-        downloadBtn.innerHTML = downloadBtn.dataset.originalHtml;
+        downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
       });
   });
 

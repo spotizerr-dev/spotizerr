@@ -1,4 +1,4 @@
-// Import the downloadQueue singleton from your working queue.js implementation.
+// main.js
 import { downloadQueue } from './queue.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -62,13 +62,16 @@ async function performSearch() {
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         
+        // When mapping the items, include the index so that each card gets a data-index attribute.
         const items = data.data[`${searchType}s`]?.items;
         if (!items?.length) {
             resultsContainer.innerHTML = '<div class="error">No results found</div>';
             return;
         }
         
-        resultsContainer.innerHTML = items.map(item => createResultCard(item, searchType)).join('');
+        resultsContainer.innerHTML = items
+            .map((item, index) => createResultCard(item, searchType, index))
+            .join('');
         attachDownloadListeners(items);
     } catch (error) {
         showError(error.message);
@@ -77,69 +80,61 @@ async function performSearch() {
 
 /**
  * Attaches event listeners to all download buttons (both standard and small versions).
+ * Instead of using the NodeList index (which can be off when multiple buttons are in one card),
+ * we look up the closest result card’s data-index to get the correct item.
  */
 function attachDownloadListeners(items) {
-    // Query for both download-btn and download-btn-small buttons.
-    document.querySelectorAll('.download-btn, .download-btn-small').forEach((btn, index) => {
+    document.querySelectorAll('.download-btn, .download-btn-small').forEach((btn) => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const url = e.currentTarget.dataset.url;
             const type = e.currentTarget.dataset.type;
             const albumType = e.currentTarget.dataset.albumType;
-            // If a main-download button is clicked (if present), remove its entire result card; otherwise just remove the button.
+            // Get the parent result card and its data-index
+            const card = e.currentTarget.closest('.result-card');
+            const idx = card ? card.getAttribute('data-index') : null;
+            const item = (idx !== null) ? items[idx] : null;
+
+            // Remove the button or card from the UI as appropriate.
             if (e.currentTarget.classList.contains('main-download')) {
-                e.currentTarget.closest('.result-card').remove();
+                card.remove();
             } else {
                 e.currentTarget.remove();
             }
-            startDownload(url, type, items[index], albumType);
+            startDownload(url, type, item, albumType);
         });
     });
 }
 
+/**
+ * Calls the appropriate downloadQueue method based on the type.
+ * For artists, this function will use the default parameters (which you can adjust)
+ * so that the backend endpoint (at /artist/download) receives the required query parameters.
+ */
 async function startDownload(url, type, item, albumType) {
-    // Retrieve configuration (if any) from localStorage
-    const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
-    const {
-        fallback = false,
-        spotify = '',
-        deezer = '',
-        spotifyQuality = 'NORMAL',
-        deezerQuality = 'MP3_128',
-        realTime = false,
-        customTrackFormat = '',
-        customDirFormat = ''
-    } = config;
-
-    let service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-    let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
-
-    if (type === 'artist') {
-        apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
+    // Enrich the item object with the artist property.
+    if (type === 'track' || type === 'album') {
+        item.artist = item.artists.map(a => a.name).join(', ');
+    } else if (type === 'playlist') {
+        item.artist = item.owner.display_name;
+    } else if (type === 'artist') {
+        item.artist = item.name;
     }
-
-    if (fallback && service === 'spotify') {
-        apiUrl += `&main=${deezer}&fallback=${spotify}`;
-        apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
-    } else {
-        const mainAccount = service === 'spotify' ? spotify : deezer;
-        apiUrl += `&main=${mainAccount}&quality=${service === 'spotify' ? spotifyQuality : deezerQuality}`;
-    }
-
-    if (realTime) apiUrl += '&real_time=true';
-
-    // Append custom formatting parameters if present.
-    if (customTrackFormat) {
-        apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
-    }
-    if (customDirFormat) {
-        apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
-    }
-
+    
     try {
-        const response = await fetch(apiUrl);
-        const data = await response.json();
-        downloadQueue.addDownload(item, type, data.prg_file);
+        if (type === 'track') {
+            await downloadQueue.startTrackDownload(url, item);
+        } else if (type === 'playlist') {
+            await downloadQueue.startPlaylistDownload(url, item);
+        } else if (type === 'album') {
+            await downloadQueue.startAlbumDownload(url, item);
+        } else if (type === 'artist') {
+            // The downloadQueue.startArtistDownload should be implemented to call your
+            // backend artist endpoint (e.g. /artist/download) with proper query parameters.
+            await downloadQueue.startArtistDownload(url, item, albumType);
+        } else {
+            throw new Error(`Unsupported type: ${type}`);
+        }
     } catch (error) {
         showError('Download failed: ' + error.message);
     }
@@ -161,7 +156,6 @@ function isSpotifyUrl(url) {
 function getSpotifyResourceDetails(url) {
     const urlObj = new URL(url);
     const pathParts = urlObj.pathname.split('/');
-    // Expecting ['', type, id, ...]
     if (pathParts.length < 3 || !pathParts[1] || !pathParts[2]) {
         throw new Error('Invalid Spotify URL');
     }
@@ -177,7 +171,11 @@ function msToMinutesSeconds(ms) {
     return `${minutes}:${seconds.padStart(2, '0')}`;
 }
 
-function createResultCard(item, type) {
+/**
+ * Create a result card for a search result.
+ * The additional parameter "index" is used to set a data-index attribute on the card.
+ */
+function createResultCard(item, type, index) {
     let newUrl = '#';
     try {
         const spotifyUrl = item.external_urls.spotify;
@@ -199,7 +197,7 @@ function createResultCard(item, type) {
                 <span class="duration">${msToMinutesSeconds(item.duration_ms)}</span>
             `;
             return `
-                <div class="result-card" data-id="${item.id}">
+                <div class="result-card" data-id="${item.id}" data-index="${index}">
                     <div class="album-art-wrapper">
                         <img src="${imageUrl}" class="album-art" alt="${type} cover">
                     </div>
@@ -230,7 +228,7 @@ function createResultCard(item, type) {
                 <span class="duration">${item.description || 'No description'}</span>
             `;
             return `
-                <div class="result-card" data-id="${item.id}">
+                <div class="result-card" data-id="${item.id}" data-index="${index}">
                     <div class="album-art-wrapper">
                         <img src="${imageUrl}" class="album-art" alt="${type} cover">
                     </div>
@@ -261,7 +259,7 @@ function createResultCard(item, type) {
                 <span class="duration">${item.total_tracks} tracks</span>
             `;
             return `
-                <div class="result-card" data-id="${item.id}">
+                <div class="result-card" data-id="${item.id}" data-index="${index}">
                     <div class="album-art-wrapper">
                         <img src="${imageUrl}" class="album-art" alt="${type} cover">
                     </div>
@@ -289,13 +287,14 @@ function createResultCard(item, type) {
             subtitle = (item.genres && item.genres.length) ? item.genres.join(', ') : 'Unknown genres';
             details = `<span>Followers: ${item.followers?.total || 'N/A'}</span>`;
             return `
-                <div class="result-card" data-id="${item.id}">
+                <div class="result-card" data-id="${item.id}" data-index="${index}">
                     <div class="album-art-wrapper">
                         <img src="${imageUrl}" class="album-art" alt="${type} cover">
                     </div>
                     <div class="title-and-view">
                         <div class="track-title">${title}</div>
                         <div class="title-buttons">
+                            <!-- A primary download button (if you want one for a “default” download) -->
                             <button class="download-btn-small" 
                                     data-url="${item.external_urls.spotify}" 
                                     data-type="${type}" 
@@ -309,7 +308,7 @@ function createResultCard(item, type) {
                     </div>
                     <div class="track-artist">${subtitle}</div>
                     <div class="track-details">${details}</div>
-                    <!-- Removed the main "Download All Discography" button -->
+                    <!-- Artist-specific download options -->
                     <div class="artist-download-buttons">
                         <div class="download-options-container">
                             <button class="options-toggle" onclick="this.nextElementSibling.classList.toggle('expanded')">
@@ -356,7 +355,7 @@ function createResultCard(item, type) {
             subtitle = '';
             details = '';
             return `
-                <div class="result-card" data-id="${item.id}">
+                <div class="result-card" data-id="${item.id}" data-index="${index}">
                     <div class="album-art-wrapper">
                         <img src="${imageUrl}" class="album-art" alt="${type} cover">
                     </div>

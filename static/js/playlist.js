@@ -72,7 +72,7 @@ function renderPlaylist(playlist) {
     downloadPlaylistBtn.id = 'downloadPlaylistBtn';
     downloadPlaylistBtn.textContent = 'Download Whole Playlist';
     downloadPlaylistBtn.className = 'download-btn download-btn--main';
-    // Insert the button into the header container (e.g. after the description)
+    // Insert the button into the header container.
     const headerContainer = document.getElementById('playlist-header');
     headerContainer.appendChild(downloadPlaylistBtn);
   }
@@ -95,6 +95,36 @@ function renderPlaylist(playlist) {
       showError('Failed to queue playlist download: ' + err.message);
       downloadPlaylistBtn.disabled = false;
     });
+  });
+
+  // --- Add "Download Playlist's Albums" Button ---
+  let downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn');
+  if (!downloadAlbumsBtn) {
+    downloadAlbumsBtn = document.createElement('button');
+    downloadAlbumsBtn.id = 'downloadAlbumsBtn';
+    downloadAlbumsBtn.textContent = "Download Playlist's Albums";
+    downloadAlbumsBtn.className = 'download-btn download-btn--main';
+    // Insert the new button into the header container.
+    const headerContainer = document.getElementById('playlist-header');
+    headerContainer.appendChild(downloadAlbumsBtn);
+  }
+  downloadAlbumsBtn.addEventListener('click', () => {
+    // Remove individual track download buttons (but leave this album button).
+    document.querySelectorAll('.download-btn').forEach(btn => {
+      if (btn.id !== 'downloadAlbumsBtn') btn.remove();
+    });
+
+    downloadAlbumsBtn.disabled = true;
+    downloadAlbumsBtn.textContent = 'Queueing...';
+
+    downloadPlaylistAlbums(playlist)
+      .then(() => {
+        downloadAlbumsBtn.textContent = 'Queued!';
+      })
+      .catch(err => {
+        showError('Failed to queue album downloads: ' + err.message);
+        downloadAlbumsBtn.disabled = false;
+      });
   });
 
   // Render tracks list
@@ -166,20 +196,16 @@ function showError(message) {
  */
 function attachDownloadListeners() {
   document.querySelectorAll('.download-btn').forEach((btn) => {
-    // Skip the whole playlist button.
-    if (btn.id === 'downloadPlaylistBtn') return;
+    // Skip the whole playlist and album download buttons.
+    if (btn.id === 'downloadPlaylistBtn' || btn.id === 'downloadAlbumsBtn') return;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const url = e.currentTarget.dataset.url;
       const type = e.currentTarget.dataset.type;
       const name = e.currentTarget.dataset.name || extractName(url);
-      const albumType = e.currentTarget.dataset.albumType;
-
-      // Remove the button after click
+      // Remove the button immediately after click.
       e.currentTarget.remove();
-
-      // Start the download for this track.
-      startDownload(url, type, { name }, albumType);
+      startDownload(url, type, { name });
     });
   });
 }
@@ -188,18 +214,80 @@ function attachDownloadListeners() {
  * Initiates the whole playlist download by calling the playlist endpoint.
  */
 async function downloadWholePlaylist(playlist) {
-  // Use the playlist external URL (assumed available) for the download.
   const url = playlist.external_urls.spotify;
-  // Queue the whole playlist download with the descriptive playlist name.
-  startDownload(url, 'playlist', { name: playlist.name });
+  try {
+    await downloadQueue.startPlaylistDownload(url, { name: playlist.name });
+  } catch (error) {
+    showError('Playlist download failed: ' + error.message);
+    throw error;
+  }
 }
+
+/**
+ * Initiates album downloads for each unique album in the playlist,
+ * adding a 20ms delay between each album download and updating the button
+ * with the progress (queued_albums/total_albums).
+ */
+async function downloadPlaylistAlbums(playlist) {
+  // Build a map of unique albums (using album ID as the key).
+  const albumMap = new Map();
+  playlist.tracks.items.forEach(item => {
+    const album = item.track.album;
+    if (album && album.id) {
+      albumMap.set(album.id, album);
+    }
+  });
+
+  const uniqueAlbums = Array.from(albumMap.values());
+  const totalAlbums = uniqueAlbums.length;
+  if (totalAlbums === 0) {
+    showError('No albums found in this playlist.');
+    return;
+  }
+
+  // Get a reference to the "Download Playlist's Albums" button.
+  const downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn');
+  if (downloadAlbumsBtn) {
+    // Initialize the progress display.
+    downloadAlbumsBtn.textContent = `0/${totalAlbums}`;
+  }
+
+  try {
+    // Process each album sequentially.
+    for (let i = 0; i < totalAlbums; i++) {
+      const album = uniqueAlbums[i];
+      await downloadQueue.startAlbumDownload(
+        album.external_urls.spotify,
+        { name: album.name }
+      );
+
+      // Update button text with current progress.
+      if (downloadAlbumsBtn) {
+        downloadAlbumsBtn.textContent = `${i + 1}/${totalAlbums}`;
+      }
+
+      // Wait 20 milliseconds before processing the next album.
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+
+    // Once all albums have been queued, update the button text.
+    if (downloadAlbumsBtn) {
+      downloadAlbumsBtn.textContent = 'Queued!';
+    }
+  } catch (error) {
+    // Propagate any errors encountered.
+    throw error;
+  }
+}
+
+
 
 /**
  * Starts the download process by building the API URL,
  * fetching download details, and then adding the download to the queue.
  */
 async function startDownload(url, type, item, albumType) {
-  // Retrieve configuration (if any) from localStorage
+  // Retrieve configuration (if any) from localStorage.
   const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
   const {
     fallback = false,

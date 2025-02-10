@@ -156,7 +156,12 @@ function renderAlbum(album) {
 
 async function downloadWholeAlbum(album) {
   const url = album.external_urls.spotify;
-  return startDownload(url, 'album', { name: album.name });
+  try {
+    await downloadQueue.startAlbumDownload(url, { name: album.name });
+  } catch (error) {
+    showError('Album download failed: ' + error.message);
+    throw error;
+  }
 }
 
 function msToTime(duration) {

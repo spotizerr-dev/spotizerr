@@ -13,8 +13,12 @@
     padding: 20px;
     transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1001;
-    overflow-y: auto;
+    /* Remove overflow-y here to delegate scrolling to the queue items container */
     box-shadow: -20px 0 30px rgba(0, 0, 0, 0.4);
+    
+    /* Added for flex layout */
+    display: flex;
+    flex-direction: column;
 }
 
 /* When active, the sidebar slides into view */
@@ -23,7 +27,7 @@
 }
 
 /* Header inside the queue sidebar */
-.queue-header {
+.sidebar-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -32,40 +36,59 @@
     margin-bottom: 20px;
 }
 
-.queue-title {
+.sidebar-header h2 {
     font-size: 1.25rem;
     font-weight: 600;
     color: #fff;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Cancel all button styling */
+#cancelAllBtn {
+    background: #ff5555;
+    border: none;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    font-size: 14px;
+}
+
+#cancelAllBtn:hover {
+    background: #ff7777;
 }
 
 /* Close button for the queue sidebar */
-.queue-close {
+.close-btn {
     background: #2a2a2a;
+    border: none;
     border-radius: 50%;
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.3s ease;
-    cursor: pointer;
-}
-
-.queue-close:hover {
-    background-color: #333;
-}
-
-/* X Icon style for the close button */
-.queue-close::before {
-    content: "×";
+    color: #ffffff;
     font-size: 20px;
-    color: #fff;
-    line-height: 32px; /* Center the icon vertically within the button */
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.close-btn:hover {
+    background-color: #333;
 }
 
 /* Container for all queue items */
 #queueItems {
-    max-height: 60vh;
+    /* Allow the container to fill all available space in the sidebar */
+    flex: 1;
     overflow-y: auto;
 }
 
@@ -186,6 +209,7 @@
     to { transform: rotate(360deg); }
 }
 
+/* Cancel button inside each queue item */
 .cancel-btn {
     background: none;
     border: none;
@@ -199,8 +223,8 @@
 }
 
 .cancel-btn img {
-    width: 16px;  /* Reduced from 24px */
-    height: 16px; /* Reduced from 24px */
+    width: 16px;
+    height: 16px;
     filter: invert(1);
     transition: transform 0.3s ease;
 }
@@ -213,71 +237,28 @@
     transform: scale(0.9);
 }
 
-/* Close button for the download queue sidebar */
-.close-btn {
-    background: #2a2a2a;
+/* ------------------------------- */
+/* FOOTER & "SHOW MORE" BUTTON     */
+/* ------------------------------- */
+
+#queueFooter {
+    text-align: center;
+    padding-top: 10px;
+}
+
+#queueFooter button {
+    background: #1DB954;
     border: none;
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-    font-size: 20px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    color: #fff;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: background 0.3s ease;
+    font-size: 14px;
 }
 
-.close-btn:hover {
-    background-color: #333;
-}
-
-/* ------------------------------- */
-/* MOBILE RESPONSIVE ADJUSTMENTS   */
-/* ------------------------------- */
-@media (max-width: 600px) {
-    /* Make the sidebar full width on mobile */
-    #downloadQueue {
-        width: 100%;
-        right: -100%;  /* Off-screen fully */
-        padding: 15px;
-    }
-    
-    /* When active, the sidebar slides into view from full width */
-    #downloadQueue.active {
-        right: 0;
-    }
-
-    /* Adjust header and title for smaller screens */
-    .queue-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .queue-title {
-        font-size: 1.1rem;
-    }
-    
-    /* Reduce the size of the close buttons */
-    .queue-close,
-    .close-btn {
-        width: 28px;
-        height: 28px;
-        font-size: 18px;
-    }
-    
-    /* Adjust queue items padding */
-    .queue-item {
-        padding: 12px;
-        margin-bottom: 12px;
-    }
-    
-    /* Ensure text remains legible on smaller screens */
-    .queue-item .log,
-    .queue-item .type {
-        font-size: 12px;
-    }
+#queueFooter button:hover {
+    background: #17a448;
 }
 
 /* -------------------------- */
@@ -321,7 +302,6 @@
     padding: 0;
 }
 
-/* Hover state for the Close (X) button */
 .close-error-btn:hover {
     background: #ff7777;
 }
@@ -334,7 +314,52 @@
     font-weight: bold;
 }
 
-/* Hover state for the Retry button */
 .retry-btn:hover {
     background: #17a448;
+}
+
+/* ------------------------------- */
+/* MOBILE RESPONSIVE ADJUSTMENTS   */
+/* ------------------------------- */
+@media (max-width: 600px) {
+    /* Make the sidebar full width on mobile */
+    #downloadQueue {
+        width: 100%;
+        right: -100%;  /* Off-screen fully */
+        padding: 15px;
+    }
+    
+    /* When active, the sidebar slides into view from full width */
+    #downloadQueue.active {
+        right: 0;
+    }
+
+    /* Adjust header and title for smaller screens */
+    .sidebar-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .sidebar-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    /* Reduce the size of the close buttons */
+    .close-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+    }
+    
+    /* Adjust queue items padding */
+    .queue-item {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    
+    /* Ensure text remains legible on smaller screens */
+    .queue-item .log,
+    .queue-item .type {
+        font-size: 12px;
+    }
 }
