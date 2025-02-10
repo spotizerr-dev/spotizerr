@@ -161,13 +161,16 @@ class DownloadQueueManager:
         Returns the generated prg filename so that the caller can later
         check the status or request cancellation.
         """
-        prg_filename = generate_random_filename()
-        prg_path = os.path.join(self.prg_dir, prg_filename)
-        task['prg_path'] = prg_path
-
+        # Determine the download type, defaulting to 'unknown' if not provided.
+        download_type = task.get("download_type", "unknown")
         # Compute the overall position in the queue:
         # position = (number of running tasks) + (number of pending tasks) + 1.
         position = len(self.running_downloads) + self.pending_tasks.qsize() + 1
+
+        # Generate the prg filename based on the download type and queue position.
+        prg_filename = f"{download_type}_{position}.prg"
+        prg_path = os.path.join(self.prg_dir, prg_filename)
+        task['prg_path'] = prg_path
 
         # Create and immediately write the initial entries to the .prg file.
         try:

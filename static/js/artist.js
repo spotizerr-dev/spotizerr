@@ -40,6 +40,9 @@ function renderArtist(artistData, artistId) {
   document.getElementById('artist-stats').textContent = `${artistData.total} albums`;
   document.getElementById('artist-image').src = artistImage;
 
+  // Define the artist URL (used by both full-discography and group downloads)
+  const artistUrl = `https://open.spotify.com/artist/${artistId}`;
+
   // Home Button
   let homeButton = document.getElementById('homeButton');
   if (!homeButton) {
@@ -51,7 +54,7 @@ function renderArtist(artistData, artistId) {
   }
   homeButton.addEventListener('click', () => window.location.href = window.location.origin);
 
-  // Download Whole Artist Button
+  // Download Whole Artist Button using the new artist API endpoint
   let downloadArtistBtn = document.getElementById('downloadArtistBtn');
   if (!downloadArtistBtn) {
     downloadArtistBtn = document.createElement('button');
@@ -62,14 +65,28 @@ function renderArtist(artistData, artistId) {
   }
 
   downloadArtistBtn.addEventListener('click', () => {
+    // Optionally remove other download buttons from individual albums.
     document.querySelectorAll('.download-btn:not(#downloadArtistBtn)').forEach(btn => btn.remove());
     downloadArtistBtn.disabled = true;
     downloadArtistBtn.textContent = 'Queueing...';
 
-    queueAllAlbums(artistData.items, downloadArtistBtn);
+    // Queue the entire discography (albums, singles, compilations, and appears_on)
+    downloadQueue.startArtistDownload(
+      artistUrl,
+      { name: artistName, artist: artistName },
+      'album,single,compilation,appears_on'
+    )
+      .then(() => {
+        downloadArtistBtn.textContent = 'Artist queued';
+      })
+      .catch(err => {
+        downloadArtistBtn.textContent = 'Download All Discography';
+        downloadArtistBtn.disabled = false;
+        showError('Failed to queue artist download: ' + err.message);
+      });
   });
 
-  // Group albums by type
+  // Group albums by type (album, single, compilation, etc.)
   const albumGroups = artistData.items.reduce((groups, album) => {
     const type = album.album_type.toLowerCase();
     if (!groups[type]) groups[type] = [];
@@ -84,7 +101,7 @@ function renderArtist(artistData, artistId) {
   for (const [groupType, albums] of Object.entries(albumGroups)) {
     const groupSection = document.createElement('section');
     groupSection.className = 'album-group';
-    
+
     groupSection.innerHTML = `
       <div class="album-group-header">
         <h3>${capitalize(groupType)}s</h3>
@@ -112,7 +129,7 @@ function renderArtist(artistData, artistId) {
         </div>
         <button class="download-btn download-btn--circle" 
                 data-url="${album.external_urls.spotify}" 
-                data-type="album"
+                data-type="${album.album_type}"
                 data-name="${album.name}"
                 title="Download">
           <img src="/static/images/download.svg" alt="Download">
@@ -126,71 +143,45 @@ function renderArtist(artistData, artistId) {
 
   document.getElementById('artist-header').classList.remove('hidden');
   document.getElementById('albums-container').classList.remove('hidden');
+
   attachDownloadListeners();
-  attachGroupDownloadListeners();
+  // Pass the artist URL and name so the group buttons can use the artist download function
+  attachGroupDownloadListeners(artistUrl, artistName);
 }
 
-// Helper to queue multiple albums
-async function queueAllAlbums(albums, button) {
-  try {
-    const results = await Promise.allSettled(
-      albums.map(album => 
-        downloadQueue.startAlbumDownload(
-          album.external_urls.spotify, 
-          { name: album.name }
-        )
-      )
-    );
-
-    const successful = results.filter(r => r.status === 'fulfilled').length;
-    button.textContent = `Queued ${successful}/${albums.length} albums`;
-  } catch (error) {
-    button.textContent = 'Download All Albums';
-    button.disabled = false;
-    showError('Failed to queue some albums: ' + error.message);
-  }
-}
-
-// Event listeners for group downloads
-function attachGroupDownloadListeners() {
+// Event listeners for group downloads using the artist download function
+function attachGroupDownloadListeners(artistUrl, artistName) {
   document.querySelectorAll('.group-download-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      const groupSection = e.target.closest('.album-group');
-      const albums = Array.from(groupSection.querySelectorAll('.album-card'))
-        .map(card => ({
-          url: card.querySelector('.download-btn').dataset.url,
-          name: card.querySelector('.album-title').textContent
-        }));
-
+      const groupType = e.target.dataset.groupType; // e.g. "album", "single", "compilation"
       e.target.disabled = true;
-      e.target.textContent = `Queueing ${albums.length} albums...`;
+      e.target.textContent = `Queueing all ${capitalize(groupType)}s...`;
 
       try {
-        const results = await Promise.allSettled(
-          albums.map(album => 
-            downloadQueue.startAlbumDownload(album.url, { name: album.name })
-          )
+        // Use the artist download function with the group type filter.
+        await downloadQueue.startArtistDownload(
+          artistUrl,
+          { name: artistName, artist: artistName },
+          groupType // Only queue releases of this specific type.
         );
-
-        const successful = results.filter(r => r.status === 'fulfilled').length;
-        e.target.textContent = `Queued ${successful}/${albums.length} albums`;
+        e.target.textContent = `Queued all ${capitalize(groupType)}s`;
       } catch (error) {
-        e.target.textContent = `Download All ${capitalize(e.target.dataset.groupType)}s`;
+        e.target.textContent = `Download All ${capitalize(groupType)}s`;
         e.target.disabled = false;
-        showError('Failed to queue some albums: ' + error.message);
+        showError(`Failed to queue download for all ${groupType}s: ${error.message}`);
       }
     });
   });
 }
 
-// Individual download handlers
+// Individual download handlers remain unchanged.
 function attachDownloadListeners() {
   document.querySelectorAll('.download-btn:not(.group-download-btn)').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const { url, name } = e.currentTarget.dataset;
+      const { url, name, type } = e.currentTarget.dataset;
       e.currentTarget.remove();
-      downloadQueue.startAlbumDownload(url, { name })
+      downloadQueue.startAlbumDownload(url, { name, type })
         .catch(err => showError('Download failed: ' + err.message));
     });
   });
