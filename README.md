@@ -50,6 +50,7 @@ mkdir spotizerr && cd spotizerr
 ```bash
 docker compose up -d
 ```
+_Note: an UnRaid template is available in the file spotizerr.xml_
 
 Access at: `http://localhost:7171`
 
