@@ -127,7 +127,7 @@ First create a Spotify credentials file using the 3rd-party `librespot-auth` too
 
 2. Build the repository using a windows-targeted Rust Docker image ([why a different image?](https://github.com/jscharnitzke/rust-build-windows)):  
    ```shell
-   docker run --rm -v "${pwd}/librespot-auth:/app" -w "/app" jscharnitzke/rust-build-windows cargo build --release
+   docker run --rm -v "${pwd}/librespot-auth:/app" -w "/app" jscharnitzke/rust-build-windows --release
    ```
 
 3. Run the built binary:   
