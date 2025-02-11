@@ -8,11 +8,14 @@ RUN apt-get update && apt-get install -y git ffmpeg gosu bash && \
 # Set the working directory in the container
 WORKDIR /app
 
+# Cache-busting mechanism
+ARG CACHE_BUST=0
+
 # Copy the requirements file into the container
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Force Docker to always run this step
+RUN echo $CACHE_BUST && pip install --no-cache-dir --upgrade --force-reinstall -r requirements.txt
 
 # Copy application code
 COPY . .
