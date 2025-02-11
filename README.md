@@ -100,7 +100,7 @@ Copy that value and paste it into the correspondant setting in Spotizerr
 First create a Spotify credentials file using the 3rd-party `librespot-auth` tool, this step has to be done in a PC/Laptop that has the Spotify desktop app installed.
 
 ---
-#### For Linux and Windows (using Docker)
+#### For Linux (using Docker)
 1. Clone the `librespot-auth` repository:  
    ```shell
    git clone --depth 1 https://github.com/dspearson/librespot-auth.git
@@ -111,16 +111,29 @@ First create a Spotify credentials file using the 3rd-party `librespot-auth` too
    docker run --rm -v "$(pwd)/librespot-auth":/app -w /app rust:latest cargo build --release
    ```
 
-3. Run the built binary:  
-   - **Linux**:  
+3. Run the built binary:    
      ```shell
      ./librespot-auth/target/release/librespot-auth --name "mySpotifyAccount1" --class=computer
      ```
-   - **Windows**:  
-     ```shell
-     .\librespot-auth\target\release\librespot-auth.exe --name "mySpotifyAccount1" --class=computer
-     ```
 
+---
+
+#### For Windows (using Docker)
+
+1. Clone the `librespot-auth` repository:  
+   ```shell
+   git clone --depth 1 https://github.com/dspearson/librespot-auth.git
+   ```
+
+2. Build the repository using a windows-targeted Rust Docker image ([why a different image?](https://github.com/jscharnitzke/rust-build-windows)):  
+   ```shell
+   docker run --rm -v "${pwd}/librespot-auth:/app" -w "/app" jscharnitzke/rust-build-windows cargo build --release
+   ```
+
+3. Run the built binary:   
+     ```shell
+     .\librespot-auth\target\x86_64-pc-windows-gnu\release\librespot-auth.exe --name "mySpotifyAccount1" --class=computer
+     ```
 ---
 
 #### For Apple Silicon (macOS)
