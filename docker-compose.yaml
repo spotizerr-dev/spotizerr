@@ -12,3 +12,4 @@ services:
     environment:
       - PUID=1000  # Replace with your desired user ID  | Remove both if you want to run as root (not recommended, might result in unreadable files)
       - PGID=1000  # Replace with your desired group ID | The user must have write permissions in the volume mapped to /app/downloads
+      - UMASK=0022 # Optional: Sets the default file permissions for newly created files within the container.
