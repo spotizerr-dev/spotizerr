@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Set umask if UMASK variable is provided
+if [ -n "${UMASK}" ]; then
+    umask "${UMASK}"
+fi
+
 # Check if both PUID and PGID are not set
 if [ -z "${PUID}" ] && [ -z "${PGID}" ]; then
     # Run as root directly
