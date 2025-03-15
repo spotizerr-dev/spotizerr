@@ -68,6 +68,22 @@
         <label for="maxConcurrentDownloads">Max Concurrent Downloads:</label>
         <input type="number" id="maxConcurrentDownloads" min="1" value="3">
       </div>      
+      <!-- New Retry Options -->
+      <div class="form-group">
+        <label for="maxRetries">Max Retry Attempts:</label>
+        <input type="number" id="maxRetries" min="0" max="10" value="3">
+      </div>
+      <div class="form-group">
+        <label for="retryDelaySeconds">Initial Retry Delay (seconds):</label>
+        <input type="number" id="retryDelaySeconds" min="1" value="5">
+      </div>
+      <div class="form-group">
+        <label for="retryDelayIncrease">Retry Delay Increase (seconds):</label>
+        <input type="number" id="retryDelayIncrease" min="0" value="5">
+        <div class="setting-description">
+          The amount of additional delay to add for each retry attempt
+        </div>
+      </div>
       <!-- New Formatting Options -->
       <div class="config-item">
         <label>Custom Directory Format:</label>
@@ -84,6 +100,17 @@
           id="customTrackFormat" 
           placeholder="e.g. %tracknum% - %music%" 
         />
+      </div>
+      <!-- New Track Number Padding Toggle -->
+      <div class="config-item">
+        <label>Track Number Padding:</label>
+        <label class="switch">
+          <input type="checkbox" id="tracknumPaddingToggle" />
+          <span class="slider"></span>
+        </label>
+        <div class="setting-description">
+          When enabled: "01. Track" - When disabled: "1. Track"
+        </div>
       </div>
     </div>
 
@@ -105,6 +132,7 @@
         <div id="searchFields" style="display: none;"></div>
         <button type="submit" id="submitCredentialBtn" class="save-btn">Save Account</button>
       </form>
+      <div id="configSuccess" class="success"></div>
       <div id="configError" class="error"></div>
     </div>
   </div>

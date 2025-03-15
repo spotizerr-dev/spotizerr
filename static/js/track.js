@@ -11,18 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Fetch the config to get active Spotify account first
-  fetch('/api/config')
-    .then(response => {
-      if (!response.ok) throw new Error('Failed to fetch config');
-      return response.json();
-    })
-    .then(config => {
-      const mainAccount = config.spotify || '';
-      
-      // Then fetch track info with the main parameter
-      return fetch(`/api/track/info?id=${encodeURIComponent(trackId)}&main=${mainAccount}`);
-    })
+  // Fetch track info directly
+  fetch(`/api/track/info?id=${encodeURIComponent(trackId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
@@ -52,25 +42,25 @@ function renderTrack(track) {
 
   // Update track information fields.
   document.getElementById('track-name').innerHTML =
-    `<a href="/track/${track.id}" title="View track details">${track.name}</a>`;
+    `<a href="/track/${track.id || ''}" title="View track details">${track.name || 'Unknown Track'}</a>`;
     
   document.getElementById('track-artist').innerHTML =
-    `By ${track.artists.map(a =>
-      `<a href="/artist/${a.id}" title="View artist details">${a.name}</a>`
-    ).join(', ')}`;
+    `By ${track.artists?.map(a =>
+      `<a href="/artist/${a?.id || ''}" title="View artist details">${a?.name || 'Unknown Artist'}</a>`
+    ).join(', ') || 'Unknown Artist'}`;
     
   document.getElementById('track-album').innerHTML =
-    `Album: <a href="/album/${track.album.id}" title="View album details">${track.album.name}</a> (${track.album.album_type})`;
+    `Album: <a href="/album/${track.album?.id || ''}" title="View album details">${track.album?.name || 'Unknown Album'}</a> (${track.album?.album_type || 'album'})`;
     
   document.getElementById('track-duration').textContent =
-    `Duration: ${msToTime(track.duration_ms)}`;
+    `Duration: ${msToTime(track.duration_ms || 0)}`;
     
   document.getElementById('track-explicit').textContent =
     track.explicit ? 'Explicit' : 'Clean';
 
-  const imageUrl = (track.album.images && track.album.images[0])
+  const imageUrl = (track.album?.images && track.album.images[0])
     ? track.album.images[0].url
-    : 'placeholder.jpg';
+    : '/static/images/placeholder.jpg';
   document.getElementById('track-album-image').src = imageUrl;
 
   // --- Insert Home Button (if not already present) ---
@@ -81,7 +71,10 @@ function renderTrack(track) {
     homeButton.className = 'home-btn';
     homeButton.innerHTML = `<img src="/static/images/home.svg" alt="Home" />`;
     // Prepend the home button into the header.
-    document.getElementById('track-header').insertBefore(homeButton, document.getElementById('track-header').firstChild);
+    const trackHeader = document.getElementById('track-header');
+    if (trackHeader) {
+      trackHeader.insertBefore(homeButton, trackHeader.firstChild);
+    }
   }
   homeButton.addEventListener('click', () => {
     window.location.href = window.location.origin;
@@ -93,28 +86,41 @@ function renderTrack(track) {
     // Remove the parent container (#actions) if needed.
     const actionsContainer = document.getElementById('actions');
     if (actionsContainer) {
-      actionsContainer.parentNode.removeChild(actionsContainer);
+      actionsContainer.parentNode?.removeChild(actionsContainer);
     }
     // Set the inner HTML to use the download.svg icon.
     downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
     // Append the download button to the track header so it appears at the right.
-    document.getElementById('track-header').appendChild(downloadBtn);
+    const trackHeader = document.getElementById('track-header');
+    if (trackHeader) {
+      trackHeader.appendChild(downloadBtn);
+    }
   }
 
-  downloadBtn.addEventListener('click', () => {
-    downloadBtn.disabled = true;
-    downloadBtn.innerHTML = `<span>Queueing...</span>`;
-    
-    downloadQueue.startTrackDownload(track.external_urls.spotify, { name: track.name })
-      .then(() => {
-        downloadBtn.innerHTML = `<span>Queued!</span>`;
-      })
-      .catch(err => {
-        showError('Failed to queue track download: ' + err.message);
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', () => {
+      downloadBtn.disabled = true;
+      downloadBtn.innerHTML = `<span>Queueing...</span>`;
+      
+      const trackUrl = track.external_urls?.spotify || '';
+      if (!trackUrl) {
+        showError('Missing track URL');
         downloadBtn.disabled = false;
         downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
-      });
-  });
+        return;
+      }
+      
+      downloadQueue.startTrackDownload(trackUrl, { name: track.name || 'Unknown Track' })
+        .then(() => {
+          downloadBtn.innerHTML = `<span>Queued!</span>`;
+        })
+        .catch(err => {
+          showError('Failed to queue track download: ' + (err?.message || 'Unknown error'));
+          downloadBtn.disabled = false;
+          downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
+        });
+    });
+  }
 
   // Reveal the header now that track info is loaded.
   document.getElementById('track-header').classList.remove('hidden');
@@ -124,6 +130,8 @@ function renderTrack(track) {
  * Converts milliseconds to minutes:seconds.
  */
 function msToTime(duration) {
+  if (!duration || isNaN(duration)) return '0:00';
+  
   const minutes = Math.floor(duration / 60000);
   const seconds = Math.floor((duration % 60000) / 1000);
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -135,49 +143,30 @@ function msToTime(duration) {
 function showError(message) {
   const errorEl = document.getElementById('error');
   if (errorEl) {
-    errorEl.textContent = message;
+    errorEl.textContent = message || 'An error occurred';
     errorEl.classList.remove('hidden');
   }
 }
 
 /**
- * Starts the download process by building the API URL,
- * fetching download details, and then adding the download to the queue.
+ * Starts the download process by building a minimal API URL with only the necessary parameters,
+ * since the server will use config defaults for others.
  */
 async function startDownload(url, type, item) {
-  const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
-  const {
-    fallback = false,
-    spotify = '',
-    deezer = '',
-    spotifyQuality = 'NORMAL',
-    deezerQuality = 'MP3_128',
-    realTime = false,
-    customTrackFormat = '',
-    customDirFormat = ''
-  } = config;
-
+  if (!url || !type) {
+    showError('Missing URL or type for download');
+    return;
+  }
+  
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
   let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
 
-  if (fallback && service === 'spotify') {
-    apiUrl += `&main=${deezer}&fallback=${spotify}`;
-    apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
-  } else {
-    const mainAccount = service === 'spotify' ? spotify : deezer;
-    apiUrl += `&main=${mainAccount}&quality=${service === 'spotify' ? spotifyQuality : deezerQuality}`;
+  // Add name and artist if available for better progress display
+  if (item.name) {
+    apiUrl += `&name=${encodeURIComponent(item.name)}`;
   }
-
-  if (realTime) {
-    apiUrl += '&real_time=true';
-  }
-
-  // Append custom formatting parameters if they are set.
-  if (customTrackFormat) {
-    apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
-  }
-  if (customDirFormat) {
-    apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
+  if (item.artist) {
+    apiUrl += `&artist=${encodeURIComponent(item.artist)}`;
   }
 
   try {
@@ -185,7 +174,7 @@ async function startDownload(url, type, item) {
     const data = await response.json();
     downloadQueue.addDownload(item, type, data.prg_file);
   } catch (error) {
-    showError('Download failed: ' + error.message);
+    showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }
 }

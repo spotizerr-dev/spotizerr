@@ -14,15 +14,13 @@ def search(
     
     if main:
         search_creds_path = Path(f'./creds/spotify/{main}/search.json')
-        print(search_creds_path)
+
         if search_creds_path.exists():
             try:
                 with open(search_creds_path, 'r') as f:
                     search_creds = json.load(f)
                     client_id = search_creds.get('client_id')
-                    print(client_id)
                     client_secret = search_creds.get('client_secret')
-                    print(client_secret)
             except Exception as e:
                 print(f"Error loading search credentials: {e}")
     

@@ -16,6 +16,11 @@ class CustomURLSearchParams {
 
 class DownloadQueue {
   constructor() {
+    // Constants read from the server config
+    this.MAX_RETRIES = 3;      // Default max retries
+    this.RETRY_DELAY = 5;      // Default retry delay in seconds
+    this.RETRY_DELAY_INCREASE = 5; // Default retry delay increase in seconds
+
     this.downloadQueue = {}; // keyed by unique queueId
     this.currentConfig = {}; // Cache for current config
 
@@ -277,13 +282,18 @@ class DownloadQueue {
    */
   createQueueItem(item, type, prgFile, queueId) {
     const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
+    
+    // Use display values if available, or fall back to standard fields
+    const displayTitle = item.name || 'Unknown';
+    const displayType = type.charAt(0).toUpperCase() + type.slice(1);
+    
     const div = document.createElement('article');
     div.className = 'queue-item';
     div.setAttribute('aria-live', 'polite');
     div.setAttribute('aria-atomic', 'true');
     div.innerHTML = `
-      <div class="title">${item.name}</div>
-      <div class="type">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
+      <div class="title">${displayTitle}</div>
+      <div class="type">${displayType}</div>
       <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
       <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
         <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Cancel Download">
@@ -453,13 +463,25 @@ class DownloadQueue {
           return `Queued track "${data.name}"${data.artist ? ` by ${data.artist}` : ''}`;
         }
         return `Queued ${data.type} "${data.name}"`;
+      
+      case 'started':
+        return `Download started`;
+      
+      case 'processing':
+        return `Processing download...`;
+        
       case 'cancel':
         return 'Download cancelled';
+        
+      case 'interrupted':
+        return 'Download was interrupted';
+      
       case 'downloading':
         if (data.type === 'track') {
           return `Downloading track "${data.song}" by ${data.artist}...`;
         }
         return `Downloading ${data.type}...`;
+      
       case 'initializing':
         if (data.type === 'playlist') {
           return `Initializing playlist download "${data.name}" with ${data.total_tracks} tracks...`;
@@ -482,6 +504,7 @@ class DownloadQueue {
           return `Initializing download for ${data.artist} with ${data.total_albums} album(s) [${data.album_type}]...`;
         }
         return `Initializing ${data.type} download...`;
+      
       case 'progress':
         if (data.track && data.current_track) {
           const parts = data.current_track.split('/');
@@ -498,6 +521,7 @@ class DownloadQueue {
           }
         }
         return `Progress: ${data.status}...`;
+      
       case 'done':
         if (data.type === 'track') {
           return `Finished track "${data.song}" by ${data.artist}`;
@@ -509,14 +533,30 @@ class DownloadQueue {
           return `Finished artist "${data.artist}" (${data.album_type})`;
         }
         return `Finished ${data.type}`;
+      
       case 'retrying':
-        return `Track "${data.song}" by ${data.artist}" failed, retrying (${data.retry_count}/5) in ${data.seconds_left}s`;
+        if (data.retry_count !== undefined) {
+          return `Retrying download (attempt ${data.retry_count}/${this.MAX_RETRIES})`;
+        }
+        return `Retrying download...`;
+      
       case 'error':
-        return `Error: ${data.message || 'Unknown error'}`;
+        let errorMsg = `Error: ${data.message || 'Unknown error'}`;
+        if (data.can_retry !== undefined) {
+          if (data.can_retry) {
+            errorMsg += ` (Can be retried)`;
+          } else {
+            errorMsg += ` (Max retries reached)`;
+          }
+        }
+        return errorMsg;
+      
       case 'complete':
         return 'Download completed successfully';
+      
       case 'skipped':
         return `Track "${data.song}" skipped, it already exists!`;
+      
       case 'real_time': {
         const totalMs = data.time_elapsed;
         const minutes = Math.floor(totalMs / 60000);
@@ -524,6 +564,7 @@ class DownloadQueue {
         const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
         return `Real-time downloading track "${data.song}" by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
       }
+      
       default:
         return data.status;
     }
@@ -540,47 +581,83 @@ class DownloadQueue {
       if (cancelBtn) {
         cancelBtn.style.display = 'none';
       }
-      logElement.innerHTML = `
-        <div class="error-message">${this.getStatusMessage(progress)}</div>
-        <div class="error-buttons">
-          <button class="close-error-btn" title="Close">&times;</button>
-          <button class="retry-btn" title="Retry">Retry</button>
-        </div>
-      `;
-      logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-        if (entry.autoRetryInterval) {
-          clearInterval(entry.autoRetryInterval);
-          entry.autoRetryInterval = null;
+      
+      // Check if we're under the max retries threshold for auto-retry
+      const canRetry = entry.retryCount < this.MAX_RETRIES;
+      
+      if (canRetry) {
+        logElement.innerHTML = `
+          <div class="error-message">${this.getStatusMessage(progress)}</div>
+          <div class="error-buttons">
+            <button class="close-error-btn" title="Close">&times;</button>
+            <button class="retry-btn" title="Retry">Retry</button>
+          </div>
+        `;
+        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+          if (entry.autoRetryInterval) {
+            clearInterval(entry.autoRetryInterval);
+            entry.autoRetryInterval = null;
+          }
+          this.cleanupEntry(queueId);
+        });
+        logElement.querySelector('.retry-btn').addEventListener('click', async () => {
+          if (entry.autoRetryInterval) {
+            clearInterval(entry.autoRetryInterval);
+            entry.autoRetryInterval = null;
+          }
+          this.retryDownload(queueId, logElement);
+        });
+        
+        // Implement auto-retry if we have the original request URL
+        if (entry.requestUrl) {
+          const maxRetries = this.MAX_RETRIES;
+          if (entry.retryCount < maxRetries) {
+            // Calculate the delay based on retry count (exponential backoff)
+            const baseDelay = this.RETRY_DELAY || 5; // seconds, use server's retry delay or default to 5
+            const increase = this.RETRY_DELAY_INCREASE || 5;
+            const retryDelay = baseDelay + (entry.retryCount * increase);
+            
+            let secondsLeft = retryDelay;
+            entry.autoRetryInterval = setInterval(() => {
+              secondsLeft--;
+              const errorMsgEl = logElement.querySelector('.error-message');
+              if (errorMsgEl) {
+                errorMsgEl.textContent = `Error: ${progress.message || 'Unknown error'}. Retrying in ${secondsLeft} seconds... (attempt ${entry.retryCount + 1}/${maxRetries})`;
+              }
+              if (secondsLeft <= 0) {
+                clearInterval(entry.autoRetryInterval);
+                entry.autoRetryInterval = null;
+                this.retryDownload(queueId, logElement);
+              }
+            }, 1000);
+          }
         }
-        this.cleanupEntry(queueId);
-      });
-      logElement.querySelector('.retry-btn').addEventListener('click', async () => {
-        if (entry.autoRetryInterval) {
-          clearInterval(entry.autoRetryInterval);
-          entry.autoRetryInterval = null;
-        }
-        this.retryDownload(queueId, logElement);
-      });
-      if (entry.requestUrl) {
-        const maxRetries = 10;
-        if (entry.retryCount < maxRetries) {
-          const autoRetryDelay = 300; // seconds
-          let secondsLeft = autoRetryDelay;
-          entry.autoRetryInterval = setInterval(() => {
-            secondsLeft--;
-            const errorMsgEl = logElement.querySelector('.error-message');
-            if (errorMsgEl) {
-              errorMsgEl.textContent = `Error: ${progress.message || 'Unknown error'}. Retrying in ${secondsLeft} seconds... (attempt ${entry.retryCount + 1}/${maxRetries})`;
-            }
-            if (secondsLeft <= 0) {
-              clearInterval(entry.autoRetryInterval);
-              entry.autoRetryInterval = null;
-              this.retryDownload(queueId, logElement);
-            }
-          }, 1000);
-        }
+      } else {
+        // Cannot be retried - just show the error
+        logElement.innerHTML = `
+          <div class="error-message">${this.getStatusMessage(progress)}</div>
+          <div class="error-buttons">
+            <button class="close-error-btn" title="Close">&times;</button>
+          </div>
+        `;
+        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+          this.cleanupEntry(queueId);
+        });
       }
       return;
+    } else if (progress.status === 'interrupted') {
+      logElement.textContent = 'Download was interrupted';
+      setTimeout(() => this.cleanupEntry(queueId), 5000);
+    } else if (progress.status === 'complete') {
+      logElement.textContent = 'Download completed successfully';
+      // Hide the cancel button
+      const cancelBtn = entry.element.querySelector('.cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.style.display = 'none';
+      }
+      // Add success styling
+      entry.element.classList.add('download-success');
+      setTimeout(() => this.cleanupEntry(queueId), 5000);
     } else {
       logElement.textContent = this.getStatusMessage(progress);
       setTimeout(() => this.cleanupEntry(queueId), 5000);
@@ -608,17 +685,36 @@ class DownloadQueue {
   async retryDownload(queueId, logElement) {
     const entry = this.downloadQueue[queueId];
     if (!entry) return;
+    
     logElement.textContent = 'Retrying download...';
+    
+    // If we don't have the request URL, we can't retry
     if (!entry.requestUrl) {
       logElement.textContent = 'Retry not available: missing original request information.';
       return;
     }
+    
     try {
+      // Use the stored original request URL to create a new download
       const retryResponse = await fetch(entry.requestUrl);
+      if (!retryResponse.ok) {
+        throw new Error(`Server returned ${retryResponse.status}`);
+      }
+      
       const retryData = await retryResponse.json();
+      
       if (retryData.prg_file) {
+        // If the old PRG file exists, we should delete it
         const oldPrgFile = entry.prgFile;
-        await fetch(`/api/prgs/delete/${oldPrgFile}`, { method: 'DELETE' });
+        if (oldPrgFile) {
+          try {
+            await fetch(`/api/prgs/delete/${oldPrgFile}`, { method: 'DELETE' });
+          } catch (deleteError) {
+            console.error('Error deleting old PRG file:', deleteError);
+          }
+        }
+        
+        // Update the entry with the new PRG file
         const logEl = entry.element.querySelector('.log');
         logEl.id = `log-${entry.uniqueId}-${retryData.prg_file}`;
         entry.prgFile = retryData.prg_file;
@@ -627,60 +723,27 @@ class DownloadQueue {
         entry.lastUpdated = Date.now();
         entry.retryCount = (entry.retryCount || 0) + 1;
         logEl.textContent = 'Retry initiated...';
+        
+        // Start monitoring the new PRG file
         this.startEntryMonitoring(queueId);
       } else {
         logElement.textContent = 'Retry failed: invalid response from server';
       }
     } catch (error) {
+      console.error('Retry error:', error);
       logElement.textContent = 'Retry failed: ' + error.message;
     }
-  }
-
-  /**
-   * Builds common URL parameters for download API requests.
-   */
-  _buildCommonParams(url, service, config) {
-    const params = new CustomURLSearchParams();
-    params.append('service', service);
-    params.append('url', url);
-  
-    if (service === 'spotify') {
-      if (config.fallback) {
-        params.append('main', config.deezer);
-        params.append('fallback', config.spotify);
-        params.append('quality', config.deezerQuality);
-        params.append('fall_quality', config.spotifyQuality);
-      } else {
-        params.append('main', config.spotify);
-        params.append('quality', config.spotifyQuality);
-      }
-    } else {
-      params.append('main', config.deezer);
-      params.append('quality', config.deezerQuality);
-    }
-  
-    if (config.realTime) {
-      params.append('real_time', 'true');
-    }
-  
-    if (config.customTrackFormat) {
-      params.append('custom_track_format', config.customTrackFormat);
-    }
-  
-    if (config.customDirFormat) {
-      params.append('custom_dir_format', config.customDirFormat);
-    }
-  
-    return params;
   }
 
   async startTrackDownload(url, item) {
     await this.loadConfig();
     const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-    const params = this._buildCommonParams(url, service, this.currentConfig);
-    params.append('name', item.name || '');
-    params.append('artist', item.artist || '');
-    const apiUrl = `/api/track/download?${params.toString()}`;
+    
+    // Use minimal parameters in the URL, letting server use config for defaults
+    const apiUrl = `/api/track/download?service=${service}&url=${encodeURIComponent(url)}` + 
+                  (item.name ? `&name=${encodeURIComponent(item.name)}` : '') +
+                  (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
+    
     try {
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Network error');
@@ -695,12 +758,15 @@ class DownloadQueue {
   async startPlaylistDownload(url, item) {
     await this.loadConfig();
     const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-    const params = this._buildCommonParams(url, service, this.currentConfig);
-    params.append('name', item.name || '');
-    params.append('artist', item.artist || '');
-    const apiUrl = `/api/playlist/download?${params.toString()}`;
+    
+    // Use minimal parameters in the URL, letting server use config for defaults
+    const apiUrl = `/api/playlist/download?service=${service}&url=${encodeURIComponent(url)}` + 
+                  (item.name ? `&name=${encodeURIComponent(item.name)}` : '') +
+                  (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
+    
     try {
       const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error('Network error');
       const data = await response.json();
       this.addDownload(item, 'playlist', data.prg_file, apiUrl);
     } catch (error) {
@@ -709,14 +775,16 @@ class DownloadQueue {
     }
   }
 
-  async startArtistDownload(url, item, albumType = 'album,single,compilation,appears_on') {
+  async startArtistDownload(url, item, albumType = 'album,single,compilation') {
     await this.loadConfig();
     const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-    const params = this._buildCommonParams(url, service, this.currentConfig);
-    params.append('album_type', albumType);
-    params.append('name', item.name || '');
-    params.append('artist', item.artist || '');
-    const apiUrl = `/api/artist/download?${params.toString()}`;
+    
+    // Use minimal parameters in the URL, letting server use config for defaults
+    const apiUrl = `/api/artist/download?service=${service}&url=${encodeURIComponent(url)}` +
+                  `&album_type=${albumType}` +
+                  (item.name ? `&name=${encodeURIComponent(item.name)}` : '') +
+                  (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
+    
     try {
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Network error');
@@ -737,12 +805,15 @@ class DownloadQueue {
   async startAlbumDownload(url, item) {
     await this.loadConfig();
     const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-    const params = this._buildCommonParams(url, service, this.currentConfig);
-    params.append('name', item.name || '');
-    params.append('artist', item.artist || '');
-    const apiUrl = `/api/album/download?${params.toString()}`;
+    
+    // Use minimal parameters in the URL, letting server use config for defaults
+    const apiUrl = `/api/album/download?service=${service}&url=${encodeURIComponent(url)}` +
+                  (item.name ? `&name=${encodeURIComponent(item.name)}` : '') +
+                  (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
+    
     try {
       const response = await fetch(apiUrl);
+      if (!response.ok) throw new Error('Network error');
       const data = await response.json();
       this.addDownload(item, 'album', data.prg_file, apiUrl);
     } catch (error) {
@@ -772,16 +843,81 @@ class DownloadQueue {
           const prgResponse = await fetch(`/api/prgs/${prgFile}`);
           if (!prgResponse.ok) continue;
           const prgData = await prgResponse.json();
+          
+          // Skip prg files that are marked as cancelled or completed
+          if (prgData.last_line && 
+              (prgData.last_line.status === 'cancel' || 
+               prgData.last_line.status === 'complete')) {
+            // Delete old completed or cancelled PRG files
+            try {
+              await fetch(`/api/prgs/delete/${prgFile}`, { method: 'DELETE' });
+              console.log(`Cleaned up old PRG file: ${prgFile}`);
+            } catch (error) {
+              console.error(`Failed to delete completed/cancelled PRG file ${prgFile}:`, error);
+            }
+            continue;
+          }
+          
+          // Use the enhanced original request info from the first line
+          const originalRequest = prgData.original_request || {};
+          
+          // Use the explicit display fields if available, or fall back to other fields
           const dummyItem = {
-            name: prgData.original_request && prgData.original_request.name ? prgData.original_request.name : prgFile,
-            artist: prgData.original_request && prgData.original_request.artist ? prgData.original_request.artist : '',
-            type: prgData.original_request && prgData.original_request.type ? prgData.original_request.type : 'unknown'
+            name: prgData.display_title || originalRequest.display_title || originalRequest.name || prgFile,
+            artist: prgData.display_artist || originalRequest.display_artist || originalRequest.artist || '',
+            type: prgData.display_type || originalRequest.display_type || originalRequest.type || 'unknown',
+            service: originalRequest.service || '',
+            url: originalRequest.url || '',
+            endpoint: originalRequest.endpoint || '',
+            download_type: originalRequest.download_type || ''
           };
-          this.addDownload(dummyItem, dummyItem.type, prgFile);
+          
+          // Check if this is a retry file and get the retry count
+          let retryCount = 0;
+          if (prgFile.includes('_retry')) {
+            const retryMatch = prgFile.match(/_retry(\d+)/);
+            if (retryMatch && retryMatch[1]) {
+              retryCount = parseInt(retryMatch[1], 10);
+            } else if (prgData.last_line && prgData.last_line.retry_count) {
+              retryCount = prgData.last_line.retry_count;
+            }
+          } else if (prgData.last_line && prgData.last_line.retry_count) {
+            retryCount = prgData.last_line.retry_count;
+          }
+          
+          // Build a potential requestUrl from the original information
+          let requestUrl = null;
+          if (dummyItem.endpoint && dummyItem.url) {
+            const params = new CustomURLSearchParams();
+            params.append('service', dummyItem.service);
+            params.append('url', dummyItem.url);
+            
+            if (dummyItem.name) params.append('name', dummyItem.name);
+            if (dummyItem.artist) params.append('artist', dummyItem.artist);
+            
+            // Add any other parameters from the original request
+            for (const [key, value] of Object.entries(originalRequest)) {
+              if (!['service', 'url', 'name', 'artist', 'type', 'endpoint', 'download_type', 
+                   'display_title', 'display_type', 'display_artist'].includes(key)) {
+                params.append(key, value);
+              }
+            }
+            
+            requestUrl = `${dummyItem.endpoint}?${params.toString()}`;
+          }
+          
+          // Add to download queue
+          const queueId = this.generateQueueId();
+          const entry = this.createQueueEntry(dummyItem, dummyItem.type, prgFile, queueId, requestUrl);
+          entry.retryCount = retryCount;
+          this.downloadQueue[queueId] = entry;
         } catch (error) {
           console.error("Error fetching details for", prgFile, error);
         }
       }
+      
+      // After adding all entries, update the queue
+      this.updateQueueOrder();
     } catch (error) {
       console.error("Error loading existing PRG files:", error);
     }
@@ -792,6 +928,19 @@ class DownloadQueue {
       const response = await fetch('/api/config');
       if (!response.ok) throw new Error('Failed to fetch config');
       this.currentConfig = await response.json();
+      
+      // Update our retry constants from the server config
+      if (this.currentConfig.maxRetries !== undefined) {
+        this.MAX_RETRIES = this.currentConfig.maxRetries;
+      }
+      if (this.currentConfig.retryDelaySeconds !== undefined) {
+        this.RETRY_DELAY = this.currentConfig.retryDelaySeconds;
+      }
+      if (this.currentConfig.retry_delay_increase !== undefined) {
+        this.RETRY_DELAY_INCREASE = this.currentConfig.retry_delay_increase;
+      }
+      
+      console.log(`Loaded retry settings from config: max=${this.MAX_RETRIES}, delay=${this.RETRY_DELAY}, increase=${this.RETRY_DELAY_INCREASE}`);
     } catch (error) {
       console.error('Error loading config:', error);
       this.currentConfig = {};

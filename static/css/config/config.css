@@ -201,6 +201,14 @@ input:checked + .slider:before {
   transform: translateX(20px);
 }
 
+/* Setting description */
+.setting-description {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: #b3b3b3;
+  line-height: 1.4;
+}
+
 /* Service Tabs */
 .service-tabs {
   display: flex;
@@ -385,6 +393,16 @@ input:checked + .slider:before {
   text-align: center;
   font-size: 0.9rem;
   min-height: 1.2rem;
+}
+
+/* Success Messages */
+#configSuccess {
+  color: #1db954;
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.9rem;
+  min-height: 1.2rem;
+  font-weight: 500;
 }
 
 /* MOBILE RESPONSIVENESS */

@@ -32,32 +32,57 @@ def get_prg_file(filename):
             return jsonify({
                 "type": "",
                 "name": "",
+                "artist": "",
                 "last_line": None,
-                "original_request": None
+                "original_request": None,
+                "display_title": "",
+                "display_type": "",
+                "display_artist": ""
             })
 
         # Attempt to extract the original request from the first line.
         original_request = None
+        display_title = ""
+        display_type = ""
+        display_artist = ""
+        
         try:
             first_line = json.loads(lines[0])
-            if "original_request" in first_line:
-                original_request = first_line["original_request"]
-        except Exception:
+            if isinstance(first_line, dict):
+                if "original_request" in first_line:
+                    original_request = first_line["original_request"]
+                else:
+                    # The first line might be the original request itself
+                    original_request = first_line
+                
+                # Extract display information from the original request
+                if original_request:
+                    display_title = original_request.get("display_title", original_request.get("name", ""))
+                    display_type = original_request.get("display_type", original_request.get("type", ""))
+                    display_artist = original_request.get("display_artist", original_request.get("artist", ""))
+        except Exception as e:
+            print(f"Error parsing first line of PRG file: {e}")
             original_request = None
 
         # For resource type and name, use the second line if available.
+        resource_type = ""
+        resource_name = ""
+        resource_artist = ""
         if len(lines) > 1:
             try:
                 second_line = json.loads(lines[1])
                 # Directly extract 'type' and 'name' from the JSON
                 resource_type = second_line.get("type", "")
                 resource_name = second_line.get("name", "")
+                resource_artist = second_line.get("artist", "")
             except Exception:
                 resource_type = ""
                 resource_name = ""
+                resource_artist = ""
         else:
             resource_type = ""
             resource_name = ""
+            resource_artist = ""
 
         # Get the last line from the file.
         last_line_raw = lines[-1]
@@ -69,8 +94,12 @@ def get_prg_file(filename):
         return jsonify({
             "type": resource_type,
             "name": resource_name,
+            "artist": resource_artist,
             "last_line": last_line_parsed,
-            "original_request": original_request
+            "original_request": original_request,
+            "display_title": display_title,
+            "display_type": display_type,
+            "display_artist": display_artist
         })
     except FileNotFoundError:
         abort(404, "File not found")

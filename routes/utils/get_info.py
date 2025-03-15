@@ -4,20 +4,45 @@ from deezspot.easy_spoty import Spo
 import json
 from pathlib import Path
 
-def get_spotify_info(spotify_id, spotify_type, main=None):
+# Load configuration from ./config/main.json
+CONFIG_PATH = './config/main.json'
+try:
+    with open(CONFIG_PATH, 'r') as f:
+        config_data = json.load(f)
+    # Get the main Spotify account from config
+    DEFAULT_SPOTIFY_ACCOUNT = config_data.get("spotify", "")
+except Exception as e:
+    print(f"Error loading configuration: {e}")
+    DEFAULT_SPOTIFY_ACCOUNT = ""
+
+def get_spotify_info(spotify_id, spotify_type):
+    """
+    Get info from Spotify API using the default Spotify account configured in main.json
+    
+    Args:
+        spotify_id: The Spotify ID of the entity
+        spotify_type: The type of entity (track, album, playlist, artist)
+        
+    Returns:
+        Dictionary with the entity information
+    """
     client_id = None
     client_secret = None
+    
+    # Use the default account from config
+    main = DEFAULT_SPOTIFY_ACCOUNT
+    
+    if not main:
+        raise ValueError("No Spotify account configured in settings")
+    
     if spotify_id:
         search_creds_path = Path(f'./creds/spotify/{main}/search.json')
-        print(search_creds_path)
         if search_creds_path.exists():
             try:
                 with open(search_creds_path, 'r') as f:
                     search_creds = json.load(f)
                     client_id = search_creds.get('client_id')
-                    print(client_id)
                     client_secret = search_creds.get('client_secret')
-                    print(client_secret)
             except Exception as e:
                 print(f"Error loading search credentials: {e}")
     

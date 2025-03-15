@@ -24,6 +24,30 @@ def handle_config():
     config = get_config()
     if config is None:
         return jsonify({"error": "Could not read config file"}), 500
+        
+    # Create config/state directory
+    Path('./config/state').mkdir(parents=True, exist_ok=True)
+        
+    # Set default values for any missing config options
+    defaults = {
+        'fallback': False,
+        'spotifyQuality': 'NORMAL',
+        'deezerQuality': 'MP3_128',
+        'realTime': False,
+        'customDirFormat': '%ar_album%/%album%',
+        'customTrackFormat': '%tracknum%. %music%',
+        'maxConcurrentDownloads': 3,
+        'maxRetries': 3,
+        'retryDelaySeconds': 5,
+        'retry_delay_increase': 5,
+        'tracknum_padding': True
+    }
+    
+    # Populate defaults for any missing keys
+    for key, default_value in defaults.items():
+        if key not in config:
+            config[key] = default_value
+            
     return jsonify(config)
 
 @config_bp.route('/config', methods=['POST', 'PUT'])

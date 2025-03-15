@@ -9,6 +9,7 @@ import os
 import random
 import string
 import traceback
+from routes.utils.queue import download_queue_manager, get_config_params
 
 artist_bp = Blueprint('artist', __name__)
 
@@ -23,46 +24,67 @@ def handle_artist_download():
     Expected query parameters:
       - url: string (a Spotify artist URL)
       - service: string ("spotify" or "deezer")
-      - main: string (e.g., a credentials directory name)
-      - fallback: string (optional)
-      - quality: string (e.g., "MP3_128")
-      - fall_quality: string (optional, e.g., "HIGH")
-      - real_time: bool (e.g., "true" or "false")
       - album_type: string(s); comma-separated values such as "album,single,appears_on,compilation"
-      - custom_dir_format: string (optional, default: "%ar_album%/%album%/%copyright%")
-      - custom_track_format: string (optional, default: "%tracknum%. %music% - %artist%")
-      
-    Since the new download_artist_albums() function simply enqueues album tasks via
-    the global queue manager, it returns a list of album PRG filenames. These are sent
-    back immediately in the JSON response.
     """
+    # Retrieve essential parameters from the request.
     service = request.args.get('service')
     url = request.args.get('url')
+    album_type = request.args.get('album_type')
+    
+    # Get common parameters from config
+    config_params = get_config_params()
+    
+    # Allow request parameters to override config values
     main = request.args.get('main')
     fallback = request.args.get('fallback')
     quality = request.args.get('quality')
     fall_quality = request.args.get('fall_quality')
-    album_type = request.args.get('album_type')
-    real_time_arg = request.args.get('real_time', 'false')
-    real_time = real_time_arg.lower() in ['true', '1', 'yes']
-
-    # New query parameters for custom formatting.
-    custom_dir_format = request.args.get('custom_dir_format', "%ar_album%/%album%/%copyright%")
-    custom_track_format = request.args.get('custom_track_format', "%tracknum%. %music% - %artist%")
+    real_time_arg = request.args.get('real_time')
+    custom_dir_format = request.args.get('custom_dir_format')
+    custom_track_format = request.args.get('custom_track_format')
+    pad_tracks_arg = request.args.get('tracknum_padding')
+    
+    # Use config values as defaults when parameters are not provided
+    if not main:
+        main = config_params['spotify'] if service == 'spotify' else config_params['deezer']
+    
+    if not fallback and config_params['fallback'] and service == 'spotify':
+        fallback = config_params['spotify']
+        
+    if not quality:
+        quality = config_params['spotifyQuality'] if service == 'spotify' else config_params['deezerQuality']
+        
+    if not fall_quality and fallback:
+        fall_quality = config_params['spotifyQuality']
+    
+    # Parse boolean parameters
+    real_time = real_time_arg.lower() in ['true', '1', 'yes'] if real_time_arg is not None else config_params['realTime']
+    pad_tracks = pad_tracks_arg.lower() in ['true', '1', 'yes'] if pad_tracks_arg is not None else config_params['tracknum_padding']
+    
+    # Use config values for formatting if not provided
+    if not custom_dir_format:
+        custom_dir_format = config_params['customDirFormat']
+    
+    if not custom_track_format:
+        custom_track_format = config_params['customTrackFormat']
+    
+    # Use default album_type if not specified
+    if not album_type:
+        album_type = "album,single,compilation"
+    
+    # Validate required parameters
+    if not all([service, url, main, quality]):
+        return Response(
+            json.dumps({"error": "Missing parameters: service, url, main, or quality"}),
+            status=400,
+            mimetype='application/json'
+        )
 
     # Sanitize main and fallback to prevent directory traversal.
     if main:
         main = os.path.basename(main)
     if fallback:
         fallback = os.path.basename(fallback)
-
-    # Check for required parameters.
-    if not all([service, url, main, quality, album_type]):
-        return Response(
-            json.dumps({"error": "Missing parameters"}),
-            status=400,
-            mimetype='application/json'
-        )
 
     # Validate credentials based on the selected service.
     try:
@@ -125,7 +147,8 @@ def handle_artist_download():
             real_time=real_time,
             album_type=album_type,
             custom_dir_format=custom_dir_format,
-            custom_track_format=custom_track_format
+            custom_track_format=custom_track_format,
+            pad_tracks=pad_tracks
         )
         # Return the list of album PRG filenames.
         return Response(
@@ -169,7 +192,6 @@ def get_artist_info():
     Expects a query parameter 'id' with the Spotify artist ID.
     """
     spotify_id = request.args.get('id')
-    main = request.args.get('main', '')
     
     if not spotify_id:
         return Response(
@@ -178,25 +200,9 @@ def get_artist_info():
             mimetype='application/json'
         )
     
-    # If main parameter is not provided in the request, get it from config
-    if not main:
-        from routes.config import get_config
-        config = get_config()
-        if config and 'spotify' in config:
-            main = config['spotify']
-            print(f"Using main from config for artist info: {main}")
-    
-    # Validate main parameter
-    if not main:
-        return Response(
-            json.dumps({"error": "Missing parameter: main (Spotify account)"}),
-            status=400,
-            mimetype='application/json'
-        )
-    
     try:
         from routes.utils.get_info import get_spotify_info
-        artist_info = get_spotify_info(spotify_id, "artist", main=main)
+        artist_info = get_spotify_info(spotify_id, "artist")
         return Response(
             json.dumps(artist_info),
             status=200,

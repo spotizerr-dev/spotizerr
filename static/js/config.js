@@ -83,6 +83,9 @@ function setupEventListeners() {
   document.getElementById('realTimeToggle').addEventListener('change', saveConfig);
   document.getElementById('spotifyQualitySelect').addEventListener('change', saveConfig);
   document.getElementById('deezerQualitySelect').addEventListener('change', saveConfig);
+  document.getElementById('tracknumPaddingToggle').addEventListener('change', saveConfig);
+  document.getElementById('maxRetries').addEventListener('change', saveConfig);
+  document.getElementById('retryDelaySeconds').addEventListener('change', saveConfig);
 
   // Update active account globals when the account selector is changed.
   document.getElementById('spotifyAccountSelect').addEventListener('change', (e) => {
@@ -350,11 +353,41 @@ function toggleSearchFieldsVisibility(showSearchFields) {
   const searchFieldsDiv = document.getElementById('searchFields');
   
   if (showSearchFields) {
+    // Hide regular fields and remove 'required' attribute
     serviceFieldsDiv.style.display = 'none';
+    // Remove required attribute from service fields
+    serviceConfig[currentService].fields.forEach(field => {
+      const input = document.getElementById(field.id);
+      if (input) input.removeAttribute('required');
+    });
+    
+    // Show search fields and add 'required' attribute
     searchFieldsDiv.style.display = 'block';
+    // Make search fields required
+    if (currentService === 'spotify' && serviceConfig[currentService].searchFields) {
+      serviceConfig[currentService].searchFields.forEach(field => {
+        const input = document.getElementById(field.id);
+        if (input) input.setAttribute('required', '');
+      });
+    }
   } else {
+    // Show regular fields and add 'required' attribute
     serviceFieldsDiv.style.display = 'block';
+    // Make service fields required
+    serviceConfig[currentService].fields.forEach(field => {
+      const input = document.getElementById(field.id);
+      if (input) input.setAttribute('required', '');
+    });
+    
+    // Hide search fields and remove 'required' attribute
     searchFieldsDiv.style.display = 'none';
+    // Remove required from search fields
+    if (currentService === 'spotify' && serviceConfig[currentService].searchFields) {
+      serviceConfig[currentService].searchFields.forEach(field => {
+        const input = document.getElementById(field.id);
+        if (input) input.removeAttribute('required');
+      });
+    }
   }
 }
 
@@ -431,9 +464,25 @@ async function handleCredentialSubmit(e) {
     if (isEditingSearch && service === 'spotify') {
       // Handle search credentials
       const formData = {};
+      let isValid = true;
+      let firstInvalidField = null;
+      
+      // Manually validate search fields
       serviceConfig[service].searchFields.forEach(field => {
-        formData[field.id] = document.getElementById(field.id).value.trim();
+        const input = document.getElementById(field.id);
+        const value = input ? input.value.trim() : '';
+        formData[field.id] = value;
+        
+        if (!value) {
+          isValid = false;
+          if (!firstInvalidField) firstInvalidField = input;
+        }
       });
+      
+      if (!isValid) {
+        if (firstInvalidField) firstInvalidField.focus();
+        throw new Error('All fields are required');
+      }
 
       data = serviceConfig[service].searchValidator(formData);
       endpoint = `/api/credentials/${service}/${endpointName}?type=search`;
@@ -444,9 +493,25 @@ async function handleCredentialSubmit(e) {
     } else {
       // Handle regular account credentials
       const formData = {};
+      let isValid = true;
+      let firstInvalidField = null;
+      
+      // Manually validate account fields
       serviceConfig[service].fields.forEach(field => {
-        formData[field.id] = document.getElementById(field.id).value.trim();
+        const input = document.getElementById(field.id);
+        const value = input ? input.value.trim() : '';
+        formData[field.id] = value;
+        
+        if (!value) {
+          isValid = false;
+          if (!firstInvalidField) firstInvalidField = input;
+        }
       });
+      
+      if (!isValid) {
+        if (firstInvalidField) firstInvalidField.focus();
+        throw new Error('All fields are required');
+      }
 
       data = serviceConfig[service].validator(formData);
       endpoint = `/api/credentials/${service}/${endpointName}`;
@@ -468,6 +533,9 @@ async function handleCredentialSubmit(e) {
     await saveConfig();
     loadCredentials(service);
     resetForm();
+    
+    // Show success message
+    showConfigSuccess(isEditingSearch ? 'API credentials saved successfully' : 'Account saved successfully');
   } catch (error) {
     showConfigError(error.message);
   }
@@ -501,7 +569,11 @@ async function saveConfig() {
     realTime: document.getElementById('realTimeToggle').checked,
     customDirFormat: document.getElementById('customDirFormat').value,
     customTrackFormat: document.getElementById('customTrackFormat').value,
-    maxConcurrentDownloads: parseInt(document.getElementById('maxConcurrentDownloads').value, 10) || 3
+    maxConcurrentDownloads: parseInt(document.getElementById('maxConcurrentDownloads').value, 10) || 3,
+    maxRetries: parseInt(document.getElementById('maxRetries').value, 10) || 3,
+    retryDelaySeconds: parseInt(document.getElementById('retryDelaySeconds').value, 10) || 5,
+    retry_delay_increase: parseInt(document.getElementById('retryDelayIncrease').value, 10) || 5,
+    tracknum_padding: document.getElementById('tracknumPaddingToggle').checked
   };
 
   try {
@@ -546,6 +618,10 @@ async function loadConfig() {
     document.getElementById('customDirFormat').value = savedConfig.customDirFormat || '%ar_album%/%album%';
     document.getElementById('customTrackFormat').value = savedConfig.customTrackFormat || '%tracknum%. %music%';
     document.getElementById('maxConcurrentDownloads').value = savedConfig.maxConcurrentDownloads || '3';
+    document.getElementById('maxRetries').value = savedConfig.maxRetries || '3';
+    document.getElementById('retryDelaySeconds').value = savedConfig.retryDelaySeconds || '5';
+    document.getElementById('retryDelayIncrease').value = savedConfig.retry_delay_increase || '5';
+    document.getElementById('tracknumPaddingToggle').checked = savedConfig.tracknum_padding === undefined ? true : !!savedConfig.tracknum_padding;
   } catch (error) {
     showConfigError('Error loading config: ' + error.message);
   }
@@ -555,4 +631,10 @@ function showConfigError(message) {
   const errorDiv = document.getElementById('configError');
   errorDiv.textContent = message;
   setTimeout(() => (errorDiv.textContent = ''), 5000);
+}
+
+function showConfigSuccess(message) {
+  const successDiv = document.getElementById('configSuccess');
+  successDiv.textContent = message;
+  setTimeout(() => (successDiv.textContent = ''), 5000);
 }

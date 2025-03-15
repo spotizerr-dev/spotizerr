@@ -21,7 +21,6 @@ def handle_search():
                 main = config['spotify']
                 print(f"Using main from config: {main}")
 
-        print(f"Search request: query={query}, type={search_type}, limit={limit}, main={main}")
 
         # Validate parameters
         if not query:
@@ -39,21 +38,16 @@ def handle_search():
             main=main  # Pass the main parameter
         )
         
-        print(f"Search response keys: {raw_results.keys() if raw_results else 'None'}")
-        
+
         # Extract items from the appropriate section of the response based on search_type
         items = []
         if raw_results and search_type + 's' in raw_results:
-            # Handle plural form (e.g., 'tracks' instead of 'track')
             type_key = search_type + 's'
-            print(f"Using type key: {type_key}")
             items = raw_results[type_key].get('items', [])
         elif raw_results and search_type in raw_results:
-            # Handle singular form
-            print(f"Using type key: {search_type}")
+
             items = raw_results[search_type].get('items', [])
             
-        print(f"Found {len(items)} items")
         
         # Return both the items array and the full data for debugging
         return jsonify({

@@ -63,7 +63,11 @@ def download_artist_albums(service, url, main, fallback=None, quality=None,
                            fall_quality=None, real_time=False,
                            album_type='album,single,compilation,appears_on',
                            custom_dir_format="%ar_album%/%album%/%copyright%",
-                           custom_track_format="%tracknum%. %music% - %artist%"):
+                           custom_track_format="%tracknum%. %music% - %artist%",
+                           pad_tracks=True,
+                           initial_retry_delay=5,
+                           retry_delay_increase=5,
+                           max_retries=3):
     """
     Retrieves the artist discography and, for each album with a valid Spotify URL,
     creates a download task that is queued via the global download queue. The queue
@@ -110,6 +114,10 @@ def download_artist_albums(service, url, main, fallback=None, quality=None,
                 "real_time": real_time,
                 "custom_dir_format": custom_dir_format,
                 "custom_track_format": custom_track_format,
+                "pad_tracks": pad_tracks,
+                "initial_retry_delay": initial_retry_delay,
+                "retry_delay_increase": retry_delay_increase,
+                "max_retries": max_retries,
                 # Extra info for logging in the PRG file.
                 "name": album_name,
                 "type": "album",

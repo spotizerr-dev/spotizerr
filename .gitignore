@@ -27,3 +27,7 @@ routes/utils/__pycache__/search.cpython-312.pyc
 search_test.py
 config/main.json
 .cache
+config/state/queue_state.json
+output.log
+queue_state.json
+search_demo.py

@@ -14,7 +14,11 @@ def download_album(
     fall_quality=None,
     real_time=False,
     custom_dir_format="%ar_album%/%album%/%copyright%",
-    custom_track_format="%tracknum%. %music% - %artist%"
+    custom_track_format="%tracknum%. %music% - %artist%",
+    pad_tracks=True,
+    initial_retry_delay=5,
+    retry_delay_increase=5,
+    max_retries=3
 ):
     try:
         # Load Spotify client credentials if available
@@ -60,7 +64,11 @@ def download_album(
                         make_zip=False,
                         method_save=1,
                         custom_dir_format=custom_dir_format,
-                        custom_track_format=custom_track_format
+                        custom_track_format=custom_track_format,
+                        pad_tracks=pad_tracks,
+                        initial_retry_delay=initial_retry_delay,
+                        retry_delay_increase=retry_delay_increase,
+                        max_retries=max_retries
                     )
                 except Exception as e:
                     # Load fallback Spotify credentials and attempt download
@@ -97,7 +105,11 @@ def download_album(
                             make_zip=False,
                             real_time_dl=real_time,
                             custom_dir_format=custom_dir_format,
-                            custom_track_format=custom_track_format
+                            custom_track_format=custom_track_format,
+                            pad_tracks=pad_tracks,
+                            initial_retry_delay=initial_retry_delay,
+                            retry_delay_increase=retry_delay_increase,
+                            max_retries=max_retries
                         )
                     except Exception as e2:
                         # If fallback also fails, raise an error indicating both attempts failed
@@ -127,7 +139,11 @@ def download_album(
                     make_zip=False,
                     real_time_dl=real_time,
                     custom_dir_format=custom_dir_format,
-                    custom_track_format=custom_track_format
+                    custom_track_format=custom_track_format,
+                    pad_tracks=pad_tracks,
+                    initial_retry_delay=initial_retry_delay,
+                    retry_delay_increase=retry_delay_increase,
+                    max_retries=max_retries
                 )
         elif service == 'deezer':
             if quality is None:
@@ -151,7 +167,11 @@ def download_album(
                 method_save=1,
                 make_zip=False,
                 custom_dir_format=custom_dir_format,
-                custom_track_format=custom_track_format
+                custom_track_format=custom_track_format,
+                pad_tracks=pad_tracks,
+                initial_retry_delay=initial_retry_delay,
+                retry_delay_increase=retry_delay_increase,
+                max_retries=max_retries
             )
         else:
             raise ValueError(f"Unsupported service: {service}")

@@ -11,18 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Fetch the config to get active Spotify account first
-  fetch('/api/config')
-    .then(response => {
-      if (!response.ok) throw new Error('Failed to fetch config');
-      return response.json();
-    })
-    .then(config => {
-      const mainAccount = config.spotify || '';
-      
-      // Then fetch playlist info with the main parameter
-      return fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}&main=${mainAccount}`);
-    })
+  // Fetch playlist info directly
+  fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
@@ -50,12 +40,12 @@ function renderPlaylist(playlist) {
   document.getElementById('error').classList.add('hidden');
 
   // Update header info
-  document.getElementById('playlist-name').textContent = playlist.name;
-  document.getElementById('playlist-owner').textContent = `By ${playlist.owner.display_name}`;
+  document.getElementById('playlist-name').textContent = playlist.name || 'Unknown Playlist';
+  document.getElementById('playlist-owner').textContent = `By ${playlist.owner?.display_name || 'Unknown User'}`;
   document.getElementById('playlist-stats').textContent =
-    `${playlist.followers.total} followers • ${playlist.tracks.total} songs`;
-  document.getElementById('playlist-description').textContent = playlist.description;
-  const image = playlist.images[0]?.url || 'placeholder.jpg';
+    `${playlist.followers?.total || '0'} followers • ${playlist.tracks?.total || '0'} songs`;
+  document.getElementById('playlist-description').textContent = playlist.description || '';
+  const image = playlist.images?.[0]?.url || '/static/images/placeholder.jpg';
   document.getElementById('playlist-image').src = image;
 
   // --- Add Home Button ---
@@ -68,7 +58,9 @@ function renderPlaylist(playlist) {
     homeButton.innerHTML = `<img src="/static/images/home.svg" alt="Home">`;
     // Insert the home button at the beginning of the header container.
     const headerContainer = document.getElementById('playlist-header');
-    headerContainer.insertBefore(homeButton, headerContainer.firstChild);
+    if (headerContainer) {
+      headerContainer.insertBefore(homeButton, headerContainer.firstChild);
+    }
   }
   homeButton.addEventListener('click', () => {
     // Navigate to the site's base URL.
@@ -84,7 +76,9 @@ function renderPlaylist(playlist) {
     downloadPlaylistBtn.className = 'download-btn download-btn--main';
     // Insert the button into the header container.
     const headerContainer = document.getElementById('playlist-header');
-    headerContainer.appendChild(downloadPlaylistBtn);
+    if (headerContainer) {
+      headerContainer.appendChild(downloadPlaylistBtn);
+    }
   }
   downloadPlaylistBtn.addEventListener('click', () => {
     // Remove individual track download buttons (but leave the whole playlist button).
@@ -102,7 +96,7 @@ function renderPlaylist(playlist) {
     downloadWholePlaylist(playlist).then(() => {
       downloadPlaylistBtn.textContent = 'Queued!';
     }).catch(err => {
-      showError('Failed to queue playlist download: ' + err.message);
+      showError('Failed to queue playlist download: ' + (err?.message || 'Unknown error'));
       downloadPlaylistBtn.disabled = false;
     });
   });
@@ -116,7 +110,9 @@ function renderPlaylist(playlist) {
     downloadAlbumsBtn.className = 'download-btn download-btn--main';
     // Insert the new button into the header container.
     const headerContainer = document.getElementById('playlist-header');
-    headerContainer.appendChild(downloadAlbumsBtn);
+    if (headerContainer) {
+      headerContainer.appendChild(downloadAlbumsBtn);
+    }
   }
   downloadAlbumsBtn.addEventListener('click', () => {
     // Remove individual track download buttons (but leave this album button).
@@ -132,48 +128,54 @@ function renderPlaylist(playlist) {
         downloadAlbumsBtn.textContent = 'Queued!';
       })
       .catch(err => {
-        showError('Failed to queue album downloads: ' + err.message);
+        showError('Failed to queue album downloads: ' + (err?.message || 'Unknown error'));
         downloadAlbumsBtn.disabled = false;
       });
   });
 
   // Render tracks list
   const tracksList = document.getElementById('tracks-list');
+  if (!tracksList) return;
+  
   tracksList.innerHTML = ''; // Clear any existing content
 
-  playlist.tracks.items.forEach((item, index) => {
-    const track = item.track;
-    // Create links for track, artist, and album using their IDs.
-    const trackLink = `/track/${track.id}`;
-    const artistLink = `/artist/${track.artists[0].id}`;
-    const albumLink = `/album/${track.album.id}`;
+  if (playlist.tracks?.items) {
+    playlist.tracks.items.forEach((item, index) => {
+      if (!item || !item.track) return; // Skip null/undefined tracks
+      
+      const track = item.track;
+      // Create links for track, artist, and album using their IDs.
+      const trackLink = `/track/${track.id || ''}`;
+      const artistLink = `/artist/${track.artists?.[0]?.id || ''}`;
+      const albumLink = `/album/${track.album?.id || ''}`;
 
-    const trackElement = document.createElement('div');
-    trackElement.className = 'track';
-    trackElement.innerHTML = `
-      <div class="track-number">${index + 1}</div>
-      <div class="track-info">
-        <div class="track-name">
-          <a href="${trackLink}" title="View track details">${track.name}</a>
+      const trackElement = document.createElement('div');
+      trackElement.className = 'track';
+      trackElement.innerHTML = `
+        <div class="track-number">${index + 1}</div>
+        <div class="track-info">
+          <div class="track-name">
+            <a href="${trackLink}" title="View track details">${track.name || 'Unknown Track'}</a>
+          </div>
+          <div class="track-artist">
+            <a href="${artistLink}" title="View artist details">${track.artists?.[0]?.name || 'Unknown Artist'}</a>
+          </div>
         </div>
-        <div class="track-artist">
-          <a href="${artistLink}" title="View artist details">${track.artists[0].name}</a>
+        <div class="track-album">
+          <a href="${albumLink}" title="View album details">${track.album?.name || 'Unknown Album'}</a>
         </div>
-      </div>
-      <div class="track-album">
-        <a href="${albumLink}" title="View album details">${track.album.name}</a>
-      </div>
-      <div class="track-duration">${msToTime(track.duration_ms)}</div>
-      <button class="download-btn download-btn--circle" 
-              data-url="${track.external_urls.spotify}" 
-              data-type="track"
-              data-name="${track.name}"
-              title="Download">
-        <img src="/static/images/download.svg" alt="Download">
-      </button>
-    `;
-    tracksList.appendChild(trackElement);
-  });
+        <div class="track-duration">${msToTime(track.duration_ms || 0)}</div>
+        <button class="download-btn download-btn--circle" 
+                data-url="${track.external_urls?.spotify || ''}" 
+                data-type="track"
+                data-name="${track.name || 'Unknown Track'}"
+                title="Download">
+          <img src="/static/images/download.svg" alt="Download">
+        </button>
+      `;
+      tracksList.appendChild(trackElement);
+    });
+  }
 
   // Reveal header and tracks container
   document.getElementById('playlist-header').classList.remove('hidden');
@@ -187,6 +189,8 @@ function renderPlaylist(playlist) {
  * Converts milliseconds to minutes:seconds.
  */
 function msToTime(duration) {
+  if (!duration || isNaN(duration)) return '0:00';
+  
   const minutes = Math.floor(duration / 60000);
   const seconds = ((duration % 60000) / 1000).toFixed(0);
   return `${minutes}:${seconds.padStart(2, '0')}`;
@@ -197,8 +201,10 @@ function msToTime(duration) {
  */
 function showError(message) {
   const errorEl = document.getElementById('error');
-  errorEl.textContent = message;
-  errorEl.classList.remove('hidden');
+  if (errorEl) {
+    errorEl.textContent = message || 'An error occurred';
+    errorEl.classList.remove('hidden');
+  }
 }
 
 /**
@@ -210,9 +216,9 @@ function attachDownloadListeners() {
     if (btn.id === 'downloadPlaylistBtn' || btn.id === 'downloadAlbumsBtn') return;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const url = e.currentTarget.dataset.url;
-      const type = e.currentTarget.dataset.type;
-      const name = e.currentTarget.dataset.name || extractName(url);
+      const url = e.currentTarget.dataset.url || '';
+      const type = e.currentTarget.dataset.type || '';
+      const name = e.currentTarget.dataset.name || extractName(url) || 'Unknown';
       // Remove the button immediately after click.
       e.currentTarget.remove();
       startDownload(url, type, { name });
@@ -224,11 +230,19 @@ function attachDownloadListeners() {
  * Initiates the whole playlist download by calling the playlist endpoint.
  */
 async function downloadWholePlaylist(playlist) {
-  const url = playlist.external_urls.spotify;
+  if (!playlist) {
+    throw new Error('Invalid playlist data');
+  }
+  
+  const url = playlist.external_urls?.spotify || '';
+  if (!url) {
+    throw new Error('Missing playlist URL');
+  }
+  
   try {
-    await downloadQueue.startPlaylistDownload(url, { name: playlist.name });
+    await downloadQueue.startPlaylistDownload(url, { name: playlist.name || 'Unknown Playlist' });
   } catch (error) {
-    showError('Playlist download failed: ' + error.message);
+    showError('Playlist download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }
 }
@@ -239,9 +253,16 @@ async function downloadWholePlaylist(playlist) {
  * with the progress (queued_albums/total_albums).
  */
 async function downloadPlaylistAlbums(playlist) {
+  if (!playlist?.tracks?.items) {
+    showError('No tracks found in this playlist.');
+    return;
+  }
+  
   // Build a map of unique albums (using album ID as the key).
   const albumMap = new Map();
   playlist.tracks.items.forEach(item => {
+    if (!item?.track?.album) return;
+    
     const album = item.track.album;
     if (album && album.id) {
       albumMap.set(album.id, album);
@@ -266,9 +287,14 @@ async function downloadPlaylistAlbums(playlist) {
     // Process each album sequentially.
     for (let i = 0; i < totalAlbums; i++) {
       const album = uniqueAlbums[i];
+      if (!album) continue;
+      
+      const albumUrl = album.external_urls?.spotify || '';
+      if (!albumUrl) continue;
+      
       await downloadQueue.startAlbumDownload(
-        album.external_urls.spotify,
-        { name: album.name }
+        albumUrl,
+        { name: album.name || 'Unknown Album' }
       );
 
       // Update button text with current progress.
@@ -291,56 +317,29 @@ async function downloadPlaylistAlbums(playlist) {
 }
 
 /**
- * Starts the download process by building the API URL,
- * fetching download details, and then adding the download to the queue.
+ * Starts the download process by building a minimal API URL with only the necessary parameters,
+ * since the server will use config defaults for others.
  */
 async function startDownload(url, type, item, albumType) {
-  // Retrieve configuration (if any) from localStorage.
-  const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
-  const {
-    fallback = false,
-    spotify = '',
-    deezer = '',
-    spotifyQuality = 'NORMAL',
-    deezerQuality = 'MP3_128',
-    realTime = false,
-    customTrackFormat = '',
-    customDirFormat = ''
-  } = config;
-
+  if (!url || !type) {
+    showError('Missing URL or type for download');
+    return;
+  }
+  
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-  let apiUrl = '';
+  let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
 
-  // Build API URL based on the download type.
-  if (type === 'playlist') {
-    // Use the dedicated playlist download endpoint.
-    apiUrl = `/api/playlist/download?service=${service}&url=${encodeURIComponent(url)}`;
-  } else if (type === 'artist') {
-    apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
-  } else {
-    // Default is track download.
-    apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
+  // Add name and artist if available for better progress display
+  if (item.name) {
+    apiUrl += `&name=${encodeURIComponent(item.name)}`;
   }
-
-  // Append account and quality details.
-  if (fallback && service === 'spotify') {
-    apiUrl += `&main=${deezer}&fallback=${spotify}`;
-    apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
-  } else {
-    const mainAccount = service === 'spotify' ? spotify : deezer;
-    apiUrl += `&main=${mainAccount}&quality=${service === 'spotify' ? spotifyQuality : deezerQuality}`;
+  if (item.artist) {
+    apiUrl += `&artist=${encodeURIComponent(item.artist)}`;
   }
-
-  if (realTime) {
-    apiUrl += '&real_time=true';
-  }
-
-  // Append custom formatting parameters.
-  if (customTrackFormat) {
-    apiUrl += `&custom_track_format=${encodeURIComponent(customTrackFormat)}`;
-  }
-  if (customDirFormat) {
-    apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
+  
+  // For artist downloads, include album_type
+  if (type === 'artist' && albumType) {
+    apiUrl += `&album_type=${encodeURIComponent(albumType)}`;
   }
 
   try {
@@ -349,7 +348,7 @@ async function startDownload(url, type, item, albumType) {
     // Add the download to the queue using the working queue implementation.
     downloadQueue.addDownload(item, type, data.prg_file);
   } catch (error) {
-    showError('Download failed: ' + error.message);
+    showError('Download failed: ' + (error?.message || 'Unknown error'));
   }
 }
 
@@ -357,5 +356,5 @@ async function startDownload(url, type, item, albumType) {
  * A helper function to extract a display name from the URL.
  */
 function extractName(url) {
-  return url;
+  return url || 'Unknown';
 }

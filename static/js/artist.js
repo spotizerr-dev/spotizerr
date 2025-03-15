@@ -10,18 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Fetch the config to get active Spotify account first
-  fetch('/api/config')
-    .then(response => {
-      if (!response.ok) throw new Error('Failed to fetch config');
-      return response.json();
-    })
-    .then(config => {
-      const mainAccount = config.spotify || '';
-      
-      // Then fetch artist info with the main parameter
-      return fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}&main=${mainAccount}`);
-    })
+  // Fetch artist info directly
+  fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
@@ -42,13 +32,13 @@ function renderArtist(artistData, artistId) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
-  const firstAlbum = artistData.items[0];
-  const artistName = firstAlbum?.artists[0]?.name || 'Unknown Artist';
-  const artistImage = firstAlbum?.images[0]?.url || 'placeholder.jpg';
+  const firstAlbum = artistData.items?.[0] || {};
+  const artistName = firstAlbum?.artists?.[0]?.name || 'Unknown Artist';
+  const artistImage = firstAlbum?.images?.[0]?.url || '/static/images/placeholder.jpg';
 
   document.getElementById('artist-name').innerHTML =
     `<a href="/artist/${artistId}" class="artist-link">${artistName}</a>`;
-  document.getElementById('artist-stats').textContent = `${artistData.total} albums`;
+  document.getElementById('artist-stats').textContent = `${artistData.total || '0'} albums`;
   document.getElementById('artist-image').src = artistImage;
 
   // Define the artist URL (used by both full-discography and group downloads)
@@ -93,13 +83,14 @@ function renderArtist(artistData, artistId) {
       .catch(err => {
         downloadArtistBtn.textContent = 'Download All Discography';
         downloadArtistBtn.disabled = false;
-        showError('Failed to queue artist download: ' + err.message);
+        showError('Failed to queue artist download: ' + (err?.message || 'Unknown error'));
       });
   });
 
   // Group albums by type (album, single, compilation, etc.)
-  const albumGroups = artistData.items.reduce((groups, album) => {
-    const type = album.album_type.toLowerCase();
+  const albumGroups = (artistData.items || []).reduce((groups, album) => {
+    if (!album) return groups;
+    const type = (album.album_type || 'unknown').toLowerCase();
     if (!groups[type]) groups[type] = [];
     groups[type].push(album);
     return groups;
@@ -126,22 +117,24 @@ function renderArtist(artistData, artistId) {
 
     const albumsContainer = groupSection.querySelector('.albums-list');
     albums.forEach(album => {
+      if (!album) return;
+      
       const albumElement = document.createElement('div');
       albumElement.className = 'album-card';
       albumElement.innerHTML = `
-        <a href="/album/${album.id}" class="album-link">
-          <img src="${album.images[1]?.url || album.images[0]?.url || 'placeholder.jpg'}" 
+        <a href="/album/${album.id || ''}" class="album-link">
+          <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}" 
                alt="Album cover" 
                class="album-cover">
         </a>
         <div class="album-info">
-          <div class="album-title">${album.name}</div>
-          <div class="album-artist">${album.artists.map(a => a.name).join(', ')}</div>
+          <div class="album-title">${album.name || 'Unknown Album'}</div>
+          <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
         </div>
         <button class="download-btn download-btn--circle" 
-                data-url="${album.external_urls.spotify}" 
-                data-type="${album.album_type}"
-                data-name="${album.name}"
+                data-url="${album.external_urls?.spotify || ''}" 
+                data-type="${album.album_type || 'album'}"
+                data-name="${album.name || 'Unknown Album'}"
                 title="Download">
           <img src="/static/images/download.svg" alt="Download">
         </button>
@@ -164,7 +157,7 @@ function renderArtist(artistData, artistId) {
 function attachGroupDownloadListeners(artistUrl, artistName) {
   document.querySelectorAll('.group-download-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      const groupType = e.target.dataset.groupType; // e.g. "album", "single", "compilation"
+      const groupType = e.target.dataset.groupType || 'album'; // e.g. "album", "single", "compilation"
       e.target.disabled = true;
       e.target.textContent = `Queueing all ${capitalize(groupType)}s...`;
 
@@ -172,14 +165,14 @@ function attachGroupDownloadListeners(artistUrl, artistName) {
         // Use the artist download function with the group type filter.
         await downloadQueue.startArtistDownload(
           artistUrl,
-          { name: artistName, artist: artistName },
+          { name: artistName || 'Unknown Artist', artist: artistName || 'Unknown Artist' },
           groupType // Only queue releases of this specific type.
         );
         e.target.textContent = `Queued all ${capitalize(groupType)}s`;
       } catch (error) {
         e.target.textContent = `Download All ${capitalize(groupType)}s`;
         e.target.disabled = false;
-        showError(`Failed to queue download for all ${groupType}s: ${error.message}`);
+        showError(`Failed to queue download for all ${groupType}s: ${error?.message || 'Unknown error'}`);
       }
     });
   });
@@ -190,10 +183,13 @@ function attachDownloadListeners() {
   document.querySelectorAll('.download-btn:not(.group-download-btn)').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const { url, name, type } = e.currentTarget.dataset;
+      const url = e.currentTarget.dataset.url || '';
+      const name = e.currentTarget.dataset.name || 'Unknown';
+      const type = e.currentTarget.dataset.type || 'album';
+      
       e.currentTarget.remove();
       downloadQueue.startAlbumDownload(url, { name, type })
-        .catch(err => showError('Download failed: ' + err.message));
+        .catch(err => showError('Download failed: ' + (err?.message || 'Unknown error')));
     });
   });
 }
@@ -201,8 +197,10 @@ function attachDownloadListeners() {
 // UI Helpers
 function showError(message) {
   const errorEl = document.getElementById('error');
-  errorEl.textContent = message;
-  errorEl.classList.remove('hidden');
+  if (errorEl) {
+    errorEl.textContent = message || 'An error occurred';
+    errorEl.classList.remove('hidden');
+  }
 }
 
 function capitalize(str) {

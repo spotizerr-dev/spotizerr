@@ -9,18 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Fetch the config to get active Spotify account first
-  fetch('/api/config')
-    .then(response => {
-      if (!response.ok) throw new Error('Failed to fetch config');
-      return response.json();
-    })
-    .then(config => {
-      const mainAccount = config.spotify || '';
-      
-      // Then fetch album info with the main parameter
-      return fetch(`/api/album/info?id=${encodeURIComponent(albumId)}&main=${mainAccount}`);
-    })
+  // Fetch album info directly
+  fetch(`/api/album/info?id=${encodeURIComponent(albumId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
@@ -48,19 +38,21 @@ function renderAlbum(album) {
 
   // Set album header info.
   document.getElementById('album-name').innerHTML = 
-    `<a href="${baseUrl}/album/${album.id}">${album.name}</a>`;
+    `<a href="${baseUrl}/album/${album.id || ''}">${album.name || 'Unknown Album'}</a>`;
 
   document.getElementById('album-artist').innerHTML = 
-    `By ${album.artists.map(artist => `<a href="${baseUrl}/artist/${artist.id}">${artist.name}</a>`).join(', ')}`;
+    `By ${album.artists?.map(artist => 
+      `<a href="${baseUrl}/artist/${artist?.id || ''}">${artist?.name || 'Unknown Artist'}</a>`
+    ).join(', ') || 'Unknown Artist'}`;
 
-  const releaseYear = new Date(album.release_date).getFullYear();
+  const releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : 'N/A';
   document.getElementById('album-stats').textContent =
-    `${releaseYear} • ${album.total_tracks} songs • ${album.label}`;
+    `${releaseYear} • ${album.total_tracks || '0'} songs • ${album.label || 'Unknown Label'}`;
 
   document.getElementById('album-copyright').textContent =
-    album.copyrights.map(c => c.text).join(' • ');
+    album.copyrights?.map(c => c?.text || '').filter(text => text).join(' • ') || '';
 
-  const image = album.images[0]?.url || 'placeholder.jpg';
+  const image = album.images?.[0]?.url || '/static/images/placeholder.jpg';
   document.getElementById('album-image').src = image;
 
   // Create (if needed) the Home Button.
@@ -107,7 +99,7 @@ function renderAlbum(album) {
         downloadAlbumBtn.textContent = 'Queued!';
       })
       .catch(err => {
-        showError('Failed to queue album download: ' + err.message);
+        showError('Failed to queue album download: ' + (err?.message || 'Unknown error'));
         downloadAlbumBtn.disabled = false;
       });
   });
@@ -116,30 +108,36 @@ function renderAlbum(album) {
   const tracksList = document.getElementById('tracks-list');
   tracksList.innerHTML = '';
 
-  album.tracks.items.forEach((track, index) => {
-    const trackElement = document.createElement('div');
-    trackElement.className = 'track';
-    trackElement.innerHTML = `
-      <div class="track-number">${index + 1}</div>
-      <div class="track-info">
-        <div class="track-name">
-          <a href="${baseUrl}/track/${track.id}">${track.name}</a>
+  if (album.tracks?.items) {
+    album.tracks.items.forEach((track, index) => {
+      if (!track) return; // Skip null or undefined tracks
+      
+      const trackElement = document.createElement('div');
+      trackElement.className = 'track';
+      trackElement.innerHTML = `
+        <div class="track-number">${index + 1}</div>
+        <div class="track-info">
+          <div class="track-name">
+            <a href="${baseUrl}/track/${track.id || ''}">${track.name || 'Unknown Track'}</a>
+          </div>
+          <div class="track-artist">
+            ${track.artists?.map(a => 
+              `<a href="${baseUrl}/artist/${a?.id || ''}">${a?.name || 'Unknown Artist'}</a>`
+            ).join(', ') || 'Unknown Artist'}
+          </div>
         </div>
-        <div class="track-artist">
-          ${track.artists.map(a => `<a href="${baseUrl}/artist/${a.id}">${a.name}</a>`).join(', ')}
-        </div>
-      </div>
-      <div class="track-duration">${msToTime(track.duration_ms)}</div>
-      <button class="download-btn download-btn--circle" 
-              data-url="${track.external_urls.spotify}" 
-              data-type="track"
-              data-name="${track.name}"
-              title="Download">
-        <img src="/static/images/download.svg" alt="Download">
-      </button>
-    `;
-    tracksList.appendChild(trackElement);
-  });
+        <div class="track-duration">${msToTime(track.duration_ms || 0)}</div>
+        <button class="download-btn download-btn--circle" 
+                data-url="${track.external_urls?.spotify || ''}" 
+                data-type="track"
+                data-name="${track.name || 'Unknown Track'}"
+                title="Download">
+          <img src="/static/images/download.svg" alt="Download">
+        </button>
+      `;
+      tracksList.appendChild(trackElement);
+    });
+  }
 
   // Reveal header and track list.
   document.getElementById('album-header').classList.remove('hidden');
@@ -166,11 +164,15 @@ function renderAlbum(album) {
 }
 
 async function downloadWholeAlbum(album) {
-  const url = album.external_urls.spotify;
+  const url = album.external_urls?.spotify || '';
+  if (!url) {
+    throw new Error('Missing album URL');
+  }
+  
   try {
-    await downloadQueue.startAlbumDownload(url, { name: album.name });
+    await downloadQueue.startAlbumDownload(url, { name: album.name || 'Unknown Album' });
   } catch (error) {
-    showError('Album download failed: ' + error.message);
+    showError('Album download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }
 }
@@ -183,7 +185,7 @@ function msToTime(duration) {
 
 function showError(message) {
   const errorEl = document.getElementById('error');
-  errorEl.textContent = message;
+  errorEl.textContent = message || 'An error occurred';
   errorEl.classList.remove('hidden');
 }
 
@@ -192,9 +194,9 @@ function attachDownloadListeners() {
     if (btn.id === 'downloadAlbumBtn') return;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const url = e.currentTarget.dataset.url;
-      const type = e.currentTarget.dataset.type;
-      const name = e.currentTarget.dataset.name || extractName(url);
+      const url = e.currentTarget.dataset.url || '';
+      const type = e.currentTarget.dataset.type || '';
+      const name = e.currentTarget.dataset.name || extractName(url) || 'Unknown';
       // Remove the button immediately after click.
       e.currentTarget.remove();
       startDownload(url, type, { name });
@@ -203,47 +205,25 @@ function attachDownloadListeners() {
 }
 
 async function startDownload(url, type, item, albumType) {
-  const config = JSON.parse(localStorage.getItem('activeConfig')) || {};
-  const {
-    fallback = false,
-    spotify = '',
-    deezer = '',
-    spotifyQuality = 'NORMAL',
-    deezerQuality = 'MP3_128',
-    realTime = false,
-    customDirFormat = '',
-    customTrackFormat = ''
-  } = config;
-
+  if (!url) {
+    showError('Missing URL for download');
+    return;
+  }
+  
   const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-  let apiUrl = '';
+  let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
 
-  if (type === 'album') {
-    apiUrl = `/api/album/download?service=${service}&url=${encodeURIComponent(url)}`;
-  } else if (type === 'artist') {
-    apiUrl = `/api/artist/download?service=${service}&artist_url=${encodeURIComponent(url)}&album_type=${encodeURIComponent(albumType || 'album,single,compilation')}`;
-  } else {
-    apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
+  // Add name and artist if available for better progress display
+  if (item.name) {
+    apiUrl += `&name=${encodeURIComponent(item.name)}`;
   }
-
-  if (fallback && service === 'spotify') {
-    apiUrl += `&main=${deezer}&fallback=${spotify}`;
-    apiUrl += `&quality=${deezerQuality}&fall_quality=${spotifyQuality}`;
-  } else {
-    const mainAccount = service === 'spotify' ? spotify : deezer;
-    apiUrl += `&main=${mainAccount}&quality=${service === 'spotify' ? spotifyQuality : deezerQuality}`;
+  if (item.artist) {
+    apiUrl += `&artist=${encodeURIComponent(item.artist)}`;
   }
-
-  if (realTime) {
-    apiUrl += '&real_time=true';
-  }
-
-  // Append custom directory and file format settings if provided.
-  if (customDirFormat) {
-    apiUrl += `&custom_dir_format=${encodeURIComponent(customDirFormat)}`;
-  }
-  if (customTrackFormat) {
-    apiUrl += `&custom_file_format=${encodeURIComponent(customTrackFormat)}`;
+  
+  // For artist downloads, include album_type
+  if (type === 'artist' && albumType) {
+    apiUrl += `&album_type=${encodeURIComponent(albumType)}`;
   }
 
   try {
@@ -251,10 +231,10 @@ async function startDownload(url, type, item, albumType) {
     const data = await response.json();
     downloadQueue.addDownload(item, type, data.prg_file);
   } catch (error) {
-    showError('Download failed: ' + error.message);
+    showError('Download failed: ' + (error?.message || 'Unknown error'));
   }
 }
 
 function extractName(url) {
-  return url;
+  return url || 'Unknown';
 }

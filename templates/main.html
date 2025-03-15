@@ -7,13 +7,19 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main/main.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main/icons.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/queue/queue.css') }}">
+  <script>
+    // Helper function to handle image loading errors
+    function handleImageError(img) {
+      img.src = '/static/images/placeholder.jpg';
+    }
+  </script>
 </head>
 <body>
   <div class="container">
     <div class="search-header">
       <!-- Settings icon linking to the config page -->
       <a href="/config" class="settings-icon">
-        <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings" />
+        <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings" onerror="handleImageError(this)"/>
       </a>
       <input
         type="text"
@@ -38,7 +44,7 @@
         aria-controls="downloadQueue"
         aria-expanded="false"
       >
-        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="" />
+        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="" onerror="handleImageError(this)"/>
       </button>
     </div>
     <div id="resultsContainer" class="results-grid"></div>

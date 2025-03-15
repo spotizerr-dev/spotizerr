@@ -14,7 +14,11 @@ def download_track(
     fall_quality=None,
     real_time=False,
     custom_dir_format="%ar_album%/%album%/%copyright%",
-    custom_track_format="%tracknum%. %music% - %artist%"
+    custom_track_format="%tracknum%. %music% - %artist%",
+    pad_tracks=True,
+    initial_retry_delay=5,
+    retry_delay_increase=5,
+    max_retries=3
 ):
     try:
         # Load Spotify client credentials if available
@@ -56,7 +60,10 @@ def download_track(
                         not_interface=False,
                         method_save=1,
                         custom_dir_format=custom_dir_format,
-                        custom_track_format=custom_track_format
+                        custom_track_format=custom_track_format,
+                        initial_retry_delay=initial_retry_delay,
+                        retry_delay_increase=retry_delay_increase,
+                        max_retries=max_retries
                     )
                 except Exception as e:
                     # If the first attempt fails, use the fallback Spotify credentials
@@ -91,7 +98,11 @@ def download_track(
                         method_save=1,
                         real_time_dl=real_time,
                         custom_dir_format=custom_dir_format,
-                        custom_track_format=custom_track_format
+                        custom_track_format=custom_track_format,
+                        pad_tracks=pad_tracks,
+                        initial_retry_delay=initial_retry_delay,
+                        retry_delay_increase=retry_delay_increase,
+                        max_retries=max_retries
                     )
             else:
                 # Directly use Spotify main account
@@ -114,7 +125,11 @@ def download_track(
                     method_save=1,
                     real_time_dl=real_time,
                     custom_dir_format=custom_dir_format,
-                    custom_track_format=custom_track_format
+                    custom_track_format=custom_track_format,
+                    pad_tracks=pad_tracks,
+                    initial_retry_delay=initial_retry_delay,
+                    retry_delay_increase=retry_delay_increase,
+                    max_retries=max_retries
                 )
         elif service == 'deezer':
             if quality is None:
@@ -137,7 +152,11 @@ def download_track(
                 recursive_download=False,
                 method_save=1,
                 custom_dir_format=custom_dir_format,
-                custom_track_format=custom_track_format
+                custom_track_format=custom_track_format,
+                pad_tracks=pad_tracks,
+                initial_retry_delay=initial_retry_delay,
+                retry_delay_increase=retry_delay_increase,
+                max_retries=max_retries
             )
         else:
             raise ValueError(f"Unsupported service: {service}")
