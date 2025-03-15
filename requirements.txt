@@ -29,8 +29,8 @@ PyYAML==6.0.2
 redis==5.2.1
 requests==2.30.0
 sniffio==1.3.1
-spotipy==2.25.0
-spotipy_anon==1.3
+spotipy
+spotipy_anon
 starlette==0.45.3
 tqdm==4.67.1
 typing_extensions==4.12.2

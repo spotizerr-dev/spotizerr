@@ -147,6 +147,8 @@ def get_album_info():
     Expects a query parameter 'id' that contains the Spotify album ID.
     """
     spotify_id = request.args.get('id')
+    main = request.args.get('main', '')
+    
     if not spotify_id:
         return Response(
             json.dumps({"error": "Missing parameter: id"}),
@@ -154,10 +156,26 @@ def get_album_info():
             mimetype='application/json'
         )
     
+    # If main parameter is not provided in the request, get it from config
+    if not main:
+        from routes.config import get_config
+        config = get_config()
+        if config and 'spotify' in config:
+            main = config['spotify']
+            print(f"Using main from config for album info: {main}")
+    
+    # Validate main parameter
+    if not main:
+        return Response(
+            json.dumps({"error": "Missing parameter: main (Spotify account)"}),
+            status=400,
+            mimetype='application/json'
+        )
+    
     try:
         # Import and use the get_spotify_info function from the utility module.
         from routes.utils.get_info import get_spotify_info
-        album_info = get_spotify_info(spotify_id, "album")
+        album_info = get_spotify_info(spotify_id, "album", main=main)
         return Response(
             json.dumps(album_info),
             status=200,

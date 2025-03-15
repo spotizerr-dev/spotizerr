@@ -11,8 +11,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Fetch playlist info and render it
-  fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`)
+  // Fetch the config to get active Spotify account first
+  fetch('/api/config')
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to fetch config');
+      return response.json();
+    })
+    .then(config => {
+      const mainAccount = config.spotify || '';
+      
+      // Then fetch playlist info with the main parameter
+      return fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}&main=${mainAccount}`);
+    })
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();
@@ -279,8 +289,6 @@ async function downloadPlaylistAlbums(playlist) {
     throw error;
   }
 }
-
-
 
 /**
  * Starts the download process by building the API URL,

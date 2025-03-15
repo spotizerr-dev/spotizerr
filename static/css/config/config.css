@@ -224,6 +224,16 @@ input:checked + .slider:before {
   transform: translateY(-2px);
 }
 
+/* No Credentials Message */
+.no-credentials {
+  padding: 1.5rem;
+  background: #2a2a2a;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: #b3b3b3;
+}
+
 /* Credentials List */
 .credentials-list {
   margin-bottom: 2rem;
@@ -244,18 +254,58 @@ input:checked + .slider:before {
   background: #3a3a3a;
 }
 
+/* New styling for credential info and actions */
+.credential-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.credential-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.search-credentials-status {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.search-credentials-status.has-api {
+  background: rgba(29, 185, 84, 0.2);
+  color: #1db954;
+}
+
+.search-credentials-status.no-api {
+  background: rgba(255, 85, 85, 0.2);
+  color: #ff5555;
+}
+
+.credential-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .credential-actions button {
-  margin-left: 0.5rem;
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 0.8rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: opacity 0.3s ease, transform 0.2s ease;
+  white-space: nowrap;
 }
 
 .edit-btn {
   background: #1db954;
+  color: #ffffff;
+}
+
+.edit-search-btn {
+  background: #2d6db5;
   color: #ffffff;
 }
 
@@ -282,7 +332,7 @@ input:checked + .slider:before {
   transform: translateY(-2px);
 }
 
-#serviceFields {
+#serviceFields, #searchFields {
   margin: 1.5rem 0;
 }
 
@@ -334,6 +384,7 @@ input:checked + .slider:before {
   margin-top: 1rem;
   text-align: center;
   font-size: 0.9rem;
+  min-height: 1.2rem;
 }
 
 /* MOBILE RESPONSIVENESS */
@@ -382,7 +433,15 @@ input:checked + .slider:before {
   .credential-actions {
     width: 100%;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .credential-actions button {
+    flex: 1;
+    text-align: center;
+    padding: 0.7rem 0.5rem;
   }
   
   /* Adjust toggle switch size for better touch support */

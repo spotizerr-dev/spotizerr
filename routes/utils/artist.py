@@ -1,5 +1,6 @@
 import json
 import traceback
+from pathlib import Path
 
 from deezspot.easy_spoty import Spo
 from deezspot.libutils.utils import get_ids, link_is_valid
@@ -11,7 +12,7 @@ def log_json(message_dict):
     print(json.dumps(message_dict))
 
 
-def get_artist_discography(url, album_type='album,single,compilation,appears_on'):
+def get_artist_discography(url, main, album_type='album,single,compilation,appears_on'):
     """
     Validate the URL, extract the artist ID, and retrieve the discography.
     """
@@ -21,6 +22,26 @@ def get_artist_discography(url, album_type='album,single,compilation,appears_on'
 
     # This will raise an exception if the link is invalid.
     link_is_valid(link=url)
+    
+    # Initialize Spotify API with credentials
+    spotify_client_id = None
+    spotify_client_secret = None
+    search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+    if search_creds_path.exists():
+        try:
+            with open(search_creds_path, 'r') as f:
+                search_creds = json.load(f)
+                spotify_client_id = search_creds.get('client_id')
+                spotify_client_secret = search_creds.get('client_secret')
+        except Exception as e:
+            log_json({"status": "error", "message": f"Error loading Spotify search credentials: {e}"})
+            raise
+
+    # Initialize the Spotify client with credentials
+    if spotify_client_id and spotify_client_secret:
+        Spo.__init__(spotify_client_id, spotify_client_secret)
+    else:
+        raise ValueError("No Spotify credentials found")
 
     try:
         artist_id = get_ids(url)
@@ -50,7 +71,7 @@ def download_artist_albums(service, url, main, fallback=None, quality=None,
     album PRG filenames.
     """
     try:
-        discography = get_artist_discography(url, album_type=album_type)
+        discography = get_artist_discography(url, main, album_type=album_type)
     except Exception as e:
         log_json({"status": "error", "message": f"Error retrieving artist discography: {e}"})
         raise

@@ -106,12 +106,19 @@ def create_app():
 
     return app
 
+app = create_app()
+
 if __name__ == '__main__':
-    # Configure waitress logger
-    logger = logging.getLogger('waitress')
-    logger.setLevel(logging.INFO)
-    
-    app = create_app()
-    logging.info("Starting Flask server on port 7171")
-    from waitress import serve
-    serve(app, host='0.0.0.0', port=7171)
+    import os
+
+    DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+
+    if DEBUG:
+        logging.info("Starting Flask in DEBUG mode on port 7171")
+        app.run(debug=True, host='0.0.0.0', port=7171)  # Use Flask's built-in server
+    else:
+        logger = logging.getLogger('waitress')
+        logger.setLevel(logging.INFO)
+        logging.info("Starting Flask server with Waitress on port 7171")
+        serve(app, host='0.0.0.0', port=7171)  # Use Waitress for production
+

@@ -3,6 +3,7 @@ import json
 import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
+from pathlib import Path
 
 def download_album(
     service,
@@ -16,6 +17,19 @@ def download_album(
     custom_track_format="%tracknum%. %music% - %artist%"
 ):
     try:
+        # Load Spotify client credentials if available
+        spotify_client_id = None
+        spotify_client_secret = None
+        search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+        if search_creds_path.exists():
+            try:
+                with open(search_creds_path, 'r') as f:
+                    search_creds = json.load(f)
+                    spotify_client_id = search_creds.get('client_id')
+                    spotify_client_secret = search_creds.get('client_secret')
+            except Exception as e:
+                print(f"Error loading Spotify search credentials: {e}")
+                
         if service == 'spotify':
             if fallback:
                 if quality is None:
@@ -29,9 +43,11 @@ def download_album(
                     deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
                     with open(deezer_creds_path, 'r') as f:
                         deezer_creds = json.load(f)
-                    # Initialize DeeLogin with Deezer credentials
+                    # Initialize DeeLogin with Deezer credentials and Spotify client credentials
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
+                        spotify_client_id=spotify_client_id,
+                        spotify_client_secret=spotify_client_secret
                     )
                     # Download using download_albumspo; pass real_time_dl accordingly and the custom formatting
                     dl.download_albumspo(
@@ -51,7 +67,25 @@ def download_album(
                     try:
                         spo_creds_dir = os.path.join('./creds/spotify', fallback)
                         spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
-                        spo = SpoLogin(credentials_path=spo_creds_path)
+                        
+                        # Check for Spotify client credentials in fallback account
+                        fallback_client_id = spotify_client_id
+                        fallback_client_secret = spotify_client_secret
+                        fallback_search_path = Path(f'./creds/spotify/{fallback}/search.json')
+                        if fallback_search_path.exists():
+                            try:
+                                with open(fallback_search_path, 'r') as f:
+                                    fallback_search_creds = json.load(f)
+                                    fallback_client_id = fallback_search_creds.get('client_id')
+                                    fallback_client_secret = fallback_search_creds.get('client_secret')
+                            except Exception as e:
+                                print(f"Error loading fallback Spotify search credentials: {e}")
+                        
+                        spo = SpoLogin(
+                            credentials_path=spo_creds_path,
+                            spotify_client_id=fallback_client_id,
+                            spotify_client_secret=fallback_client_secret
+                        )
                         spo.download_album(
                             link_album=url,
                             output_dir="./downloads",
@@ -77,7 +111,11 @@ def download_album(
                     quality = 'HIGH'
                 creds_dir = os.path.join('./creds/spotify', main)
                 credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
-                spo = SpoLogin(credentials_path=credentials_path)
+                spo = SpoLogin(
+                    credentials_path=credentials_path,
+                    spotify_client_id=spotify_client_id,
+                    spotify_client_secret=spotify_client_secret
+                )
                 spo.download_album(
                     link_album=url,
                     output_dir="./downloads",
@@ -101,6 +139,8 @@ def download_album(
                 creds = json.load(f)
             dl = DeeLogin(
                 arl=creds.get('arl', ''),
+                spotify_client_id=spotify_client_id,
+                spotify_client_secret=spotify_client_secret
             )
             dl.download_albumdee(
                 link_album=url,

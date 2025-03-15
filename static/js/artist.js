@@ -10,7 +10,18 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)
+  // Fetch the config to get active Spotify account first
+  fetch('/api/config')
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to fetch config');
+      return response.json();
+    })
+    .then(config => {
+      const mainAccount = config.spotify || '';
+      
+      // Then fetch artist info with the main parameter
+      return fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}&main=${mainAccount}`);
+    })
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json();

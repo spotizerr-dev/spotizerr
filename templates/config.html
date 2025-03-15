@@ -95,14 +95,15 @@
     <div class="credentials-list"></div>
 
     <div class="credentials-form">
-      <h2>Credentials Management</h2>
+      <h2 id="formTitle">Add New Spotify Account</h2>
       <form id="credentialForm">
         <div class="form-group">
           <label>Name:</label>
           <input type="text" id="credentialName" required />
         </div>
         <div id="serviceFields"></div>
-        <button type="submit" class="save-btn">Save Credentials</button>
+        <div id="searchFields" style="display: none;"></div>
+        <button type="submit" id="submitCredentialBtn" class="save-btn">Save Account</button>
       </form>
       <div id="configError" class="error"></div>
     </div>

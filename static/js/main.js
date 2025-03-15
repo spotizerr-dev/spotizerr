@@ -58,7 +58,13 @@ async function performSearch() {
     resultsContainer.innerHTML = '<div class="loading">Searching...</div>';
     
     try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=${searchType}&limit=50`);
+        // Fetch config to get active Spotify account
+        const configResponse = await fetch('/api/config');
+        const config = await configResponse.json();
+        const mainAccount = config.spotify || '';
+        
+        // Add the main parameter to the search API call
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&search_type=${searchType}&limit=50&main=${mainAccount}`);
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         
@@ -81,7 +87,7 @@ async function performSearch() {
 /**
  * Attaches event listeners to all download buttons (both standard and small versions).
  * Instead of using the NodeList index (which can be off when multiple buttons are in one card),
- * we look up the closest result card’s data-index to get the correct item.
+ * we look up the closest result card's data-index to get the correct item.
  */
 function attachDownloadListeners(items) {
     document.querySelectorAll('.download-btn, .download-btn-small').forEach((btn) => {
@@ -294,7 +300,7 @@ function createResultCard(item, type, index) {
                     <div class="title-and-view">
                         <div class="track-title">${title}</div>
                         <div class="title-buttons">
-                            <!-- A primary download button (if you want one for a “default” download) -->
+                            <!-- A primary download button (if you want one for a "default" download) -->
                             <button class="download-btn-small" 
                                     data-url="${item.external_urls.spotify}" 
                                     data-type="${type}" 

@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request
+import logging
 from routes.utils.search import search  # Corrected import
+from routes.config import get_config  # Import get_config function
 
 search_bp = Blueprint('search', __name__)
 
@@ -10,6 +12,16 @@ def handle_search():
         query = request.args.get('q', '')
         search_type = request.args.get('search_type', '')
         limit = int(request.args.get('limit', 10))
+        main = request.args.get('main', '')  # Get the main parameter for account selection
+
+        # If main parameter is not provided in the request, get it from config
+        if not main:
+            config = get_config()
+            if config and 'spotify' in config:
+                main = config['spotify']
+                print(f"Using main from config: {main}")
+
+        print(f"Search request: query={query}, type={search_type}, limit={limit}, main={main}")
 
         # Validate parameters
         if not query:
@@ -23,15 +35,38 @@ def handle_search():
         raw_results = search(
             query=query,
             search_type=search_type,  # Fixed parameter name
-            limit=limit
+            limit=limit,
+            main=main  # Pass the main parameter
         )
         
+        print(f"Search response keys: {raw_results.keys() if raw_results else 'None'}")
+        
+        # Extract items from the appropriate section of the response based on search_type
+        items = []
+        if raw_results and search_type + 's' in raw_results:
+            # Handle plural form (e.g., 'tracks' instead of 'track')
+            type_key = search_type + 's'
+            print(f"Using type key: {type_key}")
+            items = raw_results[type_key].get('items', [])
+        elif raw_results and search_type in raw_results:
+            # Handle singular form
+            print(f"Using type key: {search_type}")
+            items = raw_results[search_type].get('items', [])
+            
+        print(f"Found {len(items)} items")
+        
+        # Return both the items array and the full data for debugging
         return jsonify({
-            'data': raw_results,
+            'items': items,
+            'data': raw_results,  # Include full data for debugging
             'error': None
         })
 
     except ValueError as e:
+        print(f"ValueError in search: {str(e)}")
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        return jsonify({'error': 'Internal server error'}), 500
+        import traceback
+        print(f"Exception in search: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
