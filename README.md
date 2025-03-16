@@ -26,6 +26,8 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 - Service fallback system when downloading*
 - Real time downloading**
 - Quality selector***
+- Customizable track number padding (01. Track or 1. Track)
+- Customizable retry parameters (max attempts, delay, increase per retry)
 
 *It will first try to download each track from Deezer and only if it fails, will grab it from Spotify
 **Only for spotify. For each track, it matches its length with the time it takes to download it
@@ -35,6 +37,7 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 
 - Docker, duh
 - Spotify credentials (see [Spotify Credentials Setup](#spotify-credentials-setup))
+- Spotify client ID and client secret (see [Spotify Developer Setup](#spotify-developer-setup))
 - Deezer ARL token (see [Deezer ARL Setup](#deezer-arl-setup))
 
 ## Installation
@@ -63,6 +66,23 @@ Access at: `http://localhost:7171`
 4. Configure active accounts in settings
 
 _Note: If you want Spotify-only mode, just keep "Download fallback" setting disabled and don't bother adding Deezer credentials. Deezer-only mode is not, and will not be supported since there already is a much better tool for that called "Deemix"_
+
+### Spotify Developer Setup
+
+Due to Spotify's ToS changes, anonymous API calls are now more limited. You need to set up your own Spotify Developer application:
+
+1. Visit the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
+2. Log in with your Spotify account
+3. Click "Create app"
+4. Fill in:
+   - App name (e.g., "My Spotizerr App")
+   - App description
+   - Redirect URI: `http://localhost:7171/callback` (or your custom domain if exposed)
+   - Check the Developer Terms agreement box
+5. Click "Create"
+6. On your app page, note your "Client ID" 
+7. Click "Show client secret" to reveal your "Client Secret"
+8. Add these credentials in Spotizerr's settings page under the Spotify service section
 
 ### Deezer ARL Setup
 
@@ -209,6 +229,10 @@ jq -r '.username, .auth_data' credentials.json
    - For spotify: OGG 96k, 160k and 320k (premium only)
    - For deezer: MP3 128k, MP3 320k (sometimes premium, it varies) and FLAC (premium only)
 
+- **Customizable formatting**:
+  - Track number padding (01. Track or 1. Track)
+  - Adjust retry parameters (max attempts, delay, delay increase)
+
 ## Troubleshooting
 
 **Common Issues**:
@@ -216,6 +240,7 @@ jq -r '.username, .auth_data' credentials.json
 - Download failures: Check credential validity
 - Queue stalls: Verify service connectivity
 - Audiokey related: Spotify rate limit, let it cooldown about 30 seconds and click retry
+- API errors: Ensure your Spotify client ID and client secret are correctly entered
 
 **Log Locations**:
 - Credentials: `./creds/` directory
