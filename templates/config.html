@@ -4,143 +4,153 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Configuration - Spotizerr</title>
+  <!-- Add the new base.css first -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main/base.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/config/config.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/queue/queue.css') }}">
 </head>
 <body>
-  <div class="config-container">
-    <header class="config-header">
-      <h1>Configuration</h1>
-      <a href="/" class="back-button">&larr; Back to App</a>
-      <!-- Added queue icon button to toggle the download queue -->
-      <button
-        id="queueIcon"
-        class="queue-icon"
-        aria-label="Download queue"
-        aria-controls="downloadQueue"
-        aria-expanded="false"
-      >
-        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="Queue" />
-      </button>
-    </header>
+  <div class="app-container">
+    <div class="config-container">
+      <header class="config-header">
+        <h1 class="header-title">Configuration</h1>
+      </header>
 
-    <div class="account-config">
-      <!-- Your account config section remains unchanged -->
-      <div class="config-item">
-        <label>Active Spotify Account:</label>
-        <select id="spotifyAccountSelect"></select>
-      </div>
-      <div class="config-item">
-        <label>Spotify Quality:</label>
-        <select id="spotifyQualitySelect">
-          <option value="NORMAL">OGG 96</option>
-          <option value="HIGH">OGG 160</option>
-          <option value="VERY_HIGH">OGG 320 (premium)</option>
-        </select>
-      </div>
-      <div class="config-item">
-        <label>Active Deezer Account:</label>
-        <select id="deezerAccountSelect"></select>
-      </div>
-      <div class="config-item">
-        <label>Deezer Quality:</label>
-        <select id="deezerQualitySelect">
-          <option value="MP3_128">MP3 128</option>
-          <option value="MP3_320">MP3 320 (sometimes premium)</option>
-          <option value="FLAC">FLAC (premium)</option>
-        </select>
-      </div>
-      <div class="config-item">
-        <label>Download Fallback:</label>
-        <label class="switch">
-          <input type="checkbox" id="fallbackToggle" />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="config-item">
-        <label>Real time downloading:</label>
-        <label class="switch">
-          <input type="checkbox" id="realTimeToggle" />
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="form-group">
-        <label for="maxConcurrentDownloads">Max Concurrent Downloads:</label>
-        <input type="number" id="maxConcurrentDownloads" min="1" value="3">
-      </div>      
-      <!-- New Retry Options -->
-      <div class="form-group">
-        <label for="maxRetries">Max Retry Attempts:</label>
-        <input type="number" id="maxRetries" min="0" max="10" value="3">
-      </div>
-      <div class="form-group">
-        <label for="retryDelaySeconds">Initial Retry Delay (seconds):</label>
-        <input type="number" id="retryDelaySeconds" min="1" value="5">
-      </div>
-      <div class="form-group">
-        <label for="retryDelayIncrease">Retry Delay Increase (seconds):</label>
-        <input type="number" id="retryDelayIncrease" min="0" value="5">
-        <div class="setting-description">
-          The amount of additional delay to add for each retry attempt
+      <div class="account-config card">
+        <h2 class="section-title">Download Settings</h2>
+        <!-- Your account config section remains unchanged -->
+        <div class="config-item">
+          <label>Active Spotify Account:</label>
+          <select id="spotifyAccountSelect" class="form-select"></select>
+        </div>
+        <div class="config-item">
+          <label>Spotify Quality:</label>
+          <select id="spotifyQualitySelect" class="form-select">
+            <option value="NORMAL">OGG 96</option>
+            <option value="HIGH">OGG 160</option>
+            <option value="VERY_HIGH">OGG 320 (premium)</option>
+          </select>
+        </div>
+        <div class="config-item">
+          <label>Active Deezer Account:</label>
+          <select id="deezerAccountSelect" class="form-select"></select>
+        </div>
+        <div class="config-item">
+          <label>Deezer Quality:</label>
+          <select id="deezerQualitySelect" class="form-select">
+            <option value="MP3_128">MP3 128</option>
+            <option value="MP3_320">MP3 320 (sometimes premium)</option>
+            <option value="FLAC">FLAC (premium)</option>
+          </select>
+        </div>
+        <div class="config-item">
+          <label>Download Fallback:</label>
+          <label class="switch">
+            <input type="checkbox" id="fallbackToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="config-item">
+          <label>Real time downloading:</label>
+          <label class="switch">
+            <input type="checkbox" id="realTimeToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="config-item">
+          <label for="maxConcurrentDownloads">Max Concurrent Downloads:</label>
+          <input type="number" id="maxConcurrentDownloads" min="1" value="3" class="form-input">
+        </div>      
+        <!-- New Retry Options -->
+        <h2 class="section-title">Retry Options</h2>
+        <div class="config-item">
+          <label for="maxRetries">Max Retry Attempts:</label>
+          <input type="number" id="maxRetries" min="0" max="10" value="3" class="form-input">
+        </div>
+        <div class="config-item">
+          <label for="retryDelaySeconds">Initial Retry Delay (seconds):</label>
+          <input type="number" id="retryDelaySeconds" min="1" value="5" class="form-input">
+        </div>
+        <div class="config-item">
+          <label for="retryDelayIncrease">Retry Delay Increase (seconds):</label>
+          <input type="number" id="retryDelayIncrease" min="0" value="5" class="form-input">
+          <div class="setting-description">
+            The amount of additional delay to add for each retry attempt
+          </div>
+        </div>
+        <!-- New Formatting Options -->
+        <h2 class="section-title">Formatting Options</h2>
+        <div class="config-item">
+          <label>Custom Directory Format:</label>
+          <input 
+            type="text" 
+            id="customDirFormat" 
+            placeholder="e.g. %artist%/%album%" 
+            class="form-input"
+          />
+        </div>
+        <div class="config-item">
+          <label>Custom Track Format:</label>
+          <input 
+            type="text" 
+            id="customTrackFormat" 
+            placeholder="e.g. %tracknum% - %music%" 
+            class="form-input"
+          />
+        </div>
+        <!-- New Track Number Padding Toggle -->
+        <div class="config-item">
+          <label>Track Number Padding:</label>
+          <label class="switch">
+            <input type="checkbox" id="tracknumPaddingToggle" />
+            <span class="slider"></span>
+          </label>
+          <div class="setting-description">
+            When enabled: "01. Track" - When disabled: "1. Track"
+          </div>
         </div>
       </div>
-      <!-- New Formatting Options -->
-      <div class="config-item">
-        <label>Custom Directory Format:</label>
-        <input 
-          type="text" 
-          id="customDirFormat" 
-          placeholder="e.g. %artist%/%album%" 
-        />
-      </div>
-      <div class="config-item">
-        <label>Custom Track Format:</label>
-        <input 
-          type="text" 
-          id="customTrackFormat" 
-          placeholder="e.g. %tracknum% - %music%" 
-        />
-      </div>
-      <!-- New Track Number Padding Toggle -->
-      <div class="config-item">
-        <label>Track Number Padding:</label>
-        <label class="switch">
-          <input type="checkbox" id="tracknumPaddingToggle" />
-          <span class="slider"></span>
-        </label>
-        <div class="setting-description">
-          When enabled: "01. Track" - When disabled: "1. Track"
+
+      <div class="accounts-section">
+        <div class="service-tabs">
+          <button class="tab-button active" data-service="spotify">Spotify</button>
+          <button class="tab-button" data-service="deezer">Deezer</button>
+        </div>
+
+        <div class="credentials-list card"></div>
+
+        <div class="credentials-form card">
+          <h2 id="formTitle" class="section-title">Add New Spotify Account</h2>
+          <form id="credentialForm">
+            <div class="config-item">
+              <label>Name:</label>
+              <input type="text" id="credentialName" class="form-input" required />
+            </div>
+            <div id="serviceFields"></div>
+            <div id="searchFields" style="display: none;"></div>
+            <button type="submit" id="submitCredentialBtn" class="btn btn-primary save-btn">Save Account</button>
+          </form>
+          <div id="configSuccess" class="success"></div>
+          <div id="configError" class="error"></div>
         </div>
       </div>
-    </div>
-
-    <div class="service-tabs">
-      <button class="tab-button active" data-service="spotify">Spotify</button>
-      <button class="tab-button" data-service="deezer">Deezer</button>
-    </div>
-
-    <div class="credentials-list"></div>
-
-    <div class="credentials-form">
-      <h2 id="formTitle">Add New Spotify Account</h2>
-      <form id="credentialForm">
-        <div class="form-group">
-          <label>Name:</label>
-          <input type="text" id="credentialName" required />
-        </div>
-        <div id="serviceFields"></div>
-        <div id="searchFields" style="display: none;"></div>
-        <button type="submit" id="submitCredentialBtn" class="save-btn">Save Account</button>
-      </form>
-      <div id="configSuccess" class="success"></div>
-      <div id="configError" class="error"></div>
     </div>
   </div>
 
-  <!--
-    Do not include any hard-coded download queue markup here.
-    The shared queue.js module will create the queue sidebar dynamically.
-  -->
+  <!-- Fixed floating buttons for back and queue -->
+  <a href="/" class="back-button floating-icon settings-icon" aria-label="Back to app">
+    <img src="{{ url_for('static', filename='images/arrow-left.svg') }}" alt="Back" />
+  </a>
+  
+  <button
+    id="queueIcon"
+    class="btn-icon queue-icon floating-icon"
+    aria-label="Download queue" 
+    aria-controls="downloadQueue"
+    aria-expanded="false"
+  >
+    <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="Queue" />
+  </button>
 
   <!-- Load config.js as a module so you can import queue.js -->
   <script type="module" src="{{ url_for('static', filename='js/config.js') }}"></script>

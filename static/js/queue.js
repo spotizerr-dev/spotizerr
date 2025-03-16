@@ -46,8 +46,10 @@ class DownloadQueue {
         <div class="sidebar-header">
           <h2>Download Queue (<span id="queueTotalCount">0</span> items)</h2>
           <div class="header-actions">
-            <button id="cancelAllBtn" aria-label="Cancel all downloads">Cancel all</button>
-            <button class="close-btn" aria-label="Close queue">&times;</button>
+            <button id="cancelAllBtn" aria-label="Cancel all downloads">
+              <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Skull" class="skull-icon">
+              Cancel all
+            </button>
           </div>
         </div>
         <div id="queueItems" aria-live="polite"></div>
@@ -68,6 +70,20 @@ class DownloadQueue {
     const queueSidebar = document.getElementById('downloadQueue');
     queueSidebar.hidden = !this.currentConfig.downloadQueueVisible;
     queueSidebar.classList.toggle('active', this.currentConfig.downloadQueueVisible);
+    
+    // Initialize the queue icon based on sidebar visibility
+    const queueIcon = document.getElementById('queueIcon');
+    if (queueIcon) {
+      if (this.currentConfig.downloadQueueVisible) {
+        queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
+        queueIcon.setAttribute('aria-expanded', 'true');
+        queueIcon.classList.add('queue-icon-active'); // Add red tint class
+      } else {
+        queueIcon.innerHTML = '<img src="/static/images/queue.svg" alt="Queue Icon">';
+        queueIcon.setAttribute('aria-expanded', 'false');
+        queueIcon.classList.remove('queue-icon-active'); // Remove red tint class
+      }
+    }
   }
 
   /* Event Handling */
@@ -79,16 +95,6 @@ class DownloadQueue {
         await this.toggleVisibility();
       }
     });
-
-    // Close queue when the close button is clicked.
-    const queueSidebar = document.getElementById('downloadQueue');
-    if (queueSidebar) {
-      queueSidebar.addEventListener('click', async (e) => {
-        if (e.target.closest('.close-btn')) {
-          await this.toggleVisibility();
-        }
-      });
-    }
 
     // "Cancel all" button.
     const cancelAllBtn = document.getElementById('cancelAllBtn');
@@ -118,12 +124,29 @@ class DownloadQueue {
   }
 
   /* Public API */
-  async toggleVisibility() {
+  async toggleVisibility(force) {
     const queueSidebar = document.getElementById('downloadQueue');
-    const isVisible = !queueSidebar.classList.contains('active');
+    // If force is provided, use that value, otherwise toggle the current state
+    const isVisible = force !== undefined ? force : !queueSidebar.classList.contains('active');
     
     queueSidebar.classList.toggle('active', isVisible);
     queueSidebar.hidden = !isVisible;
+
+    // Update the queue icon to show X when visible or queue icon when hidden
+    const queueIcon = document.getElementById('queueIcon');
+    if (queueIcon) {
+      if (isVisible) {
+        // Replace the image with an X and add red tint
+        queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
+        queueIcon.setAttribute('aria-expanded', 'true');
+        queueIcon.classList.add('queue-icon-active'); // Add red tint class
+      } else {
+        // Restore the original queue icon and remove red tint
+        queueIcon.innerHTML = '<img src="/static/images/queue.svg" alt="Queue Icon">';
+        queueIcon.setAttribute('aria-expanded', 'false');
+        queueIcon.classList.remove('queue-icon-active'); // Remove red tint class
+      }
+    }
 
     // Persist the state locally so it survives refreshes.
     localStorage.setItem("downloadQueueVisible", isVisible);
@@ -138,6 +161,18 @@ class DownloadQueue {
       // Revert UI if save failed.
       queueSidebar.classList.toggle('active', !isVisible);
       queueSidebar.hidden = isVisible;
+      // Also revert the icon back
+      if (queueIcon) {
+        if (!isVisible) {
+          queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
+          queueIcon.setAttribute('aria-expanded', 'true');
+          queueIcon.classList.add('queue-icon-active'); // Add red tint class
+        } else {
+          queueIcon.innerHTML = '<img src="/static/images/queue.svg" alt="Queue Icon">';
+          queueIcon.setAttribute('aria-expanded', 'false');
+          queueIcon.classList.remove('queue-icon-active'); // Remove red tint class
+        }
+      }
       this.dispatchEvent('queueVisibilityChanged', { visible: !isVisible });
       this.showError('Failed to save queue visibility');
     }
@@ -186,6 +221,14 @@ class DownloadQueue {
 
         if (data.type) {
           entry.type = data.type;
+          
+          // Update type display if element exists
+          const typeElement = entry.element.querySelector('.type');
+          if (typeElement) {
+            typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
+            // Update type class without triggering animation
+            typeElement.className = `type ${data.type}`;
+          }
         }
 
         if (!entry.requestUrl && data.original_request) {
@@ -224,8 +267,16 @@ class DownloadQueue {
         entry.lastStatus = progress;
         entry.lastUpdated = Date.now();
         entry.status = progress.status;
-        logElement.textContent = this.getStatusMessage(progress);
-
+        
+        // Update status message without recreating the element
+        if (logElement) {
+          const statusMessage = this.getStatusMessage(progress);
+          logElement.textContent = statusMessage;
+        }
+        
+        // Apply appropriate CSS classes based on status
+        this.applyStatusClasses(entry, progress);
+        
         // Save updated status to cache.
         this.queueCache[entry.prgFile] = progress;
         localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
@@ -266,13 +317,71 @@ class DownloadQueue {
       intervalId: null,
       uniqueId: queueId,
       retryCount: 0,
-      autoRetryInterval: null
+      autoRetryInterval: null,
+      isNew: true // Add flag to track if this is a new entry
     };
     // If cached info exists for this PRG file, use it.
     if (this.queueCache[prgFile]) {
       entry.lastStatus = this.queueCache[prgFile];
       const logEl = entry.element.querySelector('.log');
-      logEl.textContent = this.getStatusMessage(this.queueCache[prgFile]);
+      
+      // Special handling for error states to restore UI with buttons
+      if (entry.lastStatus.status === 'error') {
+        // Hide the cancel button if in error state
+        const cancelBtn = entry.element.querySelector('.cancel-btn');
+        if (cancelBtn) {
+          cancelBtn.style.display = 'none';
+        }
+        
+        // Determine if we can retry
+        const canRetry = entry.retryCount < this.MAX_RETRIES && entry.requestUrl;
+        
+        if (canRetry) {
+          // Create error UI with retry button
+          logEl.innerHTML = `
+            <div class="error-message">${this.getStatusMessage(entry.lastStatus)}</div>
+            <div class="error-buttons">
+              <button class="close-error-btn" title="Close">&times;</button>
+              <button class="retry-btn" title="Retry">Retry</button>
+            </div>
+          `;
+          
+          // Add event listeners
+          logEl.querySelector('.close-error-btn').addEventListener('click', () => {
+            if (entry.autoRetryInterval) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+            }
+            this.cleanupEntry(queueId);
+          });
+          
+          logEl.querySelector('.retry-btn').addEventListener('click', async () => {
+            if (entry.autoRetryInterval) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+            }
+            this.retryDownload(queueId, logEl);
+          });
+        } else {
+          // Cannot retry - just show error with close button
+          logEl.innerHTML = `
+            <div class="error-message">${this.getStatusMessage(entry.lastStatus)}</div>
+            <div class="error-buttons">
+              <button class="close-error-btn" title="Close">&times;</button>
+            </div>
+          `;
+          
+          logEl.querySelector('.close-error-btn').addEventListener('click', () => {
+            this.cleanupEntry(queueId);
+          });
+        }
+      } else {
+        // For non-error states, just set the message text
+        logEl.textContent = this.getStatusMessage(entry.lastStatus);
+      }
+      
+      // Apply appropriate CSS classes based on cached status
+      this.applyStatusClasses(entry, this.queueCache[prgFile]);
     }
     return entry;
   }
@@ -288,19 +397,51 @@ class DownloadQueue {
     const displayType = type.charAt(0).toUpperCase() + type.slice(1);
     
     const div = document.createElement('article');
-    div.className = 'queue-item';
+    div.className = 'queue-item queue-item-new'; // Add the animation class
     div.setAttribute('aria-live', 'polite');
     div.setAttribute('aria-atomic', 'true');
     div.innerHTML = `
       <div class="title">${displayTitle}</div>
-      <div class="type">${displayType}</div>
+      <div class="type ${type}">${displayType}</div>
       <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
       <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
         <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Cancel Download">
       </button>
     `;
     div.querySelector('.cancel-btn').addEventListener('click', (e) => this.handleCancelDownload(e));
+    
+    // Remove the animation class after animation completes
+    setTimeout(() => {
+      div.classList.remove('queue-item-new');
+    }, 300); // Match the animation duration
+    
     return div;
+  }
+
+  // Add a helper method to apply the right CSS classes based on status
+  applyStatusClasses(entry, status) {
+    if (!entry || !entry.element || !status) return;
+    
+    // Clear existing status classes
+    entry.element.classList.remove('queue-item--processing', 'queue-item--error', 'download-success');
+    
+    // Apply appropriate class based on status
+    if (status.status === 'processing' || status.status === 'downloading' || status.status === 'progress') {
+      entry.element.classList.add('queue-item--processing');
+    } else if (status.status === 'error') {
+      entry.element.classList.add('queue-item--error');
+      entry.hasEnded = true;
+    } else if (status.status === 'complete' || status.status === 'done') {
+      entry.element.classList.add('download-success');
+      entry.hasEnded = true;
+    } else if (status.status === 'cancel' || status.status === 'interrupted') {
+      entry.hasEnded = true;
+    }
+    
+    // Special case for retry status
+    if (status.retrying || status.status === 'retrying') {
+      entry.element.classList.add('queue-item--processing');
+    }
   }
 
   async handleCancelDownload(e) {
@@ -358,14 +499,61 @@ class DownloadQueue {
     });
 
     document.getElementById('queueTotalCount').textContent = entries.length;
+    
+    // Only recreate the container content if really needed
     const visibleEntries = entries.slice(0, this.visibleCount);
-    container.innerHTML = '';
-    visibleEntries.forEach(entry => {
-      container.appendChild(entry.element);
-      if (!entry.intervalId) {
-        this.startEntryMonitoring(entry.uniqueId);
+    
+    // Handle empty state
+    if (entries.length === 0) {
+      container.innerHTML = `
+        <div class="queue-empty">
+          <img src="/static/images/queue-empty.svg" alt="Empty queue" onerror="this.src='/static/images/queue.svg'">
+          <p>Your download queue is empty</p>
+        </div>
+      `;
+    } else {
+      // Get currently visible items
+      const visibleItems = Array.from(container.children).filter(el => el.classList.contains('queue-item'));
+      
+      // Update container more efficiently
+      if (visibleItems.length === 0) {
+        // No items in container, append all visible entries
+        container.innerHTML = ''; // Clear any empty state
+        visibleEntries.forEach(entry => {
+          // Start monitoring if needed
+          if (!entry.intervalId) {
+            this.startEntryMonitoring(entry.uniqueId);
+          }
+          container.appendChild(entry.element);
+        });
+      } else {
+        // Container already has items, update more efficiently
+        
+        // Create a map of current DOM elements by queue ID
+        const existingElementMap = {};
+        visibleItems.forEach(el => {
+          const queueId = el.querySelector('.cancel-btn')?.dataset.queueid;
+          if (queueId) existingElementMap[queueId] = el;
+        });
+        
+        // Clear container to re-add in correct order
+        container.innerHTML = '';
+        
+        // Add visible entries in correct order
+        visibleEntries.forEach(entry => {
+          // Start monitoring if needed
+          if (!entry.intervalId) {
+            this.startEntryMonitoring(entry.uniqueId);
+          }
+          container.appendChild(entry.element);
+          
+          // Mark the entry as not new anymore
+          entry.isNew = false;
+        });
       }
-    });
+    }
+    
+    // Stop monitoring entries that are no longer visible
     entries.slice(this.visibleCount).forEach(entry => {
       if (entry.intervalId) {
         clearInterval(entry.intervalId);
@@ -373,6 +561,7 @@ class DownloadQueue {
       }
     });
 
+    // Update footer
     footer.innerHTML = '';
     if (entries.length > this.visibleCount) {
       const remaining = entries.length - this.visibleCount;
@@ -576,6 +765,14 @@ class DownloadQueue {
     clearInterval(entry.intervalId);
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
     if (!logElement) return;
+    
+    // Save the terminal state to the cache for persistence across reloads
+    this.queueCache[entry.prgFile] = progress;
+    localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
+    
+    // Add status classes without triggering animations
+    this.applyStatusClasses(entry, progress);
+    
     if (progress.status === 'error') {
       const cancelBtn = entry.element.querySelector('.cancel-btn');
       if (cancelBtn) {
@@ -655,8 +852,6 @@ class DownloadQueue {
       if (cancelBtn) {
         cancelBtn.style.display = 'none';
       }
-      // Add success styling
-      entry.element.classList.add('download-success');
       setTimeout(() => this.cleanupEntry(queueId), 5000);
     } else {
       logElement.textContent = this.getStatusMessage(progress);
@@ -910,11 +1105,26 @@ class DownloadQueue {
           const queueId = this.generateQueueId();
           const entry = this.createQueueEntry(dummyItem, dummyItem.type, prgFile, queueId, requestUrl);
           entry.retryCount = retryCount;
+          
+          // Set the entry's last status from the PRG file
+          if (prgData.last_line) {
+            entry.lastStatus = prgData.last_line;
+            
+            // Make sure to save the status to the cache for persistence
+            this.queueCache[prgFile] = prgData.last_line;
+            
+            // Apply proper status classes
+            this.applyStatusClasses(entry, prgData.last_line);
+          }
+          
           this.downloadQueue[queueId] = entry;
         } catch (error) {
           console.error("Error fetching details for", prgFile, error);
         }
       }
+      
+      // Save updated cache to localStorage
+      localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
       
       // After adding all entries, update the queue
       this.updateQueueOrder();

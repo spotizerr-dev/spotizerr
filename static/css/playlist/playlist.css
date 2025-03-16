@@ -392,3 +392,70 @@ a:focus {
 .download-btn--circle:active {
   transform: scale(0.98);
 }
+
+/* Playlist page specific styles */
+
+/* Playlist description */
+.playlist-description {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.75rem;
+  max-width: 90%;
+  line-height: 1.5;
+}
+
+/* Additional column for album in playlist tracks */
+.track-album {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  margin-right: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+/* Overriding the track layout for playlists to include the album column */
+.track {
+  grid-template-columns: 40px 1fr 1fr auto auto;
+}
+
+/* Style for the download albums button */
+#downloadAlbumsBtn {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+#downloadAlbumsBtn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Mobile responsiveness adjustments */
+@media (max-width: 1024px) {
+  .track {
+    grid-template-columns: 40px 1fr auto auto;
+  }
+  
+  .track-album {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .playlist-description {
+    max-width: 100%;
+  }
+  
+  #downloadAlbumsBtn {
+    margin-top: 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .track {
+    grid-template-columns: 30px 1fr auto;
+  }
+  
+  .playlist-description {
+    margin-bottom: 1rem;
+  }
+}

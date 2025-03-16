@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Spotizerr</title>
+  <!-- Add the new base.css first -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main/base.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main/main.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/main/icons.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/queue/queue.css') }}">
@@ -15,40 +17,62 @@
   </script>
 </head>
 <body>
-  <div class="container">
+  <div class="app-container">
     <div class="search-header">
-      <!-- Settings icon linking to the config page -->
-      <a href="/config" class="settings-icon">
-        <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings" onerror="handleImageError(this)"/>
-      </a>
-      <input
-        type="text"
-        class="search-input"
-        placeholder="Search tracks, albums, playlists or artists... (Or paste in a spotify url)"
-        id="searchInput"
-      />
-      <select class="search-type" id="searchType">
-        <option value="track">Tracks</option>
-        <option value="album">Albums</option>
-        <option value="playlist">Playlists</option>
-        <option value="artist">Artists</option>
-      </select>
-      <button class="search-button" id="searchButton" aria-label="Search">
+      <div class="search-input-container">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Search tracks, albums, playlists or artists... (Or paste in a spotify url)"
+          id="searchInput"
+        />
+        <select class="search-type" id="searchType">
+          <option value="track">Tracks</option>
+          <option value="album">Albums</option>
+          <option value="playlist">Playlists</option>
+          <option value="artist">Artists</option>
+        </select>
+      </div>
+      
+      <button class="search-button btn-primary" id="searchButton" aria-label="Search">
+        <img src="{{ url_for('static', filename='images/search.svg') }}" alt="" />
         Search
       </button>
-      <!-- Queue icon button; event is attached in main.js -->
-      <button
-        id="queueIcon"
-        class="queue-icon"
-        aria-label="Download queue"
-        aria-controls="downloadQueue"
-        aria-expanded="false"
-      >
-        <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="" onerror="handleImageError(this)"/>
-      </button>
     </div>
+    
+    <!-- Results container -->
     <div id="resultsContainer" class="results-grid"></div>
+    
+    <!-- Empty state when there are no results -->
+    <div id="emptyState" class="empty-state">
+      <div class="empty-state-content">
+        <img src="{{ url_for('static', filename='images/music.svg') }}" alt="Music" class="empty-state-icon" />
+        <h2>Search for music</h2>
+        <p>Find and download your favorite tracks, albums, playlists or artists</p>
+      </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loadingResults" class="loading hidden">
+      <div class="loading-indicator">Searching...</div>
+    </div>
   </div>
+  
+  <!-- Fixed floating buttons for settings and queue -->
+  <a href="/config" class="btn-icon settings-icon floating-icon" aria-label="Settings">
+    <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings" onerror="handleImageError(this)"/>
+  </a>
+  
+  <button
+    id="queueIcon"
+    class="btn-icon queue-icon floating-icon"
+    aria-label="Download queue"
+    aria-controls="downloadQueue"
+    aria-expanded="false"
+  >
+    <img src="{{ url_for('static', filename='images/queue.svg') }}" alt="" onerror="handleImageError(this)"/>
+  </button>
+  
   <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

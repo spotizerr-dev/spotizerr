@@ -32,39 +32,223 @@ body {
   transition: all 0.3s ease;
 }
 
-/* Modern Back Button */
-.back-button {
-  background: #1db954;
-  color: #ffffff;
-  padding: 0.8rem 1.5rem;
-  border-radius: 25px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: background 0.3s ease, transform 0.2s ease;
+/* Back button as floating icon - keep this for our floating button */
+.back-button.floating-icon {
+  position: fixed;
+  width: 56px;
+  height: 56px;
+  bottom: 20px;
+  left: 20px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  text-decoration: none !important;
 }
 
-.back-button:hover {
-  background: #1ed760;
+.back-button.floating-icon:hover {
+  background-color: var(--color-primary-hover);
+  transform: scale(1.05);
+}
+
+.back-button.floating-icon img {
+  width: 24px;
+  height: 24px;
+  filter: brightness(0) invert(1);
+  margin: 0;
+}
+
+/* Queue button as floating icon */
+.queue-icon.floating-icon {
+  position: fixed;
+  width: 56px;
+  height: 56px;
+  bottom: 20px;
+  right: 20px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  text-decoration: none !important;
+}
+
+.queue-icon.floating-icon:hover {
+  background-color: var(--color-primary-hover);
+  transform: scale(1.05);
+}
+
+.queue-icon.floating-icon img {
+  width: 24px;
+  height: 24px;
+  filter: brightness(0) invert(1);
+  margin: 0;
+}
+
+/* Queue Icon Active State */
+.queue-icon.queue-icon-active {
+  background-color: #d13838 !important;
+  transition: background-color 0.3s ease;
+}
+
+.queue-icon.queue-icon-active:hover {
+  background-color: #e04c4c !important;
+}
+
+.queue-icon .queue-x {
+  font-size: 28px;
+  font-weight: bold;
+  color: white;
+  line-height: 24px;
+  display: inline-block;
   transform: translateY(-2px);
 }
 
-/* Queue Icon in Header */
-#queueIcon {
-  background: none;
+/* Queue Sidebar for Config Page */
+#downloadQueue {
+  position: fixed;
+  top: 0;
+  right: -350px; 
+  width: 350px;
+  height: 100vh;
+  background: #181818;
+  padding: 20px;
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1001;
+  box-shadow: -20px 0 30px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+}
+
+#downloadQueue.active {
+  right: 0;
+}
+
+/* Header inside the queue sidebar */
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+}
+
+.sidebar-header h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* Cancel all button styling */
+#cancelAllBtn {
+  background: #8b0000;
   border: none;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
   cursor: pointer;
-  padding: 4px;
+  transition: background 0.3s ease, transform 0.2s ease;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-#queueIcon img {
-  width: 24px;
-  height: 24px;
-  filter: invert(1);
-  transition: opacity 0.3s ease;
+#cancelAllBtn:hover {
+  background: #a30000;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
 
-#queueIcon:hover img {
-  opacity: 0.8;
+#cancelAllBtn:active {
+  transform: scale(0.98);
+}
+
+#cancelAllBtn .skull-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: middle;
+  filter: brightness(0) invert(1);
+  transition: transform 0.3s ease;
+}
+
+#cancelAllBtn:hover .skull-icon {
+  transform: rotate(-10deg) scale(1.2);
+  animation: skullShake 0.5s infinite alternate;
+}
+
+@keyframes skullShake {
+  0% { transform: rotate(-5deg); }
+  100% { transform: rotate(5deg); }
+}
+
+/* Empty queue state */
+.queue-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #b3b3b3;
+  text-align: center;
+  padding: 20px;
+}
+
+.queue-empty img {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 15px;
+  opacity: 0.6;
+}
+
+.queue-empty p {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Mobile responsiveness for queue in Config page */
+@media (max-width: 600px) {
+  #downloadQueue {
+    width: 100%;
+    right: -100%;
+    padding: 15px;
+  }
+  
+  #downloadQueue.active {
+    right: 0;
+  }
+  
+  .sidebar-header {
+    padding-bottom: 12px;
+    margin-bottom: 15px;
+  }
+  
+  .sidebar-header h2 {
+    font-size: 1.1rem;
+  }
+  
+  #cancelAllBtn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 }
 
 /* Account Configuration Section */
@@ -81,6 +265,25 @@ body {
   transform: translateY(-2px);
 }
 
+/* Section Titles */
+.section-title {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+  padding-bottom: 0.75rem;
+  color: var(--color-text-primary);
+}
+
+.section-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 50px;
+  height: 2px;
+  background-color: var(--color-primary);
+}
+
 .config-item {
   margin-bottom: 1.5rem;
   position: relative;
@@ -94,10 +297,7 @@ body {
 }
 
 /* Enhanced Dropdown Styling */
-#spotifyAccountSelect,
-#deezerAccountSelect,
-#spotifyQualitySelect,
-#deezerQualitySelect {
+.form-select {
   background: #2a2a2a;
   color: #ffffff;
   border: 1px solid #404040;
@@ -115,33 +315,24 @@ body {
   transition: all 0.3s ease;
 }
 
-#spotifyAccountSelect:focus,
-#deezerAccountSelect:focus,
-#spotifyQualitySelect:focus,
-#deezerQualitySelect:focus {
+.form-select:focus {
   outline: none;
   border-color: #1db954;
   box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
 }
 
-#spotifyAccountSelect option,
-#deezerAccountSelect option,
-#spotifyQualitySelect option,
-#deezerQualitySelect option {
+.form-select option {
   background: #181818;
   color: #ffffff;
   padding: 0.8rem;
 }
 
-#spotifyAccountSelect option:hover,
-#deezerAccountSelect option:hover,
-#spotifyQualitySelect option:hover,
-#deezerQualitySelect option:hover {
+.form-select option:hover {
   background: #1db954;
 }
 
 /* New Input Styling for Custom Format Fields */
-.config-item input[type="text"] {
+.form-input {
   width: 100%;
   padding: 0.8rem;
   background: #2a2a2a;
@@ -152,20 +343,27 @@ body {
   transition: border-color 0.3s ease;
 }
 
-.config-item input[type="text"]:focus {
+.form-input:focus {
   outline: none;
   border-color: #1db954;
+  box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
 }
 
 /* Improved Toggle Switches */
 .switch {
   position: relative;
   display: inline-block;
-  width: 40px;
-  height: 20px;
-  margin-left: 1rem;
+  width: 48px;
+  height: 24px;
+  margin-top: 0.5rem;
   vertical-align: middle;
   overflow: hidden;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
 .slider {
@@ -177,16 +375,16 @@ body {
   bottom: 0;
   background-color: #666;
   transition: 0.4s;
-  border-radius: 20px;
+  border-radius: 24px;
 }
 
 .slider:before {
   position: absolute;
   content: "";
-  height: 16px;
-  width: 16px;
-  left: 2px;
-  bottom: 2px;
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
   background-color: #ffffff;
   transition: 0.4s;
   border-radius: 50%;
@@ -198,7 +396,7 @@ input:checked + .slider {
 }
 
 input:checked + .slider:before {
-  transform: translateX(20px);
+  transform: translateX(24px);
 }
 
 /* Setting description */
@@ -207,6 +405,11 @@ input:checked + .slider:before {
   font-size: 0.8rem;
   color: #b3b3b3;
   line-height: 1.4;
+}
+
+/* Accounts section layout */
+.accounts-section {
+  margin-top: 2rem;
 }
 
 /* Service Tabs */
@@ -225,11 +428,17 @@ input:checked + .slider:before {
   cursor: pointer;
   font-size: 0.95rem;
   transition: background 0.3s ease, transform 0.2s ease;
+  flex: 1;
+  text-align: center;
 }
 
 .tab-button.active {
   background: #1db954;
   transform: translateY(-2px);
+}
+
+.tab-button:hover:not(.active) {
+  background: #333333;
 }
 
 /* No Credentials Message */
@@ -245,21 +454,32 @@ input:checked + .slider:before {
 /* Credentials List */
 .credentials-list {
   margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #181818;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
 .credential-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
+  padding: 1.25rem;
   background: #2a2a2a;
   border-radius: 8px;
   margin-bottom: 0.75rem;
-  transition: background 0.3s ease;
+  transition: all 0.3s ease;
+  border-left: 3px solid var(--color-primary);
 }
 
 .credential-item:hover {
-  background: #3a3a3a;
+  background: #333333;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.credential-item:last-child {
+  margin-bottom: 0;
 }
 
 /* New styling for credential info and actions */
@@ -267,19 +487,40 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  flex: 1;
+  padding-right: 1rem;
 }
 
 .credential-name {
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 1.1rem;
+  color: var(--color-text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.credential-type {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background-color: rgba(29, 185, 84, 0.1);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  margin-bottom: 0.5rem;
+}
+
+.credential-details {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
 }
 
 .search-credentials-status {
-  font-size: 0.8rem;
-  padding: 0.2rem 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
   border-radius: 12px;
   display: inline-block;
   width: fit-content;
+  margin-top: 0.5rem;
 }
 
 .search-credentials-status.has-api {
@@ -294,37 +535,44 @@ input:checked + .slider:before {
 
 .credential-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .credential-actions button {
-  padding: 0.5rem 0.8rem;
+  background-color: #222222;
   border: none;
-  border-radius: 6px;
   cursor: pointer;
-  font-size: 0.8rem;
-  transition: opacity 0.3s ease, transform 0.2s ease;
-  white-space: nowrap;
+  padding: 0.6rem;
+  border-radius: 8px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: white;
 }
 
-.edit-btn {
-  background: #1db954;
-  color: #ffffff;
-}
-
-.edit-search-btn {
-  background: #2d6db5;
-  color: #ffffff;
-}
-
-.delete-btn {
-  background: #ff5555;
-  color: #ffffff;
+.credential-actions button img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(1);
 }
 
 .credential-actions button:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+}
+
+.credential-actions button.delete-btn {
+  color: #ff5555;
+}
+
+.credential-actions button.delete-btn:hover {
+  background-color: rgba(192, 57, 43, 0.2);
+}
+
+.credential-actions button.edit-btn:hover {
+  background-color: rgba(52, 152, 219, 0.2);
 }
 
 /* Credentials Form */
@@ -375,10 +623,10 @@ input:checked + .slider:before {
   padding: 0.8rem 1.5rem;
   border: none;
   border-radius: 25px;
-  width: 100%;
   cursor: pointer;
   font-weight: 500;
   transition: background 0.3s ease, transform 0.2s ease;
+  margin-top: 1.5rem;
 }
 
 .save-btn:hover {
@@ -386,23 +634,39 @@ input:checked + .slider:before {
   transform: translateY(-2px);
 }
 
-/* Error Messages */
+/* Error Messages - Hidden by default */
 #configError {
+  background-color: rgba(192, 57, 43, 0.1);
   color: #ff5555;
-  margin-top: 1rem;
-  text-align: center;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 3px solid #ff5555;
   font-size: 0.9rem;
-  min-height: 1.2rem;
+  display: none;
 }
 
-/* Success Messages */
+/* Show the messages when they have content */
+#configError:not(:empty) {
+  display: block;
+}
+
+/* Success Messages - Hidden by default */
 #configSuccess {
+  background-color: rgba(46, 204, 113, 0.1);
   color: #1db954;
-  margin-top: 1rem;
-  text-align: center;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 3px solid #1db954;
   font-size: 0.9rem;
-  min-height: 1.2rem;
   font-weight: 500;
+  display: none;
+}
+
+/* Show the messages when they have content */
+#configSuccess:not(:empty) {
+  display: block;
 }
 
 /* MOBILE RESPONSIVENESS */
@@ -418,16 +682,7 @@ input:checked + .slider:before {
   }
   
   /* Increase touch target sizes for buttons and selects */
-  .back-button {
-    width: 100%;
-    text-align: center;
-    padding: 0.8rem;
-  }
-  
-  #spotifyAccountSelect,
-  #deezerAccountSelect,
-  #spotifyQualitySelect,
-  #deezerQualitySelect {
+  .form-select {
     padding: 0.8rem 2rem 0.8rem 1rem;
     font-size: 0.9rem;
   }
@@ -448,31 +703,28 @@ input:checked + .slider:before {
     gap: 0.75rem;
   }
   
+  .credential-info {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+  
   .credential-actions {
     width: 100%;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: 0.5rem;
   }
   
-  .credential-actions button {
-    flex: 1;
-    text-align: center;
-    padding: 0.7rem 0.5rem;
-  }
-  
   /* Adjust toggle switch size for better touch support */
   .switch {
-    width: 50px;
-    height: 24px;
+    width: 52px;
+    height: 26px;
   }
   
   .slider:before {
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
+    height: 20px;
+    width: 20px;
   }
 }
 
@@ -482,25 +734,60 @@ input:checked + .slider:before {
   }
   
   .account-config,
+  .credentials-list,
   .credentials-form {
     padding: 1rem;
+    border-radius: 8px;
   }
   
-  .form-group input {
-    padding: 0.7rem;
+  .section-title {
+    font-size: 1.3rem;
   }
   
-  .save-btn,
-  .back-button {
+  .config-item label {
+    font-size: 0.95rem;
+  }
+  
+  .form-select,
+  .form-input {
+    padding: 0.7rem 1.8rem 0.7rem 0.8rem;
+    font-size: 0.9rem;
+  }
+  
+  .save-btn {
+    width: 100%;
     padding: 0.7rem;
     font-size: 0.9rem;
   }
   
-  /* Reduce dropdown padding for very small screens */
-  #spotifyAccountSelect,
-  #deezerAccountSelect,
-  #spotifyQualitySelect,
-  #deezerQualitySelect {
-    padding: 0.7rem 1.8rem 0.7rem 0.8rem;
+  /* Position floating icons a bit closer to the edges on small screens */
+  .back-button.floating-icon {
+    width: 60px;
+    height: 60px;
+    left: 16px;
+    bottom: 16px;
+  }
+  
+  .back-button.floating-icon img {
+    width: 28px;
+    height: 28px;
+  }
+  
+  /* Queue icon mobile styles */
+  .queue-icon.floating-icon {
+    width: 50px;
+    height: 50px;
+    right: 16px;
+    bottom: 16px;
+  }
+  
+  .queue-icon.floating-icon img {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .queue-icon .queue-x {
+    font-size: 24px;
+    line-height: 20px;
   }
 }

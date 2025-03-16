@@ -51,18 +51,29 @@
 
 /* Cancel all button styling */
 #cancelAllBtn {
-    background: #ff5555;
+    background: #8b0000; /* Dark blood red */
     border: none;
     color: #fff;
     padding: 8px 12px;
     border-radius: 4px;
     cursor: pointer;
-    transition: background 0.3s ease;
+    transition: background 0.3s ease, transform 0.2s ease;
     font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 #cancelAllBtn:hover {
-    background: #ff7777;
+    background: #a30000; /* Slightly lighter red on hover */
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+#cancelAllBtn:active {
+    transform: scale(0.98);
 }
 
 /* Close button for the queue sidebar */
@@ -78,11 +89,16 @@
     color: #ffffff;
     font-size: 20px;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: background-color 0.3s ease, transform 0.2s ease;
 }
 
 .close-btn:hover {
     background-color: #333;
+    transform: scale(1.05);
+}
+
+.close-btn:active {
+    transform: scale(0.95);
 }
 
 /* Container for all queue items */
@@ -90,6 +106,24 @@
     /* Allow the container to fill all available space in the sidebar */
     flex: 1;
     overflow-y: auto;
+    padding-right: 5px; /* Add slight padding for scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: #1DB954 rgba(255, 255, 255, 0.1);
+}
+
+/* Custom scrollbar styles */
+#queueItems::-webkit-scrollbar {
+    width: 6px;
+}
+
+#queueItems::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+#queueItems::-webkit-scrollbar-thumb {
+    background-color: #1DB954;
+    border-radius: 10px;
 }
 
 /* Each download queue item */
@@ -98,33 +132,72 @@
     padding: 15px;
     border-radius: 8px;
     margin-bottom: 15px;
-    transition: background-color 0.3s ease, transform 0.2s ease;
+    transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
     gap: 6px;
+    position: relative;
+    border-left: 4px solid transparent;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Animation only for newly added items */
+.queue-item-new {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .queue-item:hover {
     background-color: #333;
     transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Title text in a queue item */
 .queue-item .title {
-    font-weight: 500;
+    font-weight: 600;
     margin-bottom: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: #fff;
+    font-size: 14px;
 }
 
 /* Type indicator (e.g. track, album) */
 .queue-item .type {
-    font-size: 12px;
+    font-size: 11px;
     color: #1DB954;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.7px;
+    font-weight: 600;
+    background-color: rgba(29, 185, 84, 0.1);
+    padding: 3px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    width: fit-content;
+}
+
+/* Album type - for better visual distinction */
+.queue-item .type.album {
+    color: #4a90e2;
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+/* Track type */
+.queue-item .type.track {
+    color: #1DB954;
+    background-color: rgba(29, 185, 84, 0.1);
+}
+
+/* Playlist type */
+.queue-item .type.playlist {
+    color: #e67e22;
+    background-color: rgba(230, 126, 34, 0.1);
 }
 
 /* Log text for status messages */
@@ -133,19 +206,22 @@
     color: #b3b3b3;
     line-height: 1.4;
     font-family: 'SF Mono', Menlo, monospace;
+    padding: 8px 0;
+    word-break: break-word;
 }
 
 /* Optional state indicators for each queue item */
-.queue-item--complete {
-    border-left: 4px solid #1DB954;
+.queue-item--complete, 
+.queue-item.download-success {
+    border-left-color: #1DB954;
 }
 
 .queue-item--error {
-    border-left: 4px solid #ff5555;
+    border-left-color: #ff5555;
 }
 
 .queue-item--processing {
-    border-left: 4px solid #4a90e2;
+    border-left-color: #4a90e2;
 }
 
 /* Progress bar for downloads */
@@ -155,13 +231,16 @@
     width: 0;
     transition: width 0.3s ease;
     margin-top: 8px;
+    border-radius: 2px;
 }
 
 /* Progress percentage text */
 .progress-percent {
     text-align: right;
     font-weight: bold;
+    font-size: 12px;
     color: #1DB954;
+    margin-top: 4px;
 }
 
 /* Optional status message colors (if using state classes) */
@@ -197,12 +276,14 @@
 /* Loading spinner style */
 .loading-spinner {
     display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
     border-top-color: #1DB954;
     animation: spin 1s ease-in-out infinite;
+    margin-right: 6px;
+    vertical-align: middle;
 }
 
 @keyframes spin {
@@ -220,6 +301,15 @@
     /* Optionally constrain the overall size */
     max-width: 24px;
     max-height: 24px;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.cancel-btn:hover {
+    opacity: 1;
 }
 
 .cancel-btn img {
@@ -237,28 +327,65 @@
     transform: scale(0.9);
 }
 
+/* Group header for multiple albums from same artist */
+.queue-group-header {
+    font-size: 14px;
+    color: #b3b3b3;
+    margin: 15px 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.queue-group-header span {
+    display: flex;
+    align-items: center;
+}
+
+.queue-group-header span::before {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #1DB954;
+    margin-right: 8px;
+}
+
 /* ------------------------------- */
 /* FOOTER & "SHOW MORE" BUTTON     */
 /* ------------------------------- */
 
 #queueFooter {
     text-align: center;
-    padding-top: 10px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: 10px;
 }
 
 #queueFooter button {
     background: #1DB954;
     border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 10px 18px;
+    border-radius: 20px;
     color: #fff;
     cursor: pointer;
-    transition: background 0.3s ease;
+    transition: all 0.3s ease;
     font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 #queueFooter button:hover {
     background: #17a448;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+#queueFooter button:active {
+    transform: scale(0.98);
 }
 
 /* -------------------------- */
@@ -287,35 +414,77 @@
 /* Hover state for all error buttons */
 .error-buttons button:hover {
     background: #333;
+    transform: translateY(-1px);
+}
+
+.error-buttons button:active {
+    transform: scale(0.98);
 }
 
 /* Specific styles for the Close (X) error button */
 .close-error-btn {
-    background: #ff5555;
+    background: #ff5555 !important;
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    font-size: 20px;
-    padding: 0;
+    border-radius: 50% !important;
+    font-size: 18px !important;
+    padding: 0 !important;
 }
 
 .close-error-btn:hover {
-    background: #ff7777;
+    background: #ff7777 !important;
 }
 
 /* Specific styles for the Retry button */
 .retry-btn {
-    background: #1DB954;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-weight: bold;
+    background: #1DB954 !important;
+    padding: 8px 16px !important;
+    border-radius: 20px !important;
+    font-weight: 500 !important;
+    flex: 1;
 }
 
 .retry-btn:hover {
-    background: #17a448;
+    background: #17a448 !important;
+}
+
+/* Empty queue state */
+.queue-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #b3b3b3;
+    text-align: center;
+    padding: 20px;
+}
+
+.queue-empty img {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 15px;
+    opacity: 0.6;
+}
+
+.queue-empty p {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Error notification in queue */
+.queue-error {
+    background-color: rgba(192, 57, 43, 0.1);
+    color: #ff5555;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-size: 14px;
+    border-left: 3px solid #ff5555;
+    animation: fadeIn 0.3s ease;
 }
 
 /* ------------------------------- */
@@ -336,8 +505,10 @@
 
     /* Adjust header and title for smaller screens */
     .sidebar-header {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
+        padding-bottom: 12px;
+        margin-bottom: 15px;
     }
     
     .sidebar-header h2 {
@@ -361,5 +532,23 @@
     .queue-item .log,
     .queue-item .type {
         font-size: 12px;
+    }
+    
+    #cancelAllBtn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    .error-buttons {
+        flex-direction: row;
+    }
+    
+    .close-error-btn {
+        width: 28px;
+        height: 28px;
+    }
+    
+    .retry-btn {
+        padding: 6px 12px !important;
     }
 }

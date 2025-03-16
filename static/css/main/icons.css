@@ -20,6 +20,46 @@
     padding: 4px;
 }
 
+/* Style for the skull icon in the Cancel all button */
+.skull-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    vertical-align: middle;
+    filter: brightness(0) invert(1); /* Makes icon white */
+    transition: transform 0.3s ease;
+}
+
+#cancelAllBtn:hover .skull-icon {
+    transform: rotate(-10deg) scale(1.2);
+    animation: skullShake 0.5s infinite alternate;
+}
+
+@keyframes skullShake {
+    0% { transform: rotate(-5deg); }
+    100% { transform: rotate(5deg); }
+}
+
+/* Style for the X that appears when the queue is visible */
+.queue-x {
+    font-size: 28px;
+    font-weight: bold;
+    color: white;
+    line-height: 24px;
+    display: inline-block;
+    transform: translateY(-2px);
+}
+
+/* Queue icon with red tint when X is active */
+.queue-icon-active {
+    background-color: #d13838 !important; /* Red background for active state */
+    transition: background-color 0.3s ease;
+}
+
+.queue-icon-active:hover {
+    background-color: #e04c4c !important; /* Lighter red on hover */
+}
+
 .download-icon,
 .type-icon,
 .toggle-chevron {

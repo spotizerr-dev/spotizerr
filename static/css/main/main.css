@@ -24,18 +24,35 @@ body {
 
 /* LOADING & ERROR STATES */
 .loading,
-.error {
+.error,
+.success {
   width: 100%;
   text-align: center;
   font-size: 1rem;
   padding: 1rem;
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  border-radius: 8px;
+  max-width: 80%;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .error {
-  color: #c0392b;
+  color: #fff;
+  background-color: rgba(192, 57, 43, 0.9);
 }
 
-/* SEARCH HEADER COMPONENT */
+.success {
+  color: #fff;
+  background-color: rgba(46, 204, 113, 0.9);
+}
+
+/* Main search page specific styles */
+
+/* Search header improvements */
 .search-header {
   display: flex;
   align-items: center;
@@ -43,11 +60,17 @@ body {
   margin-bottom: 30px;
   position: sticky;
   top: 0;
-  background: rgba(18, 18, 18, 1);
+  background: rgba(18, 18, 18, 0.95);
   backdrop-filter: blur(10px);
   padding: 20px 0;
   z-index: 100;
-  border-bottom: 1px solid #2a2a2a;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.search-input-container {
+  display: flex;
+  flex: 1;
+  gap: 10px;
 }
 
 .search-input {
@@ -55,72 +78,121 @@ body {
   padding: 12px 20px;
   border: none;
   border-radius: 25px;
-  background: #2a2a2a;
-  color: #ffffff;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-size: 16px;
   outline: none;
-  transition: background-color 0.3s ease;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .search-input:focus {
-  background: #333333;
+  background: var(--color-surface-hover);
+  box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.3);
 }
 
 .search-type {
   padding: 12px 15px;
-  background: #2a2a2a;
+  background: var(--color-surface);
   border: none;
   border-radius: 25px;
-  color: #ffffff;
+  color: var(--color-text-primary);
   cursor: pointer;
   transition: background-color 0.3s ease;
+  min-width: 100px;
 }
 
-.search-type:hover {
-  background: #3a3a3a;
+.search-type:hover, 
+.search-type:focus {
+  background: var(--color-surface-hover);
 }
 
 .search-button {
-  padding: 12px 30px;
-  background-color: #1db954;
+  padding: 12px 25px;
+  background-color: var(--color-primary);
   border: none;
   border-radius: 25px;
-  color: #ffffff;
-  font-weight: bold;
+  color: white;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color 0.3s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-button img {
+  width: 18px;
+  height: 18px;
+  filter: brightness(0) invert(1);
 }
 
 .search-button:hover {
-  background-color: #1ed760;
+  background-color: var(--color-primary-hover);
   transform: translateY(-2px);
 }
 
-/* RESULTS GRID COMPONENT – Minimalistic Version */
+/* Empty state styles */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  text-align: center;
+}
+
+.empty-state-content {
+  max-width: 450px;
+}
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 1.5rem;
+  opacity: 0.7;
+}
+
+.empty-state h2 {
+  font-size: 1.75rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(90deg, var(--color-primary), #2ecc71);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.empty-state p {
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+/* Results grid improvement */
 .results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 15px;
+  gap: 20px;
+  margin-top: 20px;
 }
 
-/* Each result card now features a clean, flat design with minimal decoration */
+/* Result card style */
 .result-card {
-  background: #1c1c1c;                /* A uniform dark background */
-  border: 1px solid #2a2a2a;           /* A subtle border for separation */
-  border-radius: 4px;                  /* Slight rounding for a modern look */
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  height: 100%;
 }
 
 .result-card:hover {
-  background-color: #2a2a2a;           /* Lightens the card on hover */
-  transform: translateY(-2px);         /* A gentle lift effect */
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-md);
 }
 
-/* Album/Art image wrapper – Maintains aspect ratio and a clean presentation */
+/* Album art styling */
 .album-art-wrapper {
   position: relative;
   width: 100%;
@@ -130,7 +202,7 @@ body {
 .album-art-wrapper::before {
   content: "";
   display: block;
-  padding-top: 100%;                  /* 1:1 aspect ratio */
+  padding-top: 100%;
 }
 
 .album-art {
@@ -140,15 +212,19 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: opacity 0.2s ease;
+  transition: transform 0.3s ease;
 }
 
-/* Text details are kept simple and legible */
+.result-card:hover .album-art {
+  transform: scale(1.05);
+}
+
+/* Track title and details */
 .track-title {
-  padding: 0.75rem 1rem;
+  padding: 1rem 1rem 0.5rem;
   font-size: 1rem;
-  font-weight: bold;
-  color: #ffffff;
+  font-weight: 600;
+  color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -157,128 +233,106 @@ body {
 .track-artist {
   padding: 0 1rem;
   font-size: 0.9rem;
-  color: #aaaaaa;
-  margin-top: 0.25rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.75rem;
 }
 
 .track-details {
   padding: 0.75rem 1rem;
   font-size: 0.85rem;
-  color: #bbbbbb;
-  border-top: 1px solid #2a2a2a;
+  color: var(--color-text-tertiary);
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: auto;
 }
 
-.duration {
-  font-style: italic;
-  color: #999;
-}
-
-/* Centered Download Button styling */
+/* Download button within result cards */
 .download-btn {
-  margin: 0.75rem 1rem 1rem;
-  padding: 0.5rem 1rem;
-  background-color: #1db954;
-  color: #ffffff;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
-  display: block;
-  text-align: center;
-  width: calc(100% - 2rem);
+  margin: 0 1rem 1rem;
+  max-width: calc(100% - 2rem); /* Ensure button doesn't overflow container */
+  width: auto; /* Allow button to shrink if needed */
+  font-size: 0.9rem; /* Slightly smaller font size */
+  padding: 0.6rem 1rem; /* Reduce padding slightly */
+  overflow: hidden; /* Hide overflow */
+  text-overflow: ellipsis; /* Add ellipsis for long text */
+  white-space: nowrap; /* Prevent wrapping */
 }
 
-.download-btn:hover {
-  background-color: #17a44b;
-  transform: scale(1.02);
-}
-
-/* ARTIST DOWNLOAD OPTIONS */
-.artist-download-buttons {
-  border-top: 1px solid #2a2a2a;
-  padding: 0.5rem 1rem;
-}
-
-.options-toggle {
-  width: 100%;
-  background: none;
-  border: none;
-  color: #b3b3b3;
-  padding: 8px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.options-toggle:hover {
-  color: #ffffff;
-}
-
-.download-options-container {
-  margin-top: 0.5rem;
-}
-
-.secondary-options {
-  display: none;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.secondary-options.expanded {
-  display: flex;
-}
-
-.option-btn {
-  flex: 1;
-  background-color: #2a2a2a;
-  color: #ffffff;
-  padding: 0.4rem 0.6rem;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
-}
-
-.option-btn:hover {
-  background-color: #3a3a3a;
-  transform: translateY(-1px);
-}
-
-/* MOBILE RESPONSIVENESS */
-@media (max-width: 600px) {
+/* Mobile responsiveness */
+@media (max-width: 768px) {
   .search-header {
     flex-wrap: wrap;
-    justify-content: center;
-    padding: 10px 0;
+    padding: 15px 0;
+    gap: 12px;
   }
   
-  .search-input,
-  .search-type,
-  .search-button {
+  .search-input-container {
     flex: 1 1 100%;
-    margin-bottom: 10px;
+    order: 1;
   }
   
-  .search-type,
   .search-button {
-    padding: 10px;
-    font-size: 15px;
+    order: 2;
+    flex: 1;
   }
   
   .results-grid {
-    justify-content: center;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
   }
   
-  .result-card {
-    width: 90%;
-    margin: 0 auto;
+  /* Smaller download button for mobile */
+  .download-btn {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .search-header {
+    padding: 10px 0;
+  }
+  
+  .search-type {
+    min-width: 80px;
+    padding: 12px 10px;
+  }
+  
+  .search-button {
+    padding: 12px 15px;
+  }
+  
+  .results-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  
+  .track-title, .track-artist {
+    font-size: 0.9rem;
+  }
+  
+  .track-details {
+    font-size: 0.8rem;
+  }
+  
+  /* Even smaller download button for very small screens */
+  .download-btn {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.8rem;
+    margin: 0 0.8rem 0.8rem;
+    max-width: calc(100% - 1.6rem);
+  }
+  
+  .empty-state h2 {
+    font-size: 1.5rem;
+  }
+  
+  .empty-state p {
+    font-size: 0.9rem;
   }
 }
