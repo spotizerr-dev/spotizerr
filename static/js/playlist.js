@@ -240,7 +240,10 @@ async function downloadWholePlaylist(playlist) {
   }
   
   try {
-    await downloadQueue.startPlaylistDownload(url, { name: playlist.name || 'Unknown Playlist' });
+    // Use our local startDownload function instead of downloadQueue.startPlaylistDownload
+    await startDownload(url, 'playlist', { name: playlist.name || 'Unknown Playlist' });
+    // Make the queue visible after queueing
+    downloadQueue.toggleVisibility(true);
   } catch (error) {
     showError('Playlist download failed: ' + (error?.message || 'Unknown error'));
     throw error;
@@ -292,8 +295,10 @@ async function downloadPlaylistAlbums(playlist) {
       const albumUrl = album.external_urls?.spotify || '';
       if (!albumUrl) continue;
       
-      await downloadQueue.startAlbumDownload(
+      // Use our local startDownload function instead of downloadQueue.startAlbumDownload
+      await startDownload(
         albumUrl,
+        'album',
         { name: album.name || 'Unknown Album' }
       );
 
@@ -310,6 +315,9 @@ async function downloadPlaylistAlbums(playlist) {
     if (downloadAlbumsBtn) {
       downloadAlbumsBtn.textContent = 'Queued!';
     }
+    
+    // Make the queue visible after queueing all albums
+    downloadQueue.toggleVisibility(true);
   } catch (error) {
     // Propagate any errors encountered.
     throw error;
@@ -344,11 +352,67 @@ async function startDownload(url, type, item, albumType) {
 
   try {
     const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+    
     const data = await response.json();
-    // Add the download to the queue using the working queue implementation.
-    downloadQueue.addDownload(item, type, data.prg_file);
+    
+    // Handle artist downloads which return multiple album_prg_files
+    if (type === 'artist' && data.album_prg_files && Array.isArray(data.album_prg_files)) {
+      // Add each album to the download queue separately
+      const queueIds = [];
+      data.album_prg_files.forEach(prgFile => {
+        const queueId = downloadQueue.addDownload(item, 'album', prgFile, apiUrl, false);
+        queueIds.push({queueId, prgFile});
+      });
+      
+      // Wait a short time before checking the status to give server time to create files
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Start monitoring each entry after confirming PRG files exist
+      for (const {queueId, prgFile} of queueIds) {
+        try {
+          const statusResponse = await fetch(`/api/prgs/${prgFile}`);
+          if (statusResponse.ok) {
+            // Only start monitoring after confirming the PRG file exists
+            const entry = downloadQueue.downloadQueue[queueId];
+            if (entry) {
+              // Start monitoring regardless of visibility
+              downloadQueue.startEntryMonitoring(queueId);
+            }
+          }
+        } catch (statusError) {
+          console.log(`Initial status check pending for ${prgFile}, will retry on next interval`);
+        }
+      }
+    } else if (data.prg_file) {
+      // Handle single-file downloads (tracks, albums, playlists)
+      const queueId = downloadQueue.addDownload(item, type, data.prg_file, apiUrl, false);
+      
+      // Wait a short time before checking the status to give server time to create the file
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Ensure the PRG file exists and has initial data by making a status check
+      try {
+        const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+        if (statusResponse.ok) {
+          // Only start monitoring after confirming the PRG file exists
+          const entry = downloadQueue.downloadQueue[queueId];
+          if (entry) {
+            // Start monitoring regardless of visibility
+            downloadQueue.startEntryMonitoring(queueId);
+          }
+        }
+      } catch (statusError) {
+        console.log('Initial status check pending, will retry on next interval');
+      }
+    } else {
+      throw new Error('Invalid response format from server');
+    }
   } catch (error) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
+    throw error;
   }
 }
 

@@ -229,16 +229,57 @@ document.addEventListener('DOMContentLoaded', function() {
             // Handle artist downloads which return multiple album_prg_files
             if (type === 'artist' && data.album_prg_files && Array.isArray(data.album_prg_files)) {
                 // Add each album to the download queue separately
+                const queueIds = [];
                 data.album_prg_files.forEach(prgFile => {
-                    downloadQueue.addDownload(item, 'album', prgFile, apiUrl);
+                    const queueId = downloadQueue.addDownload(item, 'album', prgFile, apiUrl, false);
+                    queueIds.push({queueId, prgFile});
                 });
+                
+                // Wait a short time before checking the status to give server time to create files
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Start monitoring each entry after confirming PRG files exist
+                for (const {queueId, prgFile} of queueIds) {
+                    try {
+                        const statusResponse = await fetch(`/api/prgs/${prgFile}`);
+                        if (statusResponse.ok) {
+                            // Only start monitoring after confirming the PRG file exists
+                            const entry = downloadQueue.downloadQueue[queueId];
+                            if (entry) {
+                                // Start monitoring regardless of visibility
+                                downloadQueue.startEntryMonitoring(queueId);
+                            }
+                        }
+                    } catch (statusError) {
+                        console.log(`Initial status check pending for ${prgFile}, will retry on next interval`);
+                    }
+                }
+                
                 // Show success message for artist download
                 if (data.message) {
                     showSuccess(data.message);
                 }
             } else if (data.prg_file) {
                 // Handle single-file downloads (tracks, albums, playlists)
-                downloadQueue.addDownload(item, type, data.prg_file, apiUrl);
+                const queueId = downloadQueue.addDownload(item, type, data.prg_file, apiUrl, false);
+                
+                // Wait a short time before checking the status to give server time to create the file
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Ensure the PRG file exists and has initial data by making a status check
+                try {
+                    const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+                    if (statusResponse.ok) {
+                        // Only start monitoring after confirming the PRG file exists
+                        const entry = downloadQueue.downloadQueue[queueId];
+                        if (entry) {
+                            // Start monitoring regardless of visibility
+                            downloadQueue.startEntryMonitoring(queueId);
+                        }
+                    }
+                } catch (statusError) {
+                    console.log('Initial status check pending, will retry on next interval');
+                }
             } else {
                 throw new Error('Invalid response format from server');
             }

@@ -110,9 +110,13 @@ function renderTrack(track) {
         return;
       }
       
-      downloadQueue.startTrackDownload(trackUrl, { name: track.name || 'Unknown Track' })
+      // Create a local download function that uses our own API call instead of downloadQueue.startTrackDownload
+      // This mirrors the approach used in main.js that works properly
+      startDownload(trackUrl, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
         .then(() => {
           downloadBtn.innerHTML = `<span>Queued!</span>`;
+          // Make the queue visible to show the download
+          downloadQueue.toggleVisibility(true);
         })
         .catch(err => {
           showError('Failed to queue track download: ' + (err?.message || 'Unknown error'));
@@ -171,8 +175,36 @@ async function startDownload(url, type, item) {
 
   try {
     const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+    
     const data = await response.json();
-    downloadQueue.addDownload(item, type, data.prg_file);
+    
+    if (!data.prg_file) {
+      throw new Error('Server did not return a valid PRG file');
+    }
+    
+    // Add the download to the queue but don't start monitoring yet
+    const queueId = downloadQueue.addDownload(item, type, data.prg_file, apiUrl, false);
+    
+    // Ensure the PRG file exists and has initial data by making a status check
+    try {
+      // Wait a short time before checking the status to give server time to create the file
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+      if (statusResponse.ok) {
+        // Only start monitoring after confirming the PRG file exists
+        const entry = downloadQueue.downloadQueue[queueId];
+        if (entry) {
+          // Start monitoring regardless of visibility
+          downloadQueue.startEntryMonitoring(queueId);
+        }
+      }
+    } catch (statusError) {
+      console.log('Initial status check pending, will retry on next interval');
+    }
   } catch (error) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;

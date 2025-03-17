@@ -72,13 +72,17 @@ function renderArtist(artistData, artistId) {
     downloadArtistBtn.textContent = 'Queueing...';
 
     // Queue the entire discography (albums, singles, compilations, and appears_on)
-    downloadQueue.startArtistDownload(
+    // Use our local startDownload function instead of downloadQueue.startArtistDownload
+    startDownload(
       artistUrl,
+      'artist',
       { name: artistName, artist: artistName },
       'album,single,compilation'
     )
       .then(() => {
         downloadArtistBtn.textContent = 'Artist queued';
+        // Make the queue visible after queueing
+        downloadQueue.toggleVisibility(true);
       })
       .catch(err => {
         downloadArtistBtn.textContent = 'Download All Discography';
@@ -162,13 +166,16 @@ function attachGroupDownloadListeners(artistUrl, artistName) {
       e.target.textContent = `Queueing all ${capitalize(groupType)}s...`;
 
       try {
-        // Use the artist download function with the group type filter.
-        await downloadQueue.startArtistDownload(
+        // Use our local startDownload function with the group type filter
+        await startDownload(
           artistUrl,
+          'artist',
           { name: artistName || 'Unknown Artist', artist: artistName || 'Unknown Artist' },
           groupType // Only queue releases of this specific type.
         );
         e.target.textContent = `Queued all ${capitalize(groupType)}s`;
+        // Make the queue visible after queueing
+        downloadQueue.toggleVisibility(true);
       } catch (error) {
         e.target.textContent = `Download All ${capitalize(groupType)}s`;
         e.target.disabled = false;
@@ -188,10 +195,103 @@ function attachDownloadListeners() {
       const type = e.currentTarget.dataset.type || 'album';
       
       e.currentTarget.remove();
-      downloadQueue.startAlbumDownload(url, { name, type })
+      // Use our local startDownload function instead of downloadQueue.startAlbumDownload
+      startDownload(url, type, { name, type })
         .catch(err => showError('Download failed: ' + (err?.message || 'Unknown error')));
     });
   });
+}
+
+// Add startDownload function (similar to track.js and main.js)
+/**
+ * Starts the download process via API
+ */
+async function startDownload(url, type, item, albumType) {
+  if (!url || !type) {
+    showError('Missing URL or type for download');
+    return;
+  }
+  
+  const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
+  let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
+
+  // Add name and artist if available for better progress display
+  if (item.name) {
+    apiUrl += `&name=${encodeURIComponent(item.name)}`;
+  }
+  if (item.artist) {
+    apiUrl += `&artist=${encodeURIComponent(item.artist)}`;
+  }
+  
+  // For artist downloads, include album_type
+  if (type === 'artist' && albumType) {
+    apiUrl += `&album_type=${encodeURIComponent(albumType)}`;
+  }
+
+  try {
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Handle artist downloads which return multiple album_prg_files
+    if (type === 'artist' && data.album_prg_files && Array.isArray(data.album_prg_files)) {
+      // Add each album to the download queue separately
+      const queueIds = [];
+      data.album_prg_files.forEach(prgFile => {
+        const queueId = downloadQueue.addDownload(item, 'album', prgFile, apiUrl, false);
+        queueIds.push({queueId, prgFile});
+      });
+      
+      // Wait a short time before checking the status to give server time to create files
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Start monitoring each entry after confirming PRG files exist
+      for (const {queueId, prgFile} of queueIds) {
+        try {
+          const statusResponse = await fetch(`/api/prgs/${prgFile}`);
+          if (statusResponse.ok) {
+            // Only start monitoring after confirming the PRG file exists
+            const entry = downloadQueue.downloadQueue[queueId];
+            if (entry) {
+              // Start monitoring regardless of visibility
+              downloadQueue.startEntryMonitoring(queueId);
+            }
+          }
+        } catch (statusError) {
+          console.log(`Initial status check pending for ${prgFile}, will retry on next interval`);
+        }
+      }
+    } else if (data.prg_file) {
+      // Handle single-file downloads (tracks, albums, playlists)
+      const queueId = downloadQueue.addDownload(item, type, data.prg_file, apiUrl, false);
+      
+      // Wait a short time before checking the status to give server time to create the file
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Ensure the PRG file exists and has initial data by making a status check
+      try {
+        const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+        if (statusResponse.ok) {
+          // Only start monitoring after confirming the PRG file exists
+          const entry = downloadQueue.downloadQueue[queueId];
+          if (entry) {
+            // Start monitoring regardless of visibility
+            downloadQueue.startEntryMonitoring(queueId);
+          }
+        }
+      } catch (statusError) {
+        console.log('Initial status check pending, will retry on next interval');
+      }
+    } else {
+      throw new Error('Invalid response format from server');
+    }
+  } catch (error) {
+    showError('Download failed: ' + (error?.message || 'Unknown error'));
+    throw error;
+  }
 }
 
 // UI Helpers

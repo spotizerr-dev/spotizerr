@@ -189,13 +189,20 @@ class DownloadQueue {
   /**
    * Adds a new download entry.
    */
-  addDownload(item, type, prgFile, requestUrl = null) {
+  addDownload(item, type, prgFile, requestUrl = null, startMonitoring = false) {
     const queueId = this.generateQueueId();
     const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
     this.downloadQueue[queueId] = entry;
     // Re-render and update which entries are processed.
     this.updateQueueOrder();
+    
+    // Only start monitoring if explicitly requested
+    if (startMonitoring && this.isEntryVisible(queueId)) {
+      this.startEntryMonitoring(queueId);
+    }
+    
     this.dispatchEvent('downloadAdded', { queueId, item, type });
+    return queueId; // Return the queueId so callers can reference it
   }
 
   /* Start processing the entry only if it is visible. */
@@ -204,19 +211,38 @@ class DownloadQueue {
     if (!entry || entry.hasEnded) return;
     if (entry.intervalId) return;
 
-    entry.intervalId = setInterval(async () => {
-      if (!this.isEntryVisible(queueId)) {
-        clearInterval(entry.intervalId);
-        entry.intervalId = null;
-        return;
+    // Show a preparing message for new entries
+    if (entry.isNew) {
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        logElement.textContent = "Preparing download...";
       }
+    }
+    
+    // Track status check failures
+    entry.statusCheckFailures = 0;
+    const MAX_STATUS_CHECK_FAILURES = 5; // Maximum number of consecutive failures before showing error
+    
+    entry.intervalId = setInterval(async () => {
       const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (entry.hasEnded) {
         clearInterval(entry.intervalId);
         return;
       }
       try {
+        // Show checking status message on first few attempts
+        if (entry.statusCheckFailures > 0 && entry.statusCheckFailures < MAX_STATUS_CHECK_FAILURES && logElement) {
+          logElement.textContent = `Checking download status (attempt ${entry.statusCheckFailures+1})...`;
+        }
+        
         const response = await fetch(`/api/prgs/${entry.prgFile}`);
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+        
+        // Reset failure counter on success
+        entry.statusCheckFailures = 0;
+        
         const data = await response.json();
 
         if (data.type) {
@@ -286,10 +312,18 @@ class DownloadQueue {
         }
       } catch (error) {
         console.error('Status check failed:', error);
-        this.handleTerminalState(entry, queueId, { 
-          status: 'error', 
-          message: 'Status check error' 
-        });
+        
+        // Increment failure counter
+        entry.statusCheckFailures = (entry.statusCheckFailures || 0) + 1;
+        
+        // Only show error after multiple consecutive failures
+        if (entry.statusCheckFailures >= MAX_STATUS_CHECK_FAILURES) {
+          this.handleTerminalState(entry, queueId, { 
+            status: 'error', 
+            message: 'Status check error: ' + error.message,
+            can_retry: !!entry.requestUrl
+          });
+        }
       }
       this.updateQueueOrder();
     }, 2000);
@@ -520,10 +554,8 @@ class DownloadQueue {
         // No items in container, append all visible entries
         container.innerHTML = ''; // Clear any empty state
         visibleEntries.forEach(entry => {
-          // Start monitoring if needed
-          if (!entry.intervalId) {
-            this.startEntryMonitoring(entry.uniqueId);
-          }
+          // We no longer automatically start monitoring here
+          // Monitoring is now explicitly started by the methods that create downloads
           container.appendChild(entry.element);
         });
       } else {
@@ -541,10 +573,7 @@ class DownloadQueue {
         
         // Add visible entries in correct order
         visibleEntries.forEach(entry => {
-          // Start monitoring if needed
-          if (!entry.intervalId) {
-            this.startEntryMonitoring(entry.uniqueId);
-          }
+          // We no longer automatically start monitoring here
           container.appendChild(entry.element);
           
           // Mark the entry as not new anymore
@@ -553,14 +582,9 @@ class DownloadQueue {
       }
     }
     
-    // Stop monitoring entries that are no longer visible
-    entries.slice(this.visibleCount).forEach(entry => {
-      if (entry.intervalId) {
-        clearInterval(entry.intervalId);
-        entry.intervalId = null;
-      }
-    });
-
+    // We no longer start or stop monitoring based on visibility changes here
+    // This allows the explicit monitoring control from the download methods
+    
     // Update footer
     footer.innerHTML = '';
     if (entries.length > this.visibleCount) {
@@ -917,10 +941,23 @@ class DownloadQueue {
         entry.hasEnded = false;
         entry.lastUpdated = Date.now();
         entry.retryCount = (entry.retryCount || 0) + 1;
+        entry.statusCheckFailures = 0; // Reset failure counter
         logEl.textContent = 'Retry initiated...';
         
-        // Start monitoring the new PRG file
-        this.startEntryMonitoring(queueId);
+        // Verify the PRG file exists before starting monitoring
+        try {
+          const verifyResponse = await fetch(`/api/prgs/${retryData.prg_file}`);
+          if (verifyResponse.ok) {
+            // Start monitoring the new PRG file
+            this.startEntryMonitoring(queueId);
+          } else {
+            // If verification fails, wait a moment and then start monitoring anyway
+            setTimeout(() => this.startEntryMonitoring(queueId), 2000);
+          }
+        } catch (verifyError) {
+          // If verification fails, wait a moment and then start monitoring anyway
+          setTimeout(() => this.startEntryMonitoring(queueId), 2000);
+        }
       } else {
         logElement.textContent = 'Retry failed: invalid response from server';
       }
@@ -940,10 +977,34 @@ class DownloadQueue {
                   (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
     
     try {
+      // Show a loading indicator
+      if (document.getElementById('queueIcon')) {
+        document.getElementById('queueIcon').classList.add('queue-icon-active');
+      }
+      
+      // First create the queue entry with a preparation message
+      const tempItem = {...item, name: item.name || 'Preparing...'};
       const response = await fetch(apiUrl);
+      
       if (!response.ok) throw new Error('Network error');
       const data = await response.json();
-      this.addDownload(item, 'track', data.prg_file, apiUrl);
+      
+      // Add the download to the queue but don't start monitoring yet
+      const queueId = this.addDownload(item, 'track', data.prg_file, apiUrl, false);
+      
+      // Ensure the PRG file exists and has initial data by making a status check
+      try {
+        const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+        if (statusResponse.ok) {
+          // Only start monitoring after confirming the PRG file exists
+          const entry = this.downloadQueue[queueId];
+          if (entry && this.isEntryVisible(queueId)) {
+            this.startEntryMonitoring(queueId);
+          }
+        }
+      } catch (statusError) {
+        console.log('Initial status check pending, will retry on next interval');
+      }
     } catch (error) {
       this.dispatchEvent('downloadError', { error, item });
       throw error;
@@ -960,10 +1021,31 @@ class DownloadQueue {
                   (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
     
     try {
+      // Show a loading indicator
+      if (document.getElementById('queueIcon')) {
+        document.getElementById('queueIcon').classList.add('queue-icon-active');
+      }
+      
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Network error');
       const data = await response.json();
-      this.addDownload(item, 'playlist', data.prg_file, apiUrl);
+      
+      // Add the download to the queue but don't start monitoring yet
+      const queueId = this.addDownload(item, 'playlist', data.prg_file, apiUrl, false);
+      
+      // Ensure the PRG file exists and has initial data by making a status check
+      try {
+        const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+        if (statusResponse.ok) {
+          // Only start monitoring after confirming the PRG file exists
+          const entry = this.downloadQueue[queueId];
+          if (entry && this.isEntryVisible(queueId)) {
+            this.startEntryMonitoring(queueId);
+          }
+        }
+      } catch (statusError) {
+        console.log('Initial status check pending, will retry on next interval');
+      }
     } catch (error) {
       this.dispatchEvent('downloadError', { error, item });
       throw error;
@@ -981,15 +1063,41 @@ class DownloadQueue {
                   (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
     
     try {
+      // Show a loading indicator
+      if (document.getElementById('queueIcon')) {
+        document.getElementById('queueIcon').classList.add('queue-icon-active');
+      }
+      
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Network error');
       const data = await response.json();
+      
+      // Track all queue IDs created
+      const queueIds = [];
+      
       if (data.album_prg_files && Array.isArray(data.album_prg_files)) {
         data.album_prg_files.forEach(prgFile => {
-          this.addDownload(item, 'album', prgFile, apiUrl);
+          const queueId = this.addDownload(item, 'album', prgFile, apiUrl, false);
+          queueIds.push({queueId, prgFile});
         });
       } else if (data.prg_file) {
-        this.addDownload(item, 'album', data.prg_file, apiUrl);
+        const queueId = this.addDownload(item, 'album', data.prg_file, apiUrl, false);
+        queueIds.push({queueId, prgFile: data.prg_file});
+      }
+      
+      // Start monitoring each entry after confirming PRG files exist
+      for (const {queueId, prgFile} of queueIds) {
+        try {
+          const statusResponse = await fetch(`/api/prgs/${prgFile}`);
+          if (statusResponse.ok) {
+            const entry = this.downloadQueue[queueId];
+            if (entry && this.isEntryVisible(queueId)) {
+              this.startEntryMonitoring(queueId);
+            }
+          }
+        } catch (statusError) {
+          console.log(`Initial status check pending for ${prgFile}, will retry on next interval`);
+        }
       }
     } catch (error) {
       this.dispatchEvent('downloadError', { error, item });
@@ -1007,10 +1115,31 @@ class DownloadQueue {
                   (item.artist ? `&artist=${encodeURIComponent(item.artist)}` : '');
     
     try {
+      // Show a loading indicator
+      if (document.getElementById('queueIcon')) {
+        document.getElementById('queueIcon').classList.add('queue-icon-active');
+      }
+      
       const response = await fetch(apiUrl);
       if (!response.ok) throw new Error('Network error');
       const data = await response.json();
-      this.addDownload(item, 'album', data.prg_file, apiUrl);
+      
+      // Add the download to the queue but don't start monitoring yet
+      const queueId = this.addDownload(item, 'album', data.prg_file, apiUrl, false);
+      
+      // Ensure the PRG file exists and has initial data by making a status check
+      try {
+        const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
+        if (statusResponse.ok) {
+          // Only start monitoring after confirming the PRG file exists
+          const entry = this.downloadQueue[queueId];
+          if (entry && this.isEntryVisible(queueId)) {
+            this.startEntryMonitoring(queueId);
+          }
+        }
+      } catch (statusError) {
+        console.log('Initial status check pending, will retry on next interval');
+      }
     } catch (error) {
       this.dispatchEvent('downloadError', { error, item });
       throw error;
