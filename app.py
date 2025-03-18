@@ -9,38 +9,72 @@ from routes.prgs import prgs_bp
 from routes.config import config_bp
 from routes.artist import artist_bp
 import logging
+import logging.handlers
 import time
 from pathlib import Path
 import os
-import argparse
+import atexit
+import sys
 
-# Import Celery configuration
-try:
-    from routes.utils.celery_tasks import celery_app
-    has_celery = True
-except ImportError:
-    has_celery = False
+# Import Celery configuration and manager
+from routes.utils.celery_tasks import celery_app
+from routes.utils.celery_manager import celery_manager
+
+# Configure application-wide logging
+def setup_logging():
+    """Configure application-wide logging with rotation"""
+    # Create logs directory if it doesn't exist
+    logs_dir = Path('logs')
+    logs_dir.mkdir(exist_ok=True)
+    
+    # Set up log file paths
+    main_log = logs_dir / 'spotizerr.log'
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    
+    # Log formatting
+    log_format = logging.Formatter(
+        '%(asctime)s [%(processName)s:%(threadName)s] [%(name)s] [%(levelname)s] - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # File handler with rotation (10 MB max, keep 5 backups)
+    file_handler = logging.handlers.RotatingFileHandler(
+        main_log, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8'
+    )
+    file_handler.setFormatter(log_format)
+    file_handler.setLevel(logging.INFO)
+    
+    # Console handler for stderr
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(log_format)
+    console_handler.setLevel(logging.INFO)
+    
+    # Add handlers to root logger
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    # Set up specific loggers
+    for logger_name in ['werkzeug', 'celery', 'routes', 'flask', 'waitress']:
+        module_logger = logging.getLogger(logger_name)
+        module_logger.setLevel(logging.INFO)
+        # Handlers are inherited from root logger
+    
+    # Enable propagation for all loggers
+    logging.getLogger('celery').propagate = True
+    
+    # Notify successful setup
+    root_logger.info("Logging system initialized")
+    
+    # Return the main file handler for permissions adjustment
+    return file_handler
 
 def create_app():
     app = Flask(__name__)
     
-    # Configure basic logging
-    log_file = 'flask_server.log'
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(name)s %(threadName)s : %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-    
-    os.chmod(log_file, 0o666)
-
-    # Get Flask's logger
-    logger = logging.getLogger('werkzeug')
-    logger.setLevel(logging.INFO)
-
+    # Set up CORS
     CORS(app)
 
     # Register blueprints
@@ -53,7 +87,6 @@ def create_app():
     app.register_blueprint(artist_bp, url_prefix='/api/artist')
     app.register_blueprint(prgs_bp, url_prefix='/api/prgs')  
     
-
     # Serve frontend
     @app.route('/')
     def serve_index():
@@ -98,27 +131,48 @@ def create_app():
     @app.before_request
     def log_request():
         request.start_time = time.time()
-        logger.info(f"Request: {request.method} {request.path}")
+        app.logger.debug(f"Request: {request.method} {request.path}")
 
     @app.after_request
     def log_response(response):
-        duration = round((time.time() - request.start_time) * 1000, 2)
-        logger.info(f"Response: {response.status} | Duration: {duration}ms")
+        if hasattr(request, 'start_time'):
+            duration = round((time.time() - request.start_time) * 1000, 2)
+            app.logger.debug(f"Response: {response.status} | Duration: {duration}ms")
         return response
 
     # Error logging
     @app.errorhandler(Exception)
     def handle_exception(e):
-        logger.error(f"Server error: {str(e)}", exc_info=True)
+        app.logger.error(f"Server error: {str(e)}", exc_info=True)
         return "Internal Server Error", 500
 
     return app
 
-if __name__ == '__main__':
-    # Configure waitress logger
-    logger = logging.getLogger('waitress')
-    logger.setLevel(logging.INFO)
+def start_celery_workers():
+    """Start Celery workers with dynamic configuration"""
+    logging.info("Starting Celery workers with dynamic configuration")
+    celery_manager.start()
     
+    # Register shutdown handler
+    atexit.register(celery_manager.stop)
+
+if __name__ == '__main__':
+    # Configure application logging
+    log_handler = setup_logging()
+    
+    # Set file permissions for log files if needed
+    try:
+        os.chmod(log_handler.baseFilename, 0o666)
+    except:
+        logging.warning("Could not set permissions on log file")
+    
+    # Log application startup
+    logging.info("=== Spotizerr Application Starting ===")
+    
+    # Start Celery workers
+    start_celery_workers()
+    
+    # Create and start Flask app
     app = create_app()
     logging.info("Starting Flask server on port 7171")
     from waitress import serve

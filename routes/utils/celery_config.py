@@ -1,53 +1,75 @@
 import os
 import json
+import logging
+from pathlib import Path
 
-# Load configuration from ./config/main.json and get the max_concurrent_dl value.
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Redis configuration
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = os.getenv('REDIS_PORT', '6379')
+REDIS_DB = os.getenv('REDIS_DB', '0')
+REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+REDIS_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+
+# Config path
 CONFIG_PATH = './config/main.json'
-
-try:
-    with open(CONFIG_PATH, 'r') as f:
-        config_data = json.load(f)
-    MAX_CONCURRENT_DL = config_data.get("maxConcurrentDownloads", 3)
-    MAX_RETRIES = config_data.get("maxRetries", 3)
-    RETRY_DELAY = config_data.get("retryDelaySeconds", 5)
-    RETRY_DELAY_INCREASE = config_data.get("retry_delay_increase", 5)
-except Exception as e:
-    print(f"Error loading configuration: {e}")
-    # Fallback to default values if there's an error reading the config.
-    MAX_CONCURRENT_DL = 3
-    MAX_RETRIES = 3
-    RETRY_DELAY = 5
-    RETRY_DELAY_INCREASE = 5
 
 def get_config_params():
     """
-    Get common download parameters from the config file.
-    This centralizes parameter retrieval and reduces redundancy in API calls.
+    Get configuration parameters from the config file.
     
     Returns:
-        dict: A dictionary containing common parameters from config
+        dict: A dictionary containing configuration parameters
     """
     try:
+        if not Path(CONFIG_PATH).exists():
+            return {
+                'service': 'spotify',
+                'spotify': '',
+                'deezer': '',
+                'fallback': False,
+                'spotifyQuality': 'NORMAL',
+                'deezerQuality': 'MP3_128',
+                'realTime': False,
+                'customDirFormat': '%ar_album%/%album%',
+                'customTrackFormat': '%tracknum%. %music%',
+                'tracknum_padding': True,
+                'maxConcurrentDownloads': 3,
+                'maxRetries': 3,
+                'retryDelaySeconds': 5,
+                'retry_delay_increase': 5
+            }
+            
         with open(CONFIG_PATH, 'r') as f:
             config = json.load(f)
             
-        return {
-            'service': config.get('service', 'spotify'),
-            'spotify': config.get('spotify', ''),
-            'deezer': config.get('deezer', ''),
-            'fallback': config.get('fallback', False),
-            'spotifyQuality': config.get('spotifyQuality', 'NORMAL'),
-            'deezerQuality': config.get('deezerQuality', 'MP3_128'),
-            'realTime': config.get('realTime', False),
-            'customDirFormat': config.get('customDirFormat', '%ar_album%/%album%'),
-            'customTrackFormat': config.get('customTrackFormat', '%tracknum%. %music%'),
-            'tracknum_padding': config.get('tracknum_padding', True),
-            'maxRetries': config.get('maxRetries', 3),
-            'retryDelaySeconds': config.get('retryDelaySeconds', 5),
-            'retry_delay_increase': config.get('retry_delay_increase', 5)
+        # Set defaults for missing values
+        defaults = {
+            'service': 'spotify',
+            'spotify': '',
+            'deezer': '',
+            'fallback': False,
+            'spotifyQuality': 'NORMAL',
+            'deezerQuality': 'MP3_128',
+            'realTime': False,
+            'customDirFormat': '%ar_album%/%album%',
+            'customTrackFormat': '%tracknum%. %music%',
+            'tracknum_padding': True,
+            'maxConcurrentDownloads': 3,
+            'maxRetries': 3,
+            'retryDelaySeconds': 5,
+            'retry_delay_increase': 5
         }
+        
+        for key, value in defaults.items():
+            if key not in config:
+                config[key] = value
+                
+        return config
     except Exception as e:
-        print(f"Error reading config for parameters: {e}")
+        logger.error(f"Error reading config: {e}")
         # Return defaults if config read fails
         return {
             'service': 'spotify',
@@ -60,14 +82,18 @@ def get_config_params():
             'customDirFormat': '%ar_album%/%album%',
             'customTrackFormat': '%tracknum%. %music%',
             'tracknum_padding': True,
+            'maxConcurrentDownloads': 3,
             'maxRetries': 3,
             'retryDelaySeconds': 5,
             'retry_delay_increase': 5
         }
 
-# Celery configuration
-REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-REDIS_BACKEND = os.environ.get('REDIS_BACKEND', 'redis://localhost:6379/0')
+# Load configuration values we need for Celery
+config = get_config_params()
+MAX_CONCURRENT_DL = config.get('maxConcurrentDownloads', 3)
+MAX_RETRIES = config.get('maxRetries', 3)
+RETRY_DELAY = config.get('retryDelaySeconds', 5)
+RETRY_DELAY_INCREASE = config.get('retry_delay_increase', 5)
 
 # Define task queues
 task_queues = {

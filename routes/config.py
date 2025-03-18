@@ -2,9 +2,24 @@ from flask import Blueprint, jsonify, request
 import json
 from pathlib import Path
 import logging
+import threading
+import time
 
 config_bp = Blueprint('config_bp', __name__)
 CONFIG_PATH = Path('./config/main.json')
+
+# Flag for config change notifications
+config_changed = False
+last_config = {}
+
+# Define parameters that should trigger notification when changed
+NOTIFY_PARAMETERS = [
+    'maxConcurrentDownloads',
+    'service',
+    'fallback',
+    'spotifyQuality',
+    'deezerQuality'
+]
 
 def get_config():
     try:
@@ -18,6 +33,34 @@ def get_config():
     except Exception as e:
         logging.error(f"Error reading config: {str(e)}")
         return None
+
+def save_config(config_data):
+    """Save config and track changes to important parameters"""
+    global config_changed, last_config
+    
+    try:
+        # Load current config for comparison
+        current_config = get_config() or {}
+        
+        # Check if any notify parameters changed
+        for param in NOTIFY_PARAMETERS:
+            if param in config_data:
+                if param not in current_config or config_data[param] != current_config.get(param):
+                    config_changed = True
+                    logging.info(f"Config parameter '{param}' changed from '{current_config.get(param)}' to '{config_data[param]}'")
+        
+        # Save last known config
+        last_config = config_data.copy()
+        
+        # Write the config file
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump(config_data, f, indent=2)
+            
+        return True
+    except Exception as e:
+        logging.error(f"Error saving config: {str(e)}")
+        return False
 
 @config_bp.route('/config', methods=['GET'])
 def handle_config():
@@ -58,9 +101,8 @@ def update_config():
         if not isinstance(new_config, dict):
             return jsonify({"error": "Invalid config format"}), 400
 
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(CONFIG_PATH, 'w') as f:
-            json.dump(new_config, f, indent=2)
+        if not save_config(new_config):
+            return jsonify({"error": "Failed to save config"}), 500
             
         return jsonify({"message": "Config updated successfully"})
     except json.JSONDecodeError:
@@ -68,3 +110,23 @@ def update_config():
     except Exception as e:
         logging.error(f"Error updating config: {str(e)}")
         return jsonify({"error": "Failed to update config"}), 500
+
+@config_bp.route('/config/check', methods=['GET'])
+def check_config_changes():
+    """
+    Check if config has changed since last check
+    Returns: Status of config changes
+    """
+    global config_changed
+    
+    # Get current state
+    has_changed = config_changed
+    
+    # Reset flag after checking
+    if has_changed:
+        config_changed = False
+    
+    return jsonify({
+        "changed": has_changed,
+        "last_config": last_config
+    })

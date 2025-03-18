@@ -5,14 +5,14 @@ import logging
 import traceback
 from datetime import datetime
 from celery import Celery, Task, states
-from celery.signals import task_prerun, task_postrun, task_failure, worker_ready
+from celery.signals import task_prerun, task_postrun, task_failure, worker_ready, worker_init, setup_logging
 from celery.exceptions import Retry
-
-# Setup Redis and Celery
-from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, get_config_params
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Setup Redis and Celery
+from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, get_config_params
 
 # Initialize Celery app
 celery_app = Celery('download_tasks',
@@ -34,6 +34,25 @@ class ProgressState:
     ERROR = "error"
     RETRYING = "retrying"
     CANCELLED = "cancel"
+
+# Reuse the application's logging configuration for Celery workers
+@setup_logging.connect
+def setup_celery_logging(**kwargs):
+    """
+    This handler ensures Celery uses our application logging settings
+    instead of its own. Prevents duplicate log configurations.
+    """
+    # Using the root logger's handlers and level preserves our config
+    return logging.getLogger()
+
+# The initialization of a worker will log the worker configuration
+@worker_init.connect
+def worker_init_handler(**kwargs):
+    """Log when a worker initializes with its configuration details"""
+    config = get_config_params()
+    logger.info(f"Celery worker initialized with concurrency {config.get('maxConcurrentDownloads', 3)}")
+    logger.info(f"Worker config: spotifyQuality={config.get('spotifyQuality')}, deezerQuality={config.get('deezerQuality')}")
+    logger.debug("Worker Redis connection: " + REDIS_URL)
 
 def store_task_status(task_id, status_data):
     """Store task status information in Redis"""
@@ -102,6 +121,7 @@ def cancel_task(task_id):
         # Try to revoke the Celery task if it hasn't started yet
         celery_app.control.revoke(task_id, terminate=True, signal='SIGTERM')
         
+        logger.info(f"Task {task_id} cancelled by user")
         return {"status": "cancelled", "task_id": task_id}
     except Exception as e:
         logger.error(f"Error cancelling task {task_id}: {e}")
@@ -209,6 +229,8 @@ def retry_task(task_id):
             download_type = task_info.get("download_type", "unknown")
             task = None
             
+            logger.info(f"Retrying task {task_id} as {new_task_id} (retry {retry_count + 1}/{max_retries})")
+            
             if download_type == "track":
                 task = download_track.apply_async(
                     kwargs=task_info,
@@ -228,6 +250,7 @@ def retry_task(task_id):
                     queue='downloads'
                 )
             else:
+                logger.error(f"Unknown download type for retry: {download_type}")
                 return {
                     "status": "error",
                     "message": f"Unknown download type: {download_type}"
@@ -303,8 +326,22 @@ class ProgressTrackingTask(Task):
         # Store the progress update in Redis
         store_task_status(task_id, progress_data)
         
-        # Log the progress update
-        logger.info(f"Task {task_id} progress: {progress_data}")
+        # Log the progress update with appropriate level
+        message = progress_data.get("message", "Progress update")
+        
+        if status == "processing":
+            progress = progress_data.get("progress", 0)
+            if progress > 0:
+                logger.debug(f"Task {task_id} progress: {progress}% - {message}")
+            else:
+                logger.info(f"Task {task_id} processing: {message}")
+        elif status == "error":
+            error_message = progress_data.get("error", message)
+            logger.error(f"Task {task_id} error: {error_message}")
+        elif status == "complete":
+            logger.info(f"Task {task_id} completed: {message}")
+        else:
+            logger.info(f"Task {task_id} {status}: {message}")
 
 # Celery signal handlers
 @task_prerun.connect
@@ -378,21 +415,24 @@ def task_failure_handler(task_id=None, exception=None, traceback=None, *args, **
         can_retry = retry_count < max_retries
         
         # Update task status to error
+        error_message = str(exception)
         store_task_status(task_id, {
             "status": ProgressState.ERROR,
             "timestamp": time.time(),
             "type": task_info.get("type", "unknown"),
             "name": task_info.get("name", "Unknown"),
             "artist": task_info.get("artist", ""),
-            "error": str(exception),
+            "error": error_message,
             "traceback": str(traceback),
             "can_retry": can_retry,
             "retry_count": retry_count,
             "max_retries": max_retries,
-            "message": f"Error: {str(exception)}"
+            "message": f"Error: {error_message}"
         })
         
-        logger.error(f"Task {task_id} failed: {str(exception)}")
+        logger.error(f"Task {task_id} failed: {error_message}")
+        if can_retry:
+            logger.info(f"Task {task_id} can be retried ({retry_count}/{max_retries})")
     except Exception as e:
         logger.error(f"Error in task_failure_handler: {e}")
 
@@ -468,6 +508,9 @@ def download_track(self, **task_data):
         custom_dir_format = task_data.get("custom_dir_format", config_params.get("customDirFormat", "%ar_album%/%album%"))
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
+        
+        # Log task parameters for debugging
+        logger.debug(f"Track download parameters: service={service}, quality={quality}, real_time={real_time}")
         
         # Execute the download function with progress callback
         download_track_func(
@@ -550,6 +593,9 @@ def download_album(self, **task_data):
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
         
+        # Log task parameters for debugging
+        logger.debug(f"Album download parameters: service={service}, quality={quality}, real_time={real_time}")
+        
         # Execute the download function with progress callback
         download_album_func(
             service=service,
@@ -630,6 +676,9 @@ def download_playlist(self, **task_data):
         custom_dir_format = task_data.get("custom_dir_format", config_params.get("customDirFormat", "%ar_album%/%album%"))
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
+        
+        # Log task parameters for debugging
+        logger.debug(f"Playlist download parameters: service={service}, quality={quality}, real_time={real_time}")
         
         # Execute the download function with progress callback
         download_playlist_func(
