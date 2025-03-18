@@ -6,10 +6,40 @@ if [ -n "${UMASK}" ]; then
     umask "${UMASK}"
 fi
 
+# Function to start the application
+start_application() {
+    # Start Flask app in the background
+    echo "Starting Flask application..."
+    python app.py &
+
+    # Wait a moment for Flask to initialize
+    sleep 2
+
+    # Start Celery worker
+    echo "Starting Celery worker..."
+    celery -A routes.utils.celery_tasks.celery_app worker --loglevel=info --concurrency=${MAX_CONCURRENT_DL:-3} -Q downloads &
+
+    # Keep the script running
+    wait
+}
+
+# Check if custom command was provided
+if [ $# -gt 0 ]; then
+    # Custom command provided, use it instead of default app startup
+    RUN_COMMAND="$@"
+else
+    # No custom command, use our default application startup
+    RUN_COMMAND="start_application"
+fi
+
 # Check if both PUID and PGID are not set
 if [ -z "${PUID}" ] && [ -z "${PGID}" ]; then
     # Run as root directly
-    exec "$@"
+    if [ $# -gt 0 ]; then
+        exec "$@"
+    else
+        start_application
+    fi
 else
     # Verify both PUID and PGID are set
     if [ -z "${PUID}" ] || [ -z "${PGID}" ]; then
@@ -19,7 +49,11 @@ else
 
     # Check for root user request
     if [ "${PUID}" -eq 0 ] && [ "${PGID}" -eq 0 ]; then
-        exec "$@"
+        if [ $# -gt 0 ]; then
+            exec "$@"
+        else
+            start_application
+        fi
     else
         # Check if the group with the specified GID already exists
         if getent group "${PGID}" >/dev/null; then
@@ -45,6 +79,10 @@ else
         chown -R "${USER_NAME}:${GROUP_NAME}" /app || true
 
         # Run as specified user
-        exec gosu "${USER_NAME}" "$@"
+        if [ $# -gt 0 ]; then
+            exec gosu "${USER_NAME}" "$@"
+        else
+            exec gosu "${USER_NAME}" bash -c "$(declare -f start_application); start_application"
+        fi
     fi
 fi
