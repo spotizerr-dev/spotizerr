@@ -261,6 +261,50 @@ body {
   transition: transform 0.3s ease;
 }
 
+/* Service selection highlight */
+#defaultServiceSelect {
+  border-left: 3px solid #1db954;
+  box-shadow: 0 0 8px rgba(29, 185, 84, 0.1);
+  transition: all 0.3s ease;
+}
+
+#defaultServiceSelect:focus {
+  border-color: #1db954;
+  box-shadow: 0 0 12px rgba(29, 185, 84, 0.2);
+}
+
+/* Highlighted service-specific options */
+.config-item.highlighted-option {
+  background-color: rgba(29, 185, 84, 0.05);
+  border-radius: 8px;
+  padding: 10px;
+  margin-left: -10px;
+  margin-right: -10px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.config-item.highlighted-option::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background-color: #1db954;
+}
+
+.config-item.highlighted-option label {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Add subtle animation on hover */
+.config-item:hover #defaultServiceSelect {
+  box-shadow: 0 0 12px rgba(29, 185, 84, 0.15);
+}
+
 .account-config:hover {
   transform: translateY(-2px);
 }

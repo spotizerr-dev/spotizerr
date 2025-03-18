@@ -1,18 +1,22 @@
 import json
 import traceback
 from pathlib import Path
+import os
+import logging
+from routes.utils.celery_queue_manager import download_queue_manager, get_config_params
 
 from deezspot.easy_spoty import Spo
 from deezspot.libutils.utils import get_ids, link_is_valid
-from routes.utils.queue import download_queue_manager  # Global download queue manager
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 def log_json(message_dict):
     """Helper function to output a JSON-formatted log message."""
     print(json.dumps(message_dict))
 
 
-def get_artist_discography(url, main, album_type='album,single,compilation,appears_on'):
+def get_artist_discography(url, main, album_type='album,single,compilation,appears_on', progress_callback=None):
     """
     Validate the URL, extract the artist ID, and retrieve the discography.
     """
@@ -59,94 +63,155 @@ def get_artist_discography(url, main, album_type='album,single,compilation,appea
         raise
 
 
-def download_artist_albums(service, url, main, fallback=None, quality=None,
-                           fall_quality=None, real_time=False,
-                           album_type='album,single,compilation,appears_on',
-                           custom_dir_format="%ar_album%/%album%/%copyright%",
-                           custom_track_format="%tracknum%. %music% - %artist%",
-                           pad_tracks=True,
-                           initial_retry_delay=5,
-                           retry_delay_increase=5,
-                           max_retries=3):
+def download_artist_albums(service, url, album_type="album,single,compilation", request_args=None, progress_callback=None):
     """
-    Retrieves the artist discography and, for each album with a valid Spotify URL,
-    creates a download task that is queued via the global download queue. The queue
-    creates a PRG file for each album download. This function returns a list of those
-    album PRG filenames.
+    Download albums from an artist.
+    
+    Args:
+        service (str): 'spotify' or 'deezer'
+        url (str): URL of the artist
+        album_type (str): Comma-separated list of album types to download (album,single,compilation,appears_on)
+        request_args (dict): Original request arguments for additional parameters
+        progress_callback (callable): Optional callback function for progress reporting
+        
+    Returns:
+        list: List of task IDs for the enqueued album downloads
     """
-    try:
-        discography = get_artist_discography(url, main, album_type=album_type)
-    except Exception as e:
-        log_json({"status": "error", "message": f"Error retrieving artist discography: {e}"})
-        raise
-
-    albums = discography.get('items', [])
-    if not albums:
-        log_json({"status": "done", "message": "No albums found for the artist."})
-        return []
-
-    prg_files = []
-
-    for album in albums:
-        try:
-            album_url = album.get('external_urls', {}).get('spotify')
-            if not album_url:
-                log_json({
-                    "status": "warning",
-                    "message": f"No Spotify URL found for album '{album.get('name', 'Unknown Album')}'; skipping."
+    logger.info(f"Starting artist albums download: {url} (service: {service}, album_types: {album_type})")
+    
+    if request_args is None:
+        request_args = {}
+    
+    # Get config parameters
+    config_params = get_config_params()
+    
+    # Get the artist information first
+    if service == 'spotify':
+        from deezspot.spotloader import SpoLogin
+        
+        # Get credentials
+        spotify_profile = request_args.get('main', config_params['spotify'])
+        credentials_path = os.path.abspath(os.path.join('./creds/spotify', spotify_profile, 'credentials.json'))
+        
+        # Validate credentials
+        if not os.path.isfile(credentials_path):
+            raise ValueError(f"Invalid Spotify credentials path: {credentials_path}")
+        
+        # Load Spotify client credentials if available
+        spotify_client_id = None
+        spotify_client_secret = None
+        search_creds_path = Path(f'./creds/spotify/{spotify_profile}/search.json')
+        if search_creds_path.exists():
+            try:
+                with open(search_creds_path, 'r') as f:
+                    search_creds = json.load(f)
+                    spotify_client_id = search_creds.get('client_id')
+                    spotify_client_secret = search_creds.get('client_secret')
+            except Exception as e:
+                logger.error(f"Error loading Spotify search credentials: {e}")
+        
+        # Initialize the Spotify client
+        spo = SpoLogin(
+            credentials_path=credentials_path,
+            spotify_client_id=spotify_client_id,
+            spotify_client_secret=spotify_client_secret,
+            progress_callback=progress_callback
+        )
+        
+        # Get artist information
+        artist_info = spo.get_artist_info(url)
+        artist_name = artist_info['name']
+        artist_id = artist_info['id']
+        
+        # Get the list of albums
+        album_types = album_type.split(',')
+        albums = []
+        
+        for album_type_item in album_types:
+            # Fetch albums of the specified type
+            albums_of_type = spo.get_albums_by_artist(artist_id, album_type_item.strip())
+            for album in albums_of_type:
+                albums.append({
+                    'name': album['name'],
+                    'url': album['external_urls']['spotify'],
+                    'type': 'album',
+                    'artist': artist_name
                 })
-                continue
-
-            album_name = album.get('name', 'Unknown Album')
-            artists = album.get('artists', [])
-            # Extract artist names or use "Unknown" as a fallback.
-            artists = [artist.get("name", "Unknown") for artist in artists]
-
-            # Prepare the download task dictionary.
-            task = {
-                "download_type": "album",
-                "service": service,
-                "url": album_url,
-                "main": main,
-                "fallback": fallback,
-                "quality": quality,
-                "fall_quality": fall_quality,
-                "real_time": real_time,
-                "custom_dir_format": custom_dir_format,
-                "custom_track_format": custom_track_format,
-                "pad_tracks": pad_tracks,
-                "initial_retry_delay": initial_retry_delay,
-                "retry_delay_increase": retry_delay_increase,
-                "max_retries": max_retries,
-                # Extra info for logging in the PRG file.
-                "name": album_name,
-                "type": "album",
-                "artist": artists,
-                "orig_request": {
-                    "type": "album",
-                    "name": album_name,
-                    "artist": artists
-                }
-            }
-
-            # Add the task to the global download queue.
-            # The queue manager creates the album's PRG file and returns its filename.
-            prg_filename = download_queue_manager.add_task(task)
-            prg_files.append(prg_filename)
-
-            log_json({
-                "status": "queued",
-                "album": album_name,
-                "artist": artists,
-                "prg_file": prg_filename,
-                "message": "Album queued for download."
+    
+    elif service == 'deezer':
+        from deezspot.deezloader import DeeLogin
+        
+        # Get credentials
+        deezer_profile = request_args.get('main', config_params['deezer'])
+        credentials_path = os.path.abspath(os.path.join('./creds/deezer', deezer_profile, 'credentials.json'))
+        
+        # Validate credentials
+        if not os.path.isfile(credentials_path):
+            raise ValueError(f"Invalid Deezer credentials path: {credentials_path}")
+        
+        # For Deezer, we need to extract the ARL
+        with open(credentials_path, 'r') as f:
+            credentials = json.load(f)
+            arl = credentials.get('arl')
+        
+        if not arl:
+            raise ValueError("No ARL found in Deezer credentials")
+        
+        # Load Spotify client credentials if available for search purposes
+        spotify_client_id = None
+        spotify_client_secret = None
+        search_creds_path = Path(f'./creds/spotify/{deezer_profile}/search.json')
+        if search_creds_path.exists():
+            try:
+                with open(search_creds_path, 'r') as f:
+                    search_creds = json.load(f)
+                    spotify_client_id = search_creds.get('client_id')
+                    spotify_client_secret = search_creds.get('client_secret')
+            except Exception as e:
+                logger.error(f"Error loading Spotify search credentials: {e}")
+        
+        # Initialize the Deezer client
+        dee = DeeLogin(
+            arl=arl,
+            spotify_client_id=spotify_client_id,
+            spotify_client_secret=spotify_client_secret,
+            progress_callback=progress_callback
+        )
+        
+        # Get artist information
+        artist_info = dee.get_artist_info(url)
+        artist_name = artist_info['name']
+        
+        # Get the list of albums (Deezer doesn't distinguish types like Spotify)
+        albums_result = dee.get_artist_albums(url)
+        albums = []
+        
+        for album in albums_result:
+            albums.append({
+                'name': album['title'],
+                'url': f"https://www.deezer.com/album/{album['id']}",
+                'type': 'album',
+                'artist': artist_name
             })
-
-        except Exception as album_error:
-            log_json({
-                "status": "error",
-                "message": f"Error processing album '{album.get('name', 'Unknown')}': {album_error}"
-            })
-            traceback.print_exc()
-
-    return prg_files
+    
+    else:
+        raise ValueError(f"Unsupported service: {service}")
+    
+    # Queue the album downloads
+    album_task_ids = []
+    
+    for album in albums:
+        # Create a task for each album
+        task_id = download_queue_manager.add_task({
+            "download_type": "album",
+            "service": service,
+            "url": album['url'],
+            "name": album['name'],
+            "artist": album['artist'],
+            "orig_request": request_args.copy()  # Pass along original request args
+        })
+        
+        album_task_ids.append(task_id)
+        logger.info(f"Queued album: {album['name']} by {album['artist']} (task ID: {task_id})")
+    
+    return album_task_ids

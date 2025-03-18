@@ -30,6 +30,7 @@ def handle_config():
         
     # Set default values for any missing config options
     defaults = {
+        'service': 'spotify',  # Default service is Spotify
         'fallback': False,
         'spotifyQuality': 'NORMAL',
         'deezerQuality': 'MP3_128',

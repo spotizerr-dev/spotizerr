@@ -18,7 +18,8 @@ def download_playlist(
     pad_tracks=True,
     initial_retry_delay=5,
     retry_delay_increase=5,
-    max_retries=3
+    max_retries=3,
+    progress_callback=None
 ):
     try:
         # Load Spotify client credentials if available
@@ -51,7 +52,8 @@ def download_playlist(
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
                         spotify_client_id=spotify_client_id,
-                        spotify_client_secret=spotify_client_secret
+                        spotify_client_secret=spotify_client_secret,
+                        progress_callback=progress_callback
                     )
                     # Download using download_playlistspo; pass the custom formatting parameters.
                     dl.download_playlistspo(
@@ -92,7 +94,8 @@ def download_playlist(
                         spo = SpoLogin(
                             credentials_path=spo_creds_path,
                             spotify_client_id=fallback_client_id,
-                            spotify_client_secret=fallback_client_secret
+                            spotify_client_secret=fallback_client_secret,
+                            progress_callback=progress_callback
                         )
                         spo.download_playlist(
                             link_playlist=url,
@@ -126,7 +129,8 @@ def download_playlist(
                 spo = SpoLogin(
                     credentials_path=credentials_path,
                     spotify_client_id=spotify_client_id,
-                    spotify_client_secret=spotify_client_secret
+                    spotify_client_secret=spotify_client_secret,
+                    progress_callback=progress_callback
                 )
                 spo.download_playlist(
                     link_playlist=url,
@@ -156,7 +160,8 @@ def download_playlist(
             dl = DeeLogin(
                 arl=creds.get('arl', ''),
                 spotify_client_id=spotify_client_id,
-                spotify_client_secret=spotify_client_secret
+                spotify_client_secret=spotify_client_secret,
+                progress_callback=progress_callback
             )
             dl.download_playlistdee(
                 link_playlist=url,

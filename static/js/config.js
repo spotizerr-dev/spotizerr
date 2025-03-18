@@ -79,6 +79,10 @@ function setupEventListeners() {
   document.getElementById('credentialForm').addEventListener('submit', handleCredentialSubmit);
 
   // Config change listeners
+  document.getElementById('defaultServiceSelect').addEventListener('change', function() {
+    updateServiceSpecificOptions();
+    saveConfig();
+  });
   document.getElementById('fallbackToggle').addEventListener('change', saveConfig);
   document.getElementById('realTimeToggle').addEventListener('change', saveConfig);
   document.getElementById('spotifyQualitySelect').addEventListener('change', saveConfig);
@@ -103,6 +107,36 @@ function setupEventListeners() {
 
   // Max concurrent downloads change listener
   document.getElementById('maxConcurrentDownloads').addEventListener('change', saveConfig);
+}
+
+function updateServiceSpecificOptions() {
+  // Get the selected service
+  const selectedService = document.getElementById('defaultServiceSelect').value;
+  
+  // Get all service-specific sections
+  const spotifyOptions = document.querySelectorAll('.config-item.spotify-specific');
+  const deezerOptions = document.querySelectorAll('.config-item.deezer-specific');
+  
+  // Handle Spotify specific options
+  if (selectedService === 'spotify') {
+    // Highlight Spotify section
+    document.getElementById('spotifyQualitySelect').closest('.config-item').classList.add('highlighted-option');
+    document.getElementById('spotifyAccountSelect').closest('.config-item').classList.add('highlighted-option');
+    
+    // Remove highlight from Deezer
+    document.getElementById('deezerQualitySelect').closest('.config-item').classList.remove('highlighted-option');
+    document.getElementById('deezerAccountSelect').closest('.config-item').classList.remove('highlighted-option');
+  } 
+  // Handle Deezer specific options (for future use)
+  else if (selectedService === 'deezer') {
+    // Highlight Deezer section
+    document.getElementById('deezerQualitySelect').closest('.config-item').classList.add('highlighted-option');
+    document.getElementById('deezerAccountSelect').closest('.config-item').classList.add('highlighted-option');
+    
+    // Remove highlight from Spotify
+    document.getElementById('spotifyQualitySelect').closest('.config-item').classList.remove('highlighted-option');
+    document.getElementById('spotifyAccountSelect').closest('.config-item').classList.remove('highlighted-option');
+  }
 }
 
 async function updateAccountSelectors() {
@@ -561,6 +595,7 @@ function resetForm() {
 async function saveConfig() {
   // Read active account values directly from the DOM (or from the globals which are kept in sync)
   const config = {
+    service: document.getElementById('defaultServiceSelect').value,
     spotify: document.getElementById('spotifyAccountSelect').value,
     deezer: document.getElementById('deezerAccountSelect').value,
     fallback: document.getElementById('fallbackToggle').checked,
@@ -598,6 +633,12 @@ async function loadConfig() {
     if (!response.ok) throw new Error('Failed to load config');
 
     const savedConfig = await response.json();
+
+    // Set default service selection
+    document.getElementById('defaultServiceSelect').value = savedConfig.service || 'spotify';
+    
+    // Update the service-specific options based on selected service
+    updateServiceSpecificOptions();
 
     // Use the "spotify" and "deezer" properties from the API response to set the active accounts.
     activeSpotifyAccount = savedConfig.spotify || '';

@@ -18,7 +18,8 @@ def download_track(
     pad_tracks=True,
     initial_retry_delay=5,
     retry_delay_increase=5,
-    max_retries=3
+    max_retries=3,
+    progress_callback=None
 ):
     try:
         # Load Spotify client credentials if available
@@ -49,7 +50,8 @@ def download_track(
                     dl = DeeLogin(
                         arl=deezer_creds.get('arl', ''),
                         spotify_client_id=spotify_client_id,
-                        spotify_client_secret=spotify_client_secret
+                        spotify_client_secret=spotify_client_secret,
+                        progress_callback=progress_callback
                     )
                     dl.download_trackspo(
                         link_track=url,
@@ -86,7 +88,8 @@ def download_track(
                     spo = SpoLogin(
                         credentials_path=spo_creds_path,
                         spotify_client_id=fallback_client_id,
-                        spotify_client_secret=fallback_client_secret
+                        spotify_client_secret=fallback_client_secret,
+                        progress_callback=progress_callback
                     )
                     spo.download_track(
                         link_track=url,
@@ -113,7 +116,8 @@ def download_track(
                 spo = SpoLogin(
                     credentials_path=credentials_path,
                     spotify_client_id=spotify_client_id,
-                    spotify_client_secret=spotify_client_secret
+                    spotify_client_secret=spotify_client_secret,
+                    progress_callback=progress_callback
                 )
                 spo.download_track(
                     link_track=url,
@@ -142,7 +146,8 @@ def download_track(
             dl = DeeLogin(
                 arl=creds.get('arl', ''),
                 spotify_client_id=spotify_client_id,
-                spotify_client_secret=spotify_client_secret
+                spotify_client_secret=spotify_client_secret,
+                progress_callback=progress_callback
             )
             dl.download_trackdee(
                 link_track=url,

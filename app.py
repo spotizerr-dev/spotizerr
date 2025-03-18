@@ -12,6 +12,14 @@ import logging
 import time
 from pathlib import Path
 import os
+import argparse
+
+# Import Celery configuration
+try:
+    from routes.utils.celery_tasks import celery_app
+    has_celery = True
+except ImportError:
+    has_celery = False
 
 def create_app():
     app = Flask(__name__)

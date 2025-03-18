@@ -110,9 +110,8 @@ function renderTrack(track) {
         return;
       }
       
-      // Create a local download function that uses our own API call instead of downloadQueue.startTrackDownload
-      // This mirrors the approach used in main.js that works properly
-      startDownload(trackUrl, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
+      // Use the centralized downloadQueue.download method
+      downloadQueue.download(trackUrl, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
         .then(() => {
           downloadBtn.innerHTML = `<span>Queued!</span>`;
           // Make the queue visible to show the download
@@ -153,8 +152,7 @@ function showError(message) {
 }
 
 /**
- * Starts the download process by building a minimal API URL with only the necessary parameters,
- * since the server will use config defaults for others.
+ * Starts the download process by calling the centralized downloadQueue method
  */
 async function startDownload(url, type, item) {
   if (!url || !type) {
@@ -162,49 +160,12 @@ async function startDownload(url, type, item) {
     return;
   }
   
-  const service = url.includes('open.spotify.com') ? 'spotify' : 'deezer';
-  let apiUrl = `/api/${type}/download?service=${service}&url=${encodeURIComponent(url)}`;
-
-  // Add name and artist if available for better progress display
-  if (item.name) {
-    apiUrl += `&name=${encodeURIComponent(item.name)}`;
-  }
-  if (item.artist) {
-    apiUrl += `&artist=${encodeURIComponent(item.artist)}`;
-  }
-
   try {
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}`);
-    }
+    // Use the centralized downloadQueue.download method
+    await downloadQueue.download(url, type, item);
     
-    const data = await response.json();
-    
-    if (!data.prg_file) {
-      throw new Error('Server did not return a valid PRG file');
-    }
-    
-    // Add the download to the queue but don't start monitoring yet
-    const queueId = downloadQueue.addDownload(item, type, data.prg_file, apiUrl, false);
-    
-    // Ensure the PRG file exists and has initial data by making a status check
-    try {
-      // Wait a short time before checking the status to give server time to create the file
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
-      if (statusResponse.ok) {
-        // Only start monitoring after confirming the PRG file exists
-        const entry = downloadQueue.downloadQueue[queueId];
-        if (entry) {
-          // Start monitoring regardless of visibility
-          downloadQueue.startEntryMonitoring(queueId);
-        }
-      }
-    } catch (statusError) {
-      console.log('Initial status check pending, will retry on next interval');
-    }
+    // Make the queue visible after queueing
+    downloadQueue.toggleVisibility(true);
   } catch (error) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;

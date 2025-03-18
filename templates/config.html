@@ -18,12 +18,22 @@
 
       <div class="account-config card">
         <h2 class="section-title">Download Settings</h2>
-        <!-- Your account config section remains unchanged -->
+        <!-- Default service selection - new element -->
         <div class="config-item">
+          <label>Default Service:</label>
+          <select id="defaultServiceSelect" class="form-select">
+            <option value="spotify">Spotify</option>
+          </select>
+          <div class="setting-description">
+            The default service to use for downloads when not explicitly specified
+          </div>
+        </div>
+        <!-- Your account config section remains unchanged -->
+        <div class="config-item spotify-specific">
           <label>Active Spotify Account:</label>
           <select id="spotifyAccountSelect" class="form-select"></select>
         </div>
-        <div class="config-item">
+        <div class="config-item spotify-specific">
           <label>Spotify Quality:</label>
           <select id="spotifyQualitySelect" class="form-select">
             <option value="NORMAL">OGG 96</option>
@@ -31,11 +41,11 @@
             <option value="VERY_HIGH">OGG 320 (premium)</option>
           </select>
         </div>
-        <div class="config-item">
+        <div class="config-item deezer-specific">
           <label>Active Deezer Account:</label>
           <select id="deezerAccountSelect" class="form-select"></select>
         </div>
-        <div class="config-item">
+        <div class="config-item deezer-specific">
           <label>Deezer Quality:</label>
           <select id="deezerQualitySelect" class="form-select">
             <option value="MP3_128">MP3 128</option>

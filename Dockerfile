@@ -1,32 +1,26 @@
 # Use an official Python runtime as a parent image
-FROM python:3.12-slim
-
-# Install system dependencies and gosu for user switching
-RUN apt-get update && apt-get install -y git ffmpeg gosu bash && \
-    rm -rf /var/lib/apt/lists/*
+FROM python:3.9-slim
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Cache-busting mechanism
-ARG CACHE_BUST=0
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container
+# Copy requirements file
 COPY requirements.txt .
 
-# Force Docker to always run this step
-RUN echo $CACHE_BUST && pip install --no-cache-dir --upgrade --force-reinstall -r requirements.txt
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Copy entrypoint script and make it executable
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Create necessary directories
+RUN mkdir -p downloads config creds
 
-# Expose the application port
-EXPOSE 7171
-
-# Set entrypoint to handle user permission setup
-ENTRYPOINT ["/entrypoint.sh"]
+# Default command (overridden in docker-compose.yml)
 CMD ["python", "app.py"]

@@ -2,26 +2,58 @@ from flask import Blueprint, abort, jsonify
 import os
 import json
 
+from routes.utils.celery_tasks import (
+    get_task_info,
+    get_task_status,
+    get_last_task_status,
+    get_all_tasks,
+    cancel_task,
+    retry_task
+)
+
 prgs_bp = Blueprint('prgs', __name__, url_prefix='/api/prgs')
 
-# Base directory for files
+# The old path for PRG files (keeping for backward compatibility during transition)
 PRGS_DIR = os.path.join(os.getcwd(), 'prgs')
 
-@prgs_bp.route('/<filename>', methods=['GET'])
-def get_prg_file(filename):
+@prgs_bp.route('/<task_id>', methods=['GET'])
+def get_prg_file(task_id):
     """
     Return a JSON object with the resource type, its name (title),
-    the last progress update (last line) of the PRG file, and, if available,
-    the original request parameters (from the first line of the file).
+    the last progress update, and, if available, the original request parameters.
     
-    For resource type and name, the second line of the file is used.
+    This function works with both the old PRG file system (for backward compatibility)
+    and the new task ID based system.
+    
+    Args:
+        task_id: Either a task UUID from Celery or a PRG filename from the old system
     """
     try:
+        # First check if this is a task ID in the new system
+        task_info = get_task_info(task_id)
+        
+        if task_info:
+            # This is a task ID in the new system
+            original_request = task_info.get("original_request", {})
+            last_status = get_last_task_status(task_id)
+            
+            return jsonify({
+                "type": task_info.get("type", ""),
+                "name": task_info.get("name", ""),
+                "artist": task_info.get("artist", ""),
+                "last_line": last_status,
+                "original_request": original_request,
+                "display_title": original_request.get("display_title", task_info.get("name", "")),
+                "display_type": original_request.get("display_type", task_info.get("type", "")),
+                "display_artist": original_request.get("display_artist", task_info.get("artist", ""))
+            })
+        
+        # If not found in new system, try the old PRG file system
         # Security check to prevent path traversal attacks.
-        if '..' in filename or '/' in filename:
+        if '..' in task_id or '/' in task_id:
             abort(400, "Invalid file request")
 
-        filepath = os.path.join(PRGS_DIR, filename)
+        filepath = os.path.join(PRGS_DIR, task_id)
 
         with open(filepath, 'r') as f:
             content = f.read()
@@ -102,32 +134,54 @@ def get_prg_file(filename):
             "display_artist": display_artist
         })
     except FileNotFoundError:
-        abort(404, "File not found")
+        abort(404, "Task or file not found")
     except Exception as e:
         abort(500, f"An error occurred: {e}")
 
 
-@prgs_bp.route('/delete/<filename>', methods=['DELETE'])
-def delete_prg_file(filename):
+@prgs_bp.route('/delete/<task_id>', methods=['DELETE'])
+def delete_prg_file(task_id):
     """
-    Delete the specified .prg file from the prgs directory.
+    Delete a task's information and history.
+    Works with both the old PRG file system and the new task ID based system.
+    
+    Args:
+        task_id: Either a task UUID from Celery or a PRG filename from the old system
     """
     try:
+        # First try to delete from Redis if it's a task ID
+        task_info = get_task_info(task_id)
+        
+        if task_info:
+            # This is a task ID in the new system - we should cancel it first
+            # if it's still running, then clear its data from Redis
+            cancel_result = cancel_task(task_id)
+            
+            # Use Redis connection to delete the task data
+            from routes.utils.celery_tasks import redis_client
+            
+            # Delete task info and status
+            redis_client.delete(f"task:{task_id}:info")
+            redis_client.delete(f"task:{task_id}:status")
+            
+            return {'message': f'Task {task_id} deleted successfully'}, 200
+        
+        # If not found in Redis, try the old PRG file system
         # Security checks to prevent path traversal and ensure correct file type.
-        if '..' in filename or '/' in filename:
+        if '..' in task_id or '/' in task_id:
             abort(400, "Invalid file request")
-        if not filename.endswith('.prg'):
+        if not task_id.endswith('.prg'):
             abort(400, "Only .prg files can be deleted")
         
-        filepath = os.path.join(PRGS_DIR, filename)
+        filepath = os.path.join(PRGS_DIR, task_id)
         
         if not os.path.isfile(filepath):
             abort(404, "File not found")
         
         os.remove(filepath)
-        return {'message': f'File {filename} deleted successfully'}, 200
+        return {'message': f'File {task_id} deleted successfully'}, 200
     except FileNotFoundError:
-        abort(404, "File not found")
+        abort(404, "Task or file not found")
     except Exception as e:
         abort(500, f"An error occurred: {e}")
 
@@ -135,15 +189,79 @@ def delete_prg_file(filename):
 @prgs_bp.route('/list', methods=['GET'])
 def list_prg_files():
     """
-    Retrieve a list of all .prg files in the prgs directory.
+    Retrieve a list of all tasks in the system.
+    Combines results from both the old PRG file system and the new task ID based system.
     """
     try:
+        # Get tasks from the new system
+        tasks = get_all_tasks()
+        task_ids = [task["task_id"] for task in tasks]
+        
+        # Get PRG files from the old system
         prg_files = []
         if os.path.isdir(PRGS_DIR):
             with os.scandir(PRGS_DIR) as entries:
                 for entry in entries:
                     if entry.is_file() and entry.name.endswith('.prg'):
                         prg_files.append(entry.name)
-        return jsonify(prg_files)
+        
+        # Combine both lists
+        all_ids = task_ids + prg_files
+        
+        return jsonify(all_ids)
+    except Exception as e:
+        abort(500, f"An error occurred: {e}")
+
+
+@prgs_bp.route('/retry/<task_id>', methods=['POST'])
+def retry_task_endpoint(task_id):
+    """
+    Retry a failed task.
+    
+    Args:
+        task_id: The ID of the task to retry
+    """
+    try:
+        # First check if this is a task ID in the new system
+        task_info = get_task_info(task_id)
+        
+        if task_info:
+            # This is a task ID in the new system
+            result = retry_task(task_id)
+            return jsonify(result)
+        
+        # If not found in new system, we need to handle the old system retry
+        # For now, return an error as we're transitioning to the new system
+        return jsonify({
+            "status": "error",
+            "message": "Retry for old system is not supported in the new API. Please use the new task ID format."
+        }), 400
+    except Exception as e:
+        abort(500, f"An error occurred: {e}")
+
+
+@prgs_bp.route('/cancel/<task_id>', methods=['POST'])
+def cancel_task_endpoint(task_id):
+    """
+    Cancel a running or queued task.
+    
+    Args:
+        task_id: The ID of the task to cancel
+    """
+    try:
+        # First check if this is a task ID in the new system
+        task_info = get_task_info(task_id)
+        
+        if task_info:
+            # This is a task ID in the new system
+            result = cancel_task(task_id)
+            return jsonify(result)
+        
+        # If not found in new system, we need to handle the old system cancellation
+        # For now, return an error as we're transitioning to the new system
+        return jsonify({
+            "status": "error",
+            "message": "Cancellation for old system is not supported in the new API. Please use the new task ID format."
+        }), 400
     except Exception as e:
         abort(500, f"An error occurred: {e}")
