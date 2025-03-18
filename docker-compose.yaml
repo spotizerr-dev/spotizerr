@@ -1,33 +1,20 @@
 name: spotizerr
 
 services:
-  redis:
-    image: redis:alpine
-    container_name: spotizerr-redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
   spotizerr:
     volumes:
       - ./creds:/app/creds
       - ./config:/app/config
       - ./downloads:/app/downloads  # <-- Change this for your music library dir
+      - ./logs:/app/logs  # <-- Volume for persistent logs
     ports:
       - 7171:7171
-    image: cooldockerizer93/spotizerr
+    image: spotizerr:dev
     container_name: spotizerr-app
     restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_healthy
     environment:
       - PUID=1000  # Replace with your desired user ID  | Remove both if you want to run as root (not recommended, might result in unreadable files)
       - PGID=1000  # Replace with your desired group ID | The user must have write permissions in the volume mapped to /app/downloads
       - UMASK=0022 # Optional: Sets the default file permissions for newly created files within the container.
-      - MAX_CONCURRENT_DL=3 # Optional: Set the number of concurrent downloads allowed
-      - REDIS_URL=redis://redis:6379/0
-      - REDIS_BACKEND=redis://redis:6379/0
+      - REDIS_URL=redis://localhost:6379/0
+      - REDIS_BACKEND=redis://localhost:6379/0
