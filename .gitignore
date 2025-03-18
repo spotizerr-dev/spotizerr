@@ -31,3 +31,4 @@ config/state/queue_state.json
 output.log
 queue_state.json
 search_demo.py
+celery_worker.log
