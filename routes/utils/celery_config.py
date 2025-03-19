@@ -6,12 +6,15 @@ from pathlib import Path
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Redis configuration
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+# Redis configuration - read from environment variables
+REDIS_HOST = os.getenv('REDIS_HOST', 'redis')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 REDIS_DB = os.getenv('REDIS_DB', '0')
-REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
-REDIS_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+REDIS_URL = os.getenv('REDIS_URL', f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
+REDIS_BACKEND = os.getenv('REDIS_BACKEND', REDIS_URL)
+
+# Log Redis connection details
+logger.info(f"Redis configuration: REDIS_URL={REDIS_URL}, REDIS_BACKEND={REDIS_BACKEND}")
 
 # Config path
 CONFIG_PATH = './config/main.json'

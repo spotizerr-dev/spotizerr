@@ -16,5 +16,22 @@ services:
       - PUID=1000  # Replace with your desired user ID  | Remove both if you want to run as root (not recommended, might result in unreadable files)
       - PGID=1000  # Replace with your desired group ID | The user must have write permissions in the volume mapped to /app/downloads
       - UMASK=0022 # Optional: Sets the default file permissions for newly created files within the container.
-      - REDIS_URL=redis://localhost:6379/0
-      - REDIS_BACKEND=redis://localhost:6379/0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: spotizerr-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    
+volumes:
+  redis-data:
+    driver: local

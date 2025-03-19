@@ -6,31 +6,8 @@ if [ -n "${UMASK}" ]; then
     umask "${UMASK}"
 fi
 
-# Check if Redis should be started locally
-if [[ -z "${REDIS_URL}" || "${REDIS_URL}" == *"localhost"* || "${REDIS_URL}" == *"127.0.0.1"* ]]; then
-    echo "Starting local Redis server..."
-    redis-server --daemonize yes
-    # Wait for Redis to be ready
-    until redis-cli ping &>/dev/null; do
-        echo "Waiting for Redis to start..."
-        sleep 1
-    done
-    echo "Redis server is running."
-    
-    # If REDIS_URL is not set, set it to localhost
-    if [ -z "${REDIS_URL}" ]; then
-        export REDIS_URL="redis://localhost:6379/0"
-        echo "Set REDIS_URL to ${REDIS_URL}"
-    fi
-    
-    # If REDIS_BACKEND is not set, set it to the same as REDIS_URL
-    if [ -z "${REDIS_BACKEND}" ]; then
-        export REDIS_BACKEND="${REDIS_URL}"
-        echo "Set REDIS_BACKEND to ${REDIS_BACKEND}"
-    fi
-else
-    echo "Using external Redis server at ${REDIS_URL}"
-fi
+# Redis is now in a separate container so we don't need to start it locally
+echo "Using Redis at ${REDIS_URL}"
 
 # Check if both PUID and PGID are not set
 if [ -z "${PUID}" ] && [ -z "${PGID}" ]; then

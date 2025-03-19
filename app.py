@@ -15,10 +15,13 @@ from pathlib import Path
 import os
 import atexit
 import sys
+import redis
+import socket
 
 # Import Celery configuration and manager
 from routes.utils.celery_tasks import celery_app
 from routes.utils.celery_manager import celery_manager
+from routes.utils.celery_config import REDIS_URL
 
 # Configure application-wide logging
 def setup_logging():
@@ -70,6 +73,56 @@ def setup_logging():
     
     # Return the main file handler for permissions adjustment
     return file_handler
+
+def check_redis_connection():
+    """Check if Redis is reachable and retry with exponential backoff if not"""
+    max_retries = 5
+    retry_count = 0
+    retry_delay = 1  # start with 1 second
+    
+    # Extract host and port from REDIS_URL
+    redis_host = "redis"  # default
+    redis_port = 6379     # default
+    
+    # Parse from REDIS_URL if possible
+    if REDIS_URL and "://" in REDIS_URL:
+        parts = REDIS_URL.split("://")[1].split(":")
+        if len(parts) >= 2:
+            redis_host = parts[0]
+            redis_port = int(parts[1].split("/")[0])
+    
+    # Log Redis connection details
+    logging.info(f"Checking Redis connection to {redis_host}:{redis_port}")
+    
+    while retry_count < max_retries:
+        try:
+            # First try socket connection to check if Redis port is open
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex((redis_host, redis_port))
+            sock.close()
+            
+            if result != 0:
+                raise ConnectionError(f"Cannot connect to Redis at {redis_host}:{redis_port}")
+            
+            # If socket connection successful, try Redis ping
+            r = redis.Redis.from_url(REDIS_URL)
+            r.ping()
+            logging.info("Successfully connected to Redis")
+            return True
+        except Exception as e:
+            retry_count += 1
+            if retry_count >= max_retries:
+                logging.error(f"Failed to connect to Redis after {max_retries} attempts: {e}")
+                logging.error(f"Make sure Redis is running at {redis_host}:{redis_port}")
+                return False
+            
+            logging.warning(f"Redis connection attempt {retry_count} failed: {e}")
+            logging.info(f"Retrying in {retry_delay} seconds...")
+            time.sleep(retry_delay)
+            retry_delay *= 2  # exponential backoff
+    
+    return False
 
 def create_app():
     app = Flask(__name__)
@@ -169,11 +222,16 @@ if __name__ == '__main__':
     # Log application startup
     logging.info("=== Spotizerr Application Starting ===")
     
-    # Start Celery workers
-    start_celery_workers()
-    
-    # Create and start Flask app
-    app = create_app()
-    logging.info("Starting Flask server on port 7171")
-    from waitress import serve
-    serve(app, host='0.0.0.0', port=7171)
+    # Check Redis connection before starting workers
+    if check_redis_connection():
+        # Start Celery workers
+        start_celery_workers()
+        
+        # Create and start Flask app
+        app = create_app()
+        logging.info("Starting Flask server on port 7171")
+        from waitress import serve
+        serve(app, host='0.0.0.0', port=7171)
+    else:
+        logging.error("Cannot start application: Redis connection failed")
+        sys.exit(1)
