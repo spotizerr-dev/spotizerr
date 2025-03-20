@@ -22,16 +22,30 @@ def download_track(
     progress_callback=None
 ):
     try:
+        # DEBUG: Print parameters
+        print(f"DEBUG: track.py received - service={service}, main={main}, fallback={fallback}")
+        
         # Load Spotify client credentials if available
         spotify_client_id = None
         spotify_client_secret = None
-        search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+        
+        # Smartly determine where to look for Spotify search credentials
+        if service == 'spotify' and fallback:
+            # If fallback is enabled, use the fallback account for Spotify search credentials
+            search_creds_path = Path(f'./creds/spotify/{fallback}/search.json')
+            print(f"DEBUG: Using Spotify search credentials from fallback: {search_creds_path}")
+        else:
+            # Otherwise use the main account for Spotify search credentials
+            search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+            print(f"DEBUG: Using Spotify search credentials from main: {search_creds_path}")
+            
         if search_creds_path.exists():
             try:
                 with open(search_creds_path, 'r') as f:
                     search_creds = json.load(f)
                     spotify_client_id = search_creds.get('client_id')
                     spotify_client_secret = search_creds.get('client_secret')
+                    print(f"DEBUG: Loaded Spotify client credentials successfully")
             except Exception as e:
                 print(f"Error loading Spotify search credentials: {e}")
                 
@@ -45,6 +59,19 @@ def download_track(
                 try:
                     deezer_creds_dir = os.path.join('./creds/deezer', main)
                     deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
+                    
+                    # DEBUG: Print Deezer credential paths being used
+                    print(f"DEBUG: Looking for Deezer credentials at:")
+                    print(f"DEBUG:   deezer_creds_dir = {deezer_creds_dir}")
+                    print(f"DEBUG:   deezer_creds_path = {deezer_creds_path}")
+                    print(f"DEBUG:   Directory exists = {os.path.exists(deezer_creds_dir)}")
+                    print(f"DEBUG:   Credentials file exists = {os.path.exists(deezer_creds_path)}")
+                    
+                    # List available directories to compare
+                    print(f"DEBUG: Available Deezer credential directories:")
+                    for dir_name in os.listdir('./creds/deezer'):
+                        print(f"DEBUG:   ./creds/deezer/{dir_name}")
+                    
                     with open(deezer_creds_path, 'r') as f:
                         deezer_creds = json.load(f)
                     dl = DeeLogin(
@@ -68,27 +95,17 @@ def download_track(
                         max_retries=max_retries
                     )
                 except Exception as e:
+                    print(f"DEBUG: Deezer download attempt failed: {e}")
                     # If the first attempt fails, use the fallback Spotify credentials
                     spo_creds_dir = os.path.join('./creds/spotify', fallback)
                     spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
                     
-                    # Check for Spotify client credentials in fallback account
-                    fallback_client_id = spotify_client_id
-                    fallback_client_secret = spotify_client_secret
-                    fallback_search_path = Path(f'./creds/spotify/{fallback}/search.json')
-                    if fallback_search_path.exists():
-                        try:
-                            with open(fallback_search_path, 'r') as f:
-                                fallback_search_creds = json.load(f)
-                                fallback_client_id = fallback_search_creds.get('client_id')
-                                fallback_client_secret = fallback_search_creds.get('client_secret')
-                        except Exception as e:
-                            print(f"Error loading fallback Spotify search credentials: {e}")
+                    # We've already loaded the Spotify client credentials above based on fallback
                     
                     spo = SpoLogin(
                         credentials_path=spo_creds_path,
-                        spotify_client_id=fallback_client_id,
-                        spotify_client_secret=fallback_client_secret,
+                        spotify_client_id=spotify_client_id,
+                        spotify_client_secret=spotify_client_secret,
                         progress_callback=progress_callback
                     )
                     spo.download_track(

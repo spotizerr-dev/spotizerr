@@ -467,6 +467,13 @@ def download_track(self, **task_data):
         # Get the service from config
         service = config_params.get("service")
         
+        # DEBUG: Log the config parameters
+        print(f"DEBUG: celery_tasks.py config_params:")
+        print(f"DEBUG:   service = {service}")
+        print(f"DEBUG:   spotify = {config_params.get('spotify', '')}")
+        print(f"DEBUG:   deezer = {config_params.get('deezer', '')}")
+        print(f"DEBUG:   fallback_enabled = {config_params.get('fallback', False)}")
+        
         # Determine main, fallback, and quality parameters based on service and fallback setting
         fallback_enabled = config_params.get("fallback", False)
         
@@ -479,6 +486,11 @@ def download_track(self, **task_data):
                 fallback = config_params.get("spotify", "")
                 quality = config_params.get("deezerQuality", "MP3_128")
                 fall_quality = config_params.get("spotifyQuality", "NORMAL")
+                
+                # DEBUG: Log the values after fallback logic
+                print(f"DEBUG: Spotify with fallback enabled:")
+                print(f"DEBUG:   main (Deezer account) = {main}")
+                print(f"DEBUG:   fallback (Spotify account) = {fallback}")
             else:
                 # If fallback is disabled with Spotify service:
                 # - main is the Spotify account
@@ -487,6 +499,10 @@ def download_track(self, **task_data):
                 fallback = None
                 quality = config_params.get("spotifyQuality", "NORMAL")
                 fall_quality = None
+                
+                # DEBUG: Log the values
+                print(f"DEBUG: Spotify without fallback:")
+                print(f"DEBUG:   main (Spotify account) = {main}")
         elif service == 'deezer':
             # For Deezer service:
             # - main is the Deezer account
@@ -495,12 +511,20 @@ def download_track(self, **task_data):
             fallback = None
             quality = config_params.get("deezerQuality", "MP3_128")
             fall_quality = None
+            
+            # DEBUG: Log the values
+            print(f"DEBUG: Deezer service:")
+            print(f"DEBUG:   main (Deezer account) = {main}")
         else:
             # Default to Spotify if unknown service
             main = config_params.get("spotify", "")
             fallback = None
             quality = config_params.get("spotifyQuality", "NORMAL")
             fall_quality = None
+            
+            # DEBUG: Log the values
+            print(f"DEBUG: Unknown service defaulting to Spotify:")
+            print(f"DEBUG:   main (Spotify account) = {main}")
         
         # Get remaining parameters from task_data or config
         url = task_data.get("url", "")
@@ -510,7 +534,12 @@ def download_track(self, **task_data):
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
         
         # Log task parameters for debugging
-        logger.debug(f"Track download parameters: service={service}, quality={quality}, real_time={real_time}")
+        print(f"DEBUG: Final parameters for download_track_func:")
+        print(f"DEBUG:   service = {service}")
+        print(f"DEBUG:   main = {main}")
+        print(f"DEBUG:   fallback = {fallback}")
+        print(f"DEBUG:   quality = {quality}")
+        print(f"DEBUG:   fall_quality = {fall_quality}")
         
         # Execute the download function with progress callback
         download_track_func(

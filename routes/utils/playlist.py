@@ -25,7 +25,15 @@ def download_playlist(
         # Load Spotify client credentials if available
         spotify_client_id = None
         spotify_client_secret = None
-        search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+        
+        # Smartly determine where to look for Spotify search credentials
+        if service == 'spotify' and fallback:
+            # If fallback is enabled, use the fallback account for Spotify search credentials
+            search_creds_path = Path(f'./creds/spotify/{fallback}/search.json')
+        else:
+            # Otherwise use the main account for Spotify search credentials
+            search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+            
         if search_creds_path.exists():
             try:
                 with open(search_creds_path, 'r') as f:
@@ -78,23 +86,12 @@ def download_playlist(
                         spo_creds_dir = os.path.join('./creds/spotify', fallback)
                         spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
                         
-                        # Check for Spotify client credentials in fallback account
-                        fallback_client_id = spotify_client_id
-                        fallback_client_secret = spotify_client_secret
-                        fallback_search_path = Path(f'./creds/spotify/{fallback}/search.json')
-                        if fallback_search_path.exists():
-                            try:
-                                with open(fallback_search_path, 'r') as f:
-                                    fallback_search_creds = json.load(f)
-                                    fallback_client_id = fallback_search_creds.get('client_id')
-                                    fallback_client_secret = fallback_search_creds.get('client_secret')
-                            except Exception as e:
-                                print(f"Error loading fallback Spotify search credentials: {e}")
+                        # We've already loaded the Spotify client credentials above based on fallback
                         
                         spo = SpoLogin(
                             credentials_path=spo_creds_path,
-                            spotify_client_id=fallback_client_id,
-                            spotify_client_secret=fallback_client_secret,
+                            spotify_client_id=spotify_client_id,
+                            spotify_client_secret=spotify_client_secret,
                             progress_callback=progress_callback
                         )
                         spo.download_playlist(
