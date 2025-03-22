@@ -17,7 +17,7 @@ def handle_download():
     if not url:
         return Response(
             json.dumps({"error": "Missing required parameter: url"}),
-            status=400,
+            status=400, 
             mimetype='application/json'
         )
     
