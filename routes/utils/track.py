@@ -56,6 +56,7 @@ def download_track(
                 if fall_quality is None:
                     fall_quality = 'HIGH'
                 # First attempt: use Deezer's download_trackspo with 'main' (Deezer credentials)
+                deezer_error = None
                 try:
                     deezer_creds_dir = os.path.join('./creds/deezer', main)
                     deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
@@ -95,35 +96,47 @@ def download_track(
                         max_retries=max_retries
                     )
                 except Exception as e:
-                    print(f"DEBUG: Deezer download attempt failed: {e}")
+                    deezer_error = e
+                    # Immediately report the Deezer error
+                    print(f"ERROR: Deezer download attempt failed: {e}")
+                    traceback.print_exc()
+                    print("Attempting Spotify fallback...")
+                    
                     # If the first attempt fails, use the fallback Spotify credentials
-                    spo_creds_dir = os.path.join('./creds/spotify', fallback)
-                    spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
-                    
-                    # We've already loaded the Spotify client credentials above based on fallback
-                    
-                    spo = SpoLogin(
-                        credentials_path=spo_creds_path,
-                        spotify_client_id=spotify_client_id,
-                        spotify_client_secret=spotify_client_secret,
-                        progress_callback=progress_callback
-                    )
-                    spo.download_track(
-                        link_track=url,
-                        output_dir="./downloads",
-                        quality_download=fall_quality,
-                        recursive_quality=False,
-                        recursive_download=False,
-                        not_interface=False,
-                        method_save=1,
-                        real_time_dl=real_time,
-                        custom_dir_format=custom_dir_format,
-                        custom_track_format=custom_track_format,
-                        pad_tracks=pad_tracks,
-                        initial_retry_delay=initial_retry_delay,
-                        retry_delay_increase=retry_delay_increase,
-                        max_retries=max_retries
-                    )
+                    try:
+                        spo_creds_dir = os.path.join('./creds/spotify', fallback)
+                        spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
+                        
+                        # We've already loaded the Spotify client credentials above based on fallback
+                        
+                        spo = SpoLogin(
+                            credentials_path=spo_creds_path,
+                            spotify_client_id=spotify_client_id,
+                            spotify_client_secret=spotify_client_secret,
+                            progress_callback=progress_callback
+                        )
+                        spo.download_track(
+                            link_track=url,
+                            output_dir="./downloads",
+                            quality_download=fall_quality,
+                            recursive_quality=False,
+                            recursive_download=False,
+                            not_interface=False,
+                            method_save=1,
+                            real_time_dl=real_time,
+                            custom_dir_format=custom_dir_format,
+                            custom_track_format=custom_track_format,
+                            pad_tracks=pad_tracks,
+                            initial_retry_delay=initial_retry_delay,
+                            retry_delay_increase=retry_delay_increase,
+                            max_retries=max_retries
+                        )
+                    except Exception as e2:
+                        # If fallback also fails, raise an error indicating both attempts failed
+                        raise RuntimeError(
+                            f"Both main (Deezer) and fallback (Spotify) attempts failed. "
+                            f"Deezer error: {deezer_error}, Spotify error: {e2}"
+                        ) from e2
             else:
                 # Directly use Spotify main account
                 if quality is None:

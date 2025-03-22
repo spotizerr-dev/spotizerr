@@ -50,6 +50,7 @@ def download_playlist(
                 if fall_quality is None:
                     fall_quality = 'HIGH'
                 # First attempt: use DeeLogin's download_playlistspo with the 'main' (Deezer credentials)
+                deezer_error = None
                 try:
                     # Load Deezer credentials from 'main' under deezer directory
                     deezer_creds_dir = os.path.join('./creds/deezer', main)
@@ -81,6 +82,12 @@ def download_playlist(
                         max_retries=max_retries
                     )
                 except Exception as e:
+                    deezer_error = e
+                    # Immediately report the Deezer error
+                    print(f"ERROR: Deezer playlist download attempt failed: {e}")
+                    traceback.print_exc()
+                    print("Attempting Spotify fallback...")
+                    
                     # Load fallback Spotify credentials and attempt download
                     try:
                         spo_creds_dir = os.path.join('./creds/spotify', fallback)
@@ -115,7 +122,7 @@ def download_playlist(
                         # If fallback also fails, raise an error indicating both attempts failed
                         raise RuntimeError(
                             f"Both main (Deezer) and fallback (Spotify) attempts failed. "
-                            f"Deezer error: {e}, Spotify error: {e2}"
+                            f"Deezer error: {deezer_error}, Spotify error: {e2}"
                         ) from e2
             else:
                 # Original behavior: use Spotify main

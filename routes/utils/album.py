@@ -49,61 +49,31 @@ def download_album(
                     quality = 'FLAC'
                 if fall_quality is None:
                     fall_quality = 'HIGH'
-                # First attempt: use DeeLogin's download_albumspo with the 'main' (Deezer credentials)
-                try:
-                    # Load Deezer credentials from 'main' under deezer directory
-                    deezer_creds_dir = os.path.join('./creds/deezer', main)
-                    deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
-                    with open(deezer_creds_path, 'r') as f:
-                        deezer_creds = json.load(f)
-                    # Initialize DeeLogin with Deezer credentials and Spotify client credentials
-                    dl = DeeLogin(
-                        arl=deezer_creds.get('arl', ''),
-                        spotify_client_id=spotify_client_id,
-                        spotify_client_secret=spotify_client_secret,
-                        progress_callback=progress_callback
-                    )
-                    # Download using download_albumspo; pass real_time_dl accordingly and the custom formatting
-                    dl.download_albumspo(
-                        link_album=url,
-                        output_dir="./downloads",
-                        quality_download=quality,
-                        recursive_quality=True,
-                        recursive_download=False,
-                        not_interface=False,
-                        make_zip=False,
-                        method_save=1,
-                        custom_dir_format=custom_dir_format,
-                        custom_track_format=custom_track_format,
-                        pad_tracks=pad_tracks,
-                        initial_retry_delay=initial_retry_delay,
-                        retry_delay_increase=retry_delay_increase,
-                        max_retries=max_retries
-                    )
-                except Exception as e:
-                    # Load fallback Spotify credentials and attempt download
+                    # First attempt: use DeeLogin's download_albumspo with the 'main' (Deezer credentials)
+                    deezer_error = None
                     try:
-                        spo_creds_dir = os.path.join('./creds/spotify', fallback)
-                        spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
-                        
-                        # We've already loaded the Spotify client credentials above based on fallback
-                        
-                        spo = SpoLogin(
-                            credentials_path=spo_creds_path,
+                        # Load Deezer credentials from 'main' under deezer directory
+                        deezer_creds_dir = os.path.join('./creds/deezer', main)
+                        deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
+                        with open(deezer_creds_path, 'r') as f:
+                            deezer_creds = json.load(f)
+                        # Initialize DeeLogin with Deezer credentials and Spotify client credentials
+                        dl = DeeLogin(
+                            arl=deezer_creds.get('arl', ''),
                             spotify_client_id=spotify_client_id,
                             spotify_client_secret=spotify_client_secret,
                             progress_callback=progress_callback
                         )
-                        spo.download_album(
+                        # Download using download_albumspo; pass real_time_dl accordingly and the custom formatting
+                        dl.download_albumspo(
                             link_album=url,
                             output_dir="./downloads",
-                            quality_download=fall_quality,
+                            quality_download=quality,
                             recursive_quality=True,
                             recursive_download=False,
                             not_interface=False,
-                            method_save=1,
                             make_zip=False,
-                            real_time_dl=real_time,
+                            method_save=1,
                             custom_dir_format=custom_dir_format,
                             custom_track_format=custom_track_format,
                             pad_tracks=pad_tracks,
@@ -111,12 +81,49 @@ def download_album(
                             retry_delay_increase=retry_delay_increase,
                             max_retries=max_retries
                         )
-                    except Exception as e2:
-                        # If fallback also fails, raise an error indicating both attempts failed
-                        raise RuntimeError(
-                            f"Both main (Deezer) and fallback (Spotify) attempts failed. "
-                            f"Deezer error: {e}, Spotify error: {e2}"
-                        ) from e2
+                    except Exception as e:
+                        deezer_error = e
+                        # Immediately report the Deezer error
+                        print(f"ERROR: Deezer album download attempt failed: {e}")
+                        traceback.print_exc()
+                        print("Attempting Spotify fallback...")
+                        
+                        # Load fallback Spotify credentials and attempt download
+                        try:
+                            spo_creds_dir = os.path.join('./creds/spotify', fallback)
+                            spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
+                            
+                            # We've already loaded the Spotify client credentials above based on fallback
+                            
+                            spo = SpoLogin(
+                                credentials_path=spo_creds_path,
+                                spotify_client_id=spotify_client_id,
+                                spotify_client_secret=spotify_client_secret,
+                                progress_callback=progress_callback
+                            )
+                            spo.download_album(
+                                link_album=url,
+                                output_dir="./downloads",
+                                quality_download=fall_quality,
+                                recursive_quality=True,
+                                recursive_download=False,
+                                not_interface=False,
+                                method_save=1,
+                                make_zip=False,
+                                real_time_dl=real_time,
+                                custom_dir_format=custom_dir_format,
+                                custom_track_format=custom_track_format,
+                                pad_tracks=pad_tracks,
+                                initial_retry_delay=initial_retry_delay,
+                                retry_delay_increase=retry_delay_increase,
+                                max_retries=max_retries
+                            )
+                        except Exception as e2:
+                            # If fallback also fails, raise an error indicating both attempts failed
+                            raise RuntimeError(
+                                f"Both main (Deezer) and fallback (Spotify) attempts failed. "
+                                f"Deezer error: {deezer_error}, Spotify error: {e2}"
+                            ) from e2
             else:
                 # Original behavior: use Spotify main
                 if quality is None:
