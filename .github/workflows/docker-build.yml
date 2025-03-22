@@ -2,13 +2,13 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    # Trigger on all branches and tags; you can later refine this logic if needed
+    branches: [ '**' ]
+    tags: [ '**' ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ '**' ]
   release:
     types: [ published, released ]
-  # Allow manual triggering
   workflow_dispatch:
 
 jobs:
@@ -41,13 +41,15 @@ jobs:
             type=raw,value=latest,enable=${{ github.event_name == 'release' }}
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
-      # Build and push Docker image
+      # Build and push Docker image with multiarch support
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
           context: .
+          # Specify the multiarch platforms
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max 
+          cache-to: type=gha,mode=max
