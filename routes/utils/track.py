@@ -55,6 +55,7 @@ def download_track(
                     quality = 'FLAC'
                 if fall_quality is None:
                     fall_quality = 'HIGH'
+                    
                 # First attempt: use Deezer's download_trackspo with 'main' (Deezer credentials)
                 deezer_error = None
                 try:

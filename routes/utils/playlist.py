@@ -49,6 +49,7 @@ def download_playlist(
                     quality = 'FLAC'
                 if fall_quality is None:
                     fall_quality = 'HIGH'
+                    
                 # First attempt: use DeeLogin's download_playlistspo with the 'main' (Deezer credentials)
                 deezer_error = None
                 try:
