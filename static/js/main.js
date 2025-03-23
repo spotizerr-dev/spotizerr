@@ -101,8 +101,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data && data.items && data.items.length > 0) {
                 resultsContainer.innerHTML = '';
                 
-                // Filter out null/undefined items first
-                const validItems = data.items.filter(item => item);
+                // Filter out items with null/undefined essential display parameters
+                const validItems = filterValidItems(data.items, searchType.value);
+                
+                if (validItems.length === 0) {
+                    // No valid items found after filtering
+                    resultsContainer.innerHTML = `
+                        <div class="empty-search-results">
+                            <p>No valid results found for "${query}"</p>
+                        </div>
+                    `;
+                    return;
+                }
                 
                 validItems.forEach((item, index) => {
                     const cardElement = createResultCard(item, searchType.value, index);
@@ -135,6 +145,75 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
         }
+    }
+
+    /**
+     * Filters out items with null/undefined essential display parameters based on search type
+     */
+    function filterValidItems(items, type) {
+        if (!items) return [];
+        
+        return items.filter(item => {
+            // Skip null/undefined items
+            if (!item) return false;
+            
+            // Skip explicit content if filter is enabled
+            if (downloadQueue.isExplicitFilterEnabled() && item.explicit === true) {
+                return false;
+            }
+            
+            // Check essential parameters based on search type
+            switch (type) {
+                case 'track':
+                    // For tracks, we need name, artists, and album
+                    return (
+                        item.name &&
+                        item.artists && 
+                        item.artists.length > 0 &&
+                        item.artists[0] && 
+                        item.artists[0].name &&
+                        item.album && 
+                        item.album.name &&
+                        item.external_urls && 
+                        item.external_urls.spotify
+                    );
+                    
+                case 'album':
+                    // For albums, we need name, artists, and cover image
+                    return (
+                        item.name &&
+                        item.artists && 
+                        item.artists.length > 0 &&
+                        item.artists[0] && 
+                        item.artists[0].name &&
+                        item.external_urls && 
+                        item.external_urls.spotify
+                    );
+                    
+                case 'playlist':
+                    // For playlists, we need name, owner, and tracks
+                    return (
+                        item.name &&
+                        item.owner && 
+                        item.owner.display_name &&
+                        item.tracks &&
+                        item.external_urls && 
+                        item.external_urls.spotify
+                    );
+                    
+                case 'artist':
+                    // For artists, we need name
+                    return (
+                        item.name &&
+                        item.external_urls && 
+                        item.external_urls.spotify
+                    );
+                    
+                default:
+                    // Default case - just check if the item exists
+                    return true;
+            }
+        });
     }
 
     /**

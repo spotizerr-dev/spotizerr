@@ -4,6 +4,7 @@ from pathlib import Path
 import logging
 import threading
 import time
+import os
 
 config_bp = Blueprint('config_bp', __name__)
 CONFIG_PATH = Path('./config/main.json')
@@ -91,6 +92,10 @@ def handle_config():
     for key, default_value in defaults.items():
         if key not in config:
             config[key] = default_value
+    
+    # Get explicit filter setting from environment variable
+    explicit_filter_env = os.environ.get('EXPLICIT_FILTER', 'false').lower()
+    config['explicitFilter'] = explicit_filter_env in ('true', '1', 'yes', 'on')
             
     return jsonify(config)
 
@@ -100,6 +105,13 @@ def update_config():
         new_config = request.get_json()
         if not isinstance(new_config, dict):
             return jsonify({"error": "Invalid config format"}), 400
+
+        # Get existing config to preserve environment-controlled values
+        existing_config = get_config() or {}
+        
+        # Preserve the explicitFilter setting from environment
+        explicit_filter_env = os.environ.get('EXPLICIT_FILTER', 'false').lower()
+        new_config['explicitFilter'] = explicit_filter_env in ('true', '1', 'yes', 'on')
 
         if not save_config(new_config):
             return jsonify({"error": "Failed to save config"}), 500

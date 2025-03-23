@@ -40,6 +40,28 @@ function renderTrack(track) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
+  // Check if track is explicit and if explicit filter is enabled
+  if (track.explicit && downloadQueue.isExplicitFilterEnabled()) {
+    // Show placeholder for explicit content
+    document.getElementById('loading').classList.add('hidden');
+    
+    const placeholderContent = `
+      <div class="explicit-filter-placeholder">
+        <h2>Explicit Content Filtered</h2>
+        <p>This track contains explicit content and has been filtered based on your settings.</p>
+        <p>The explicit content filter is controlled by environment variables.</p>
+      </div>
+    `;
+    
+    const contentContainer = document.getElementById('track-header');
+    if (contentContainer) {
+      contentContainer.innerHTML = placeholderContent;
+      contentContainer.classList.remove('hidden');
+    }
+    
+    return; // Stop rendering the actual track content
+  }
+
   // Update track information fields.
   document.getElementById('track-name').innerHTML =
     `<a href="/track/${track.id || ''}" title="View track details">${track.name || 'Unknown Track'}</a>`;

@@ -1244,6 +1244,11 @@ class DownloadQueue {
       throw error;
     }
   }
+
+  // Add a method to check if explicit filter is enabled
+  isExplicitFilterEnabled() {
+    return !!this.currentConfig.explicitFilter;
+  }
 }
 
 // Singleton instance

@@ -454,4 +454,49 @@ a:hover, a:focus {
     right: 16px;
     bottom: 16px;
   }
+}
+
+/* Add styles for explicit content filter */
+.explicit-filter-placeholder {
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  padding: 2rem;
+  margin: 1rem 0;
+  text-align: center;
+  color: #f5f5f5;
+  border: 1px solid #444;
+}
+
+.explicit-filter-placeholder h2 {
+  color: #ff5555;
+  margin-bottom: 1rem;
+}
+
+.track-filtered {
+  opacity: 0.7;
+}
+
+.track-name.explicit-filtered {
+  color: #ff5555;
+  font-style: italic;
+}
+
+/* Add styles for disabled download buttons */
+.download-btn--disabled {
+  background-color: #666;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.download-btn--disabled:hover {
+  background-color: #666;
+  transform: none;
+}
+
+/* Add styles for download note in artist view */
+.download-note {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
 } 

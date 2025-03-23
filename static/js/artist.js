@@ -32,6 +32,9 @@ function renderArtist(artistData, artistId) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
+  // Check if explicit filter is enabled
+  const isExplicitFilterEnabled = downloadQueue.isExplicitFilterEnabled();
+
   const firstAlbum = artistData.items?.[0] || {};
   const artistName = firstAlbum?.artists?.[0]?.name || 'Unknown Artist';
   const artistImage = firstAlbum?.images?.[0]?.url || '/static/images/placeholder.jpg';
@@ -65,35 +68,50 @@ function renderArtist(artistData, artistId) {
     document.getElementById('artist-header').appendChild(downloadArtistBtn);
   }
 
-  downloadArtistBtn.addEventListener('click', () => {
-    // Optionally remove other download buttons from individual albums.
-    document.querySelectorAll('.download-btn:not(#downloadArtistBtn)').forEach(btn => btn.remove());
+  // When explicit filter is enabled, disable all download buttons
+  if (isExplicitFilterEnabled) {
+    // Disable the artist download button and display a message explaining why
     downloadArtistBtn.disabled = true;
-    downloadArtistBtn.textContent = 'Queueing...';
+    downloadArtistBtn.classList.add('download-btn--disabled');
+    downloadArtistBtn.innerHTML = `<span title="Direct artist downloads are restricted when explicit filter is enabled. Please visit individual album pages.">Downloads Restricted</span>`;
+  } else {
+    // Normal behavior when explicit filter is not enabled
+    downloadArtistBtn.addEventListener('click', () => {
+      // Optionally remove other download buttons from individual albums.
+      document.querySelectorAll('.download-btn:not(#downloadArtistBtn)').forEach(btn => btn.remove());
+      downloadArtistBtn.disabled = true;
+      downloadArtistBtn.textContent = 'Queueing...';
 
-    // Queue the entire discography (albums, singles, compilations, and appears_on)
-    // Use our local startDownload function instead of downloadQueue.startArtistDownload
-    startDownload(
-      artistUrl,
-      'artist',
-      { name: artistName, artist: artistName },
-      'album,single,compilation'
-    )
-      .then(() => {
-        downloadArtistBtn.textContent = 'Artist queued';
-        // Make the queue visible after queueing
-        downloadQueue.toggleVisibility(true);
-      })
-      .catch(err => {
-        downloadArtistBtn.textContent = 'Download All Discography';
-        downloadArtistBtn.disabled = false;
-        showError('Failed to queue artist download: ' + (err?.message || 'Unknown error'));
-      });
-  });
+      // Queue the entire discography (albums, singles, compilations, and appears_on)
+      // Use our local startDownload function instead of downloadQueue.startArtistDownload
+      startDownload(
+        artistUrl,
+        'artist',
+        { name: artistName, artist: artistName },
+        'album,single,compilation'
+      )
+        .then(() => {
+          downloadArtistBtn.textContent = 'Artist queued';
+          // Make the queue visible after queueing
+          downloadQueue.toggleVisibility(true);
+        })
+        .catch(err => {
+          downloadArtistBtn.textContent = 'Download All Discography';
+          downloadArtistBtn.disabled = false;
+          showError('Failed to queue artist download: ' + (err?.message || 'Unknown error'));
+        });
+    });
+  }
 
   // Group albums by type (album, single, compilation, etc.)
   const albumGroups = (artistData.items || []).reduce((groups, album) => {
     if (!album) return groups;
+    
+    // Skip explicit albums if filter is enabled
+    if (isExplicitFilterEnabled && album.explicit) {
+      return groups;
+    }
+    
     const type = (album.album_type || 'unknown').toLowerCase();
     if (!groups[type]) groups[type] = [];
     groups[type].push(album);
@@ -108,14 +126,22 @@ function renderArtist(artistData, artistId) {
     const groupSection = document.createElement('section');
     groupSection.className = 'album-group';
 
-    groupSection.innerHTML = `
-      <div class="album-group-header">
+    // If explicit filter is enabled, don't show the group download button
+    const groupHeaderHTML = isExplicitFilterEnabled ? 
+      `<div class="album-group-header">
+        <h3>${capitalize(groupType)}s</h3>
+        <div class="download-note">Visit album pages to download content</div>
+      </div>` : 
+      `<div class="album-group-header">
         <h3>${capitalize(groupType)}s</h3>
         <button class="download-btn download-btn--main group-download-btn" 
                 data-group-type="${groupType}">
           Download All ${capitalize(groupType)}s
         </button>
-      </div>
+      </div>`;
+
+    groupSection.innerHTML = `
+      ${groupHeaderHTML}
       <div class="albums-list"></div>
     `;
 
@@ -125,24 +151,41 @@ function renderArtist(artistData, artistId) {
       
       const albumElement = document.createElement('div');
       albumElement.className = 'album-card';
-      albumElement.innerHTML = `
-        <a href="/album/${album.id || ''}" class="album-link">
-          <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}" 
-               alt="Album cover" 
-               class="album-cover">
-        </a>
-        <div class="album-info">
-          <div class="album-title">${album.name || 'Unknown Album'}</div>
-          <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
-        </div>
-        <button class="download-btn download-btn--circle" 
-                data-url="${album.external_urls?.spotify || ''}" 
-                data-type="${album.album_type || 'album'}"
-                data-name="${album.name || 'Unknown Album'}"
-                title="Download">
-          <img src="/static/images/download.svg" alt="Download">
-        </button>
-      `;
+
+      // Create album card with or without download button based on explicit filter setting
+      if (isExplicitFilterEnabled) {
+        albumElement.innerHTML = `
+          <a href="/album/${album.id || ''}" class="album-link">
+            <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}" 
+                 alt="Album cover" 
+                 class="album-cover">
+          </a>
+          <div class="album-info">
+            <div class="album-title">${album.name || 'Unknown Album'}</div>
+            <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
+          </div>
+        `;
+      } else {
+        albumElement.innerHTML = `
+          <a href="/album/${album.id || ''}" class="album-link">
+            <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}" 
+                 alt="Album cover" 
+                 class="album-cover">
+          </a>
+          <div class="album-info">
+            <div class="album-title">${album.name || 'Unknown Album'}</div>
+            <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
+          </div>
+          <button class="download-btn download-btn--circle" 
+                  data-url="${album.external_urls?.spotify || ''}" 
+                  data-type="${album.album_type || 'album'}"
+                  data-name="${album.name || 'Unknown Album'}"
+                  title="Download">
+            <img src="/static/images/download.svg" alt="Download">
+          </button>
+        `;
+      }
+      
       albumsContainer.appendChild(albumElement);
     });
 
@@ -152,9 +195,12 @@ function renderArtist(artistData, artistId) {
   document.getElementById('artist-header').classList.remove('hidden');
   document.getElementById('albums-container').classList.remove('hidden');
 
-  attachDownloadListeners();
-  // Pass the artist URL and name so the group buttons can use the artist download function
-  attachGroupDownloadListeners(artistUrl, artistName);
+  // Only attach download listeners if explicit filter is not enabled
+  if (!isExplicitFilterEnabled) {
+    attachDownloadListeners();
+    // Pass the artist URL and name so the group buttons can use the artist download function
+    attachGroupDownloadListeners(artistUrl, artistName);
+  }
 }
 
 // Event listeners for group downloads using the artist download function

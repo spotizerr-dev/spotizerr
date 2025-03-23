@@ -39,6 +39,9 @@ function renderPlaylist(playlist) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
+  // Check if explicit filter is enabled
+  const isExplicitFilterEnabled = downloadQueue.isExplicitFilterEnabled();
+
   // Update header info
   document.getElementById('playlist-name').textContent = playlist.name || 'Unknown Playlist';
   document.getElementById('playlist-owner').textContent = `By ${playlist.owner?.display_name || 'Unknown User'}`;
@@ -67,6 +70,12 @@ function renderPlaylist(playlist) {
     window.location.href = window.location.origin;
   });
 
+  // Check if any track in the playlist is explicit when filter is enabled
+  let hasExplicitTrack = false;
+  if (isExplicitFilterEnabled && playlist.tracks?.items) {
+    hasExplicitTrack = playlist.tracks.items.some(item => item?.track && item.track.explicit);
+  }
+
   // --- Add "Download Whole Playlist" Button ---
   let downloadPlaylistBtn = document.getElementById('downloadPlaylistBtn');
   if (!downloadPlaylistBtn) {
@@ -80,26 +89,6 @@ function renderPlaylist(playlist) {
       headerContainer.appendChild(downloadPlaylistBtn);
     }
   }
-  downloadPlaylistBtn.addEventListener('click', () => {
-    // Remove individual track download buttons (but leave the whole playlist button).
-    document.querySelectorAll('.download-btn').forEach(btn => {
-      if (btn.id !== 'downloadPlaylistBtn') {
-        btn.remove();
-      }
-    });
-
-    // Disable the whole playlist button to prevent repeated clicks.
-    downloadPlaylistBtn.disabled = true;
-    downloadPlaylistBtn.textContent = 'Queueing...';
-
-    // Initiate the playlist download.
-    downloadWholePlaylist(playlist).then(() => {
-      downloadPlaylistBtn.textContent = 'Queued!';
-    }).catch(err => {
-      showError('Failed to queue playlist download: ' + (err?.message || 'Unknown error'));
-      downloadPlaylistBtn.disabled = false;
-    });
-  });
 
   // --- Add "Download Playlist's Albums" Button ---
   let downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn');
@@ -114,24 +103,58 @@ function renderPlaylist(playlist) {
       headerContainer.appendChild(downloadAlbumsBtn);
     }
   }
-  downloadAlbumsBtn.addEventListener('click', () => {
-    // Remove individual track download buttons (but leave this album button).
-    document.querySelectorAll('.download-btn').forEach(btn => {
-      if (btn.id !== 'downloadAlbumsBtn') btn.remove();
+
+  if (isExplicitFilterEnabled && hasExplicitTrack) {
+    // Disable both playlist buttons and display messages explaining why
+    downloadPlaylistBtn.disabled = true;
+    downloadPlaylistBtn.classList.add('download-btn--disabled');
+    downloadPlaylistBtn.innerHTML = `<span title="Cannot download entire playlist because it contains explicit tracks">Playlist Contains Explicit Tracks</span>`;
+    
+    downloadAlbumsBtn.disabled = true;
+    downloadAlbumsBtn.classList.add('download-btn--disabled');
+    downloadAlbumsBtn.innerHTML = `<span title="Cannot download albums from this playlist because it contains explicit tracks">Albums Access Restricted</span>`;
+  } else {
+    // Normal behavior when no explicit tracks are present
+    downloadPlaylistBtn.addEventListener('click', () => {
+      // Remove individual track download buttons (but leave the whole playlist button).
+      document.querySelectorAll('.download-btn').forEach(btn => {
+        if (btn.id !== 'downloadPlaylistBtn') {
+          btn.remove();
+        }
+      });
+
+      // Disable the whole playlist button to prevent repeated clicks.
+      downloadPlaylistBtn.disabled = true;
+      downloadPlaylistBtn.textContent = 'Queueing...';
+
+      // Initiate the playlist download.
+      downloadWholePlaylist(playlist).then(() => {
+        downloadPlaylistBtn.textContent = 'Queued!';
+      }).catch(err => {
+        showError('Failed to queue playlist download: ' + (err?.message || 'Unknown error'));
+        downloadPlaylistBtn.disabled = false;
+      });
     });
 
-    downloadAlbumsBtn.disabled = true;
-    downloadAlbumsBtn.textContent = 'Queueing...';
-
-    downloadPlaylistAlbums(playlist)
-      .then(() => {
-        downloadAlbumsBtn.textContent = 'Queued!';
-      })
-      .catch(err => {
-        showError('Failed to queue album downloads: ' + (err?.message || 'Unknown error'));
-        downloadAlbumsBtn.disabled = false;
+    downloadAlbumsBtn.addEventListener('click', () => {
+      // Remove individual track download buttons (but leave this album button).
+      document.querySelectorAll('.download-btn').forEach(btn => {
+        if (btn.id !== 'downloadAlbumsBtn') btn.remove();
       });
-  });
+
+      downloadAlbumsBtn.disabled = true;
+      downloadAlbumsBtn.textContent = 'Queueing...';
+
+      downloadPlaylistAlbums(playlist)
+        .then(() => {
+          downloadAlbumsBtn.textContent = 'Queued!';
+        })
+        .catch(err => {
+          showError('Failed to queue album downloads: ' + (err?.message || 'Unknown error'));
+          downloadAlbumsBtn.disabled = false;
+        });
+    });
+  }
 
   // Render tracks list
   const tracksList = document.getElementById('tracks-list');
@@ -144,6 +167,25 @@ function renderPlaylist(playlist) {
       if (!item || !item.track) return; // Skip null/undefined tracks
       
       const track = item.track;
+      
+      // Skip explicit tracks if filter is enabled
+      if (isExplicitFilterEnabled && track.explicit) {
+        // Add a placeholder for filtered explicit tracks
+        const trackElement = document.createElement('div');
+        trackElement.className = 'track track-filtered';
+        trackElement.innerHTML = `
+          <div class="track-number">${index + 1}</div>
+          <div class="track-info">
+            <div class="track-name explicit-filtered">Explicit Content Filtered</div>
+            <div class="track-artist">This track is not shown due to explicit content filter settings</div>
+          </div>
+          <div class="track-album">Not available</div>
+          <div class="track-duration">--:--</div>
+        `;
+        tracksList.appendChild(trackElement);
+        return;
+      }
+      
       // Create links for track, artist, and album using their IDs.
       const trackLink = `/track/${track.id || ''}`;
       const artistLink = `/artist/${track.artists?.[0]?.id || ''}`;
