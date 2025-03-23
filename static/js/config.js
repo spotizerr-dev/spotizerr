@@ -663,8 +663,28 @@ async function loadConfig() {
     document.getElementById('retryDelaySeconds').value = savedConfig.retryDelaySeconds || '5';
     document.getElementById('retryDelayIncrease').value = savedConfig.retry_delay_increase || '5';
     document.getElementById('tracknumPaddingToggle').checked = savedConfig.tracknum_padding === undefined ? true : !!savedConfig.tracknum_padding;
+    
+    // Update explicit filter status
+    updateExplicitFilterStatus(savedConfig.explicitFilter);
   } catch (error) {
     showConfigError('Error loading config: ' + error.message);
+  }
+}
+
+function updateExplicitFilterStatus(isEnabled) {
+  const statusElement = document.getElementById('explicitFilterStatus');
+  if (statusElement) {
+    // Remove existing classes
+    statusElement.classList.remove('enabled', 'disabled');
+    
+    // Add appropriate class and text based on whether filter is enabled
+    if (isEnabled) {
+      statusElement.textContent = 'Enabled';
+      statusElement.classList.add('enabled');
+    } else {
+      statusElement.textContent = 'Disabled';
+      statusElement.classList.add('disabled');
+    }
   }
 }
 

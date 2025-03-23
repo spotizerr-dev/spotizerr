@@ -34,6 +34,27 @@ function renderAlbum(album) {
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('error').classList.add('hidden');
 
+  // Check if album itself is marked explicit and filter is enabled
+  const isExplicitFilterEnabled = downloadQueue.isExplicitFilterEnabled();
+  if (isExplicitFilterEnabled && album.explicit) {
+    // Show placeholder for explicit album
+    const placeholderContent = `
+      <div class="explicit-filter-placeholder">
+        <h2>Explicit Content Filtered</h2>
+        <p>This album contains explicit content and has been filtered based on your settings.</p>
+        <p>The explicit content filter is controlled by environment variables.</p>
+      </div>
+    `;
+    
+    const contentContainer = document.getElementById('album-header');
+    if (contentContainer) {
+      contentContainer.innerHTML = placeholderContent;
+      contentContainer.classList.remove('hidden');
+    }
+    
+    return; // Stop rendering the actual album content
+  }
+
   const baseUrl = window.location.origin;
 
   // Set album header info.
@@ -75,6 +96,12 @@ function renderAlbum(album) {
     window.location.href = window.location.origin;
   });
 
+  // Check if any track in the album is explicit when filter is enabled
+  let hasExplicitTrack = false;
+  if (isExplicitFilterEnabled && album.tracks?.items) {
+    hasExplicitTrack = album.tracks.items.some(track => track && track.explicit);
+  }
+
   // Create (if needed) the Download Album Button.
   let downloadAlbumBtn = document.getElementById('downloadAlbumBtn');
   if (!downloadAlbumBtn) {
@@ -85,24 +112,32 @@ function renderAlbum(album) {
     document.getElementById('album-header').appendChild(downloadAlbumBtn);
   }
   
-  downloadAlbumBtn.addEventListener('click', () => {
-    // Remove any other download buttons (keeping the full-album button in place).
-    document.querySelectorAll('.download-btn').forEach(btn => {
-      if (btn.id !== 'downloadAlbumBtn') btn.remove();
-    });
-
+  if (isExplicitFilterEnabled && hasExplicitTrack) {
+    // Disable the album download button and display a message explaining why
     downloadAlbumBtn.disabled = true;
-    downloadAlbumBtn.textContent = 'Queueing...';
-
-    downloadWholeAlbum(album)
-      .then(() => {
-        downloadAlbumBtn.textContent = 'Queued!';
-      })
-      .catch(err => {
-        showError('Failed to queue album download: ' + (err?.message || 'Unknown error'));
-        downloadAlbumBtn.disabled = false;
+    downloadAlbumBtn.classList.add('download-btn--disabled');
+    downloadAlbumBtn.innerHTML = `<span title="Cannot download entire album because it contains explicit tracks">Album Contains Explicit Tracks</span>`;
+  } else {
+    // Normal behavior when no explicit tracks are present
+    downloadAlbumBtn.addEventListener('click', () => {
+      // Remove any other download buttons (keeping the full-album button in place).
+      document.querySelectorAll('.download-btn').forEach(btn => {
+        if (btn.id !== 'downloadAlbumBtn') btn.remove();
       });
-  });
+
+      downloadAlbumBtn.disabled = true;
+      downloadAlbumBtn.textContent = 'Queueing...';
+
+      downloadWholeAlbum(album)
+        .then(() => {
+          downloadAlbumBtn.textContent = 'Queued!';
+        })
+        .catch(err => {
+          showError('Failed to queue album download: ' + (err?.message || 'Unknown error'));
+          downloadAlbumBtn.disabled = false;
+        });
+    });
+  }
 
   // Render each track.
   const tracksList = document.getElementById('tracks-list');
@@ -111,6 +146,23 @@ function renderAlbum(album) {
   if (album.tracks?.items) {
     album.tracks.items.forEach((track, index) => {
       if (!track) return; // Skip null or undefined tracks
+      
+      // Skip explicit tracks if filter is enabled
+      if (isExplicitFilterEnabled && track.explicit) {
+        // Add a placeholder for filtered explicit tracks
+        const trackElement = document.createElement('div');
+        trackElement.className = 'track track-filtered';
+        trackElement.innerHTML = `
+          <div class="track-number">${index + 1}</div>
+          <div class="track-info">
+            <div class="track-name explicit-filtered">Explicit Content Filtered</div>
+            <div class="track-artist">This track is not shown due to explicit content filter settings</div>
+          </div>
+          <div class="track-duration">--:--</div>
+        `;
+        tracksList.appendChild(trackElement);
+        return;
+      }
       
       const trackElement = document.createElement('div');
       trackElement.className = 'track';

@@ -32,6 +32,39 @@ body {
   transition: all 0.3s ease;
 }
 
+/* Environment controlled setting styles */
+.env-controlled-setting {
+  display: flex;
+  align-items: center;
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.env-controlled-value {
+  flex: 1;
+  font-weight: 500;
+}
+
+.env-controlled-value.enabled {
+  color: #1db954;
+}
+
+.env-controlled-value.disabled {
+  color: #ff5555;
+}
+
+.env-controlled-badge {
+  background-color: #555;
+  color: white;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+  font-weight: bold;
+}
+
 /* Back button as floating icon - keep this for our floating button */
 .back-button.floating-icon {
   position: fixed;

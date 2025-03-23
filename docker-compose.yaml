@@ -21,6 +21,7 @@ services:
       - REDIS_DB=0
       - REDIS_URL=redis://redis:6379/0
       - REDIS_BACKEND=redis://redis:6379/0
+      - EXPLICIT_FILTER=false # Set to true to filter out explicit content
     depends_on:
       - redis
 

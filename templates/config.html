@@ -53,6 +53,17 @@
             <option value="FLAC">FLAC (premium)</option>
           </select>
         </div>
+        <!-- Explicit Filter Status -->
+        <div class="config-item">
+          <label>Explicit Content Filter:</label>
+          <div class="env-controlled-setting">
+            <span id="explicitFilterStatus" class="env-controlled-value">Loading...</span>
+            <div class="env-controlled-badge">ENV</div>
+          </div>
+          <div class="setting-description">
+            Filter explicit content. Controlled by environment variable EXPLICIT_FILTER.
+          </div>
+        </div>
         <div class="config-item">
           <label>Download Fallback:</label>
           <label class="switch">
