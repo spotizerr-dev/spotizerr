@@ -31,3 +31,11 @@ If applicable, add screenshots to help explain your problem.
 ```
 Paste it here
 ```
+**Logs**
+```
+Preferably, restart the app before reproducing so you can paste the logs from the bare beginning
+```
+
+**Image**
+Run 
+```docker container ls --format "{{.Names}}: {{.Image}}"``` and share the relevant output (e.g. spotizerr: cooldockerizer93/spotizerr:latest)
