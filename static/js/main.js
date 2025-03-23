@@ -101,15 +101,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data && data.items && data.items.length > 0) {
                 resultsContainer.innerHTML = '';
                 
-                data.items.forEach((item, index) => {
-                    if (!item) return; // Skip null/undefined items
-                    
+                // Filter out null/undefined items first
+                const validItems = data.items.filter(item => item);
+                
+                validItems.forEach((item, index) => {
                     const cardElement = createResultCard(item, searchType.value, index);
+                    
+                    // Store the item data directly on the button element
+                    const downloadBtn = cardElement.querySelector('.download-btn');
+                    if (downloadBtn) {
+                        downloadBtn.dataset.itemIndex = index;
+                    }
+                    
                     resultsContainer.appendChild(cardElement);
                 });
                 
                 // Attach download handlers to the newly created cards
-                attachDownloadListeners(data.items);
+                attachDownloadListeners(validItems);
             } else {
                 // No results found
                 resultsContainer.innerHTML = `
@@ -133,12 +141,15 @@ document.addEventListener('DOMContentLoaded', function() {
      * Attaches download handlers to result cards
      */
     function attachDownloadListeners(items) {
-        document.querySelectorAll('.download-btn').forEach((btn, index) => {
+        document.querySelectorAll('.download-btn').forEach((btn) => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 
+                // Get the item index from the button's dataset
+                const itemIndex = parseInt(btn.dataset.itemIndex, 10);
+                
                 // Get the corresponding item
-                const item = items[index];
+                const item = items[itemIndex];
                 if (!item) return;
                 
                 const type = searchType.value;
@@ -323,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="track-title">${item.name || 'Unknown'}</div>
             <div class="track-artist">${subtitle}</div>
             <div class="track-details">${details}</div>
-            <button class="download-btn btn-primary">
+            <button class="download-btn btn-primary" data-item-index="${index}">
                 <img src="/static/images/download.svg" alt="Download" /> 
                 Download
             </button>
