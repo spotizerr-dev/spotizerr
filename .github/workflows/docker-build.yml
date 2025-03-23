@@ -33,12 +33,17 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: cooldockerizer93/spotizerr
+          # Set latest tag to follow semantic versioning
+          flavor: |
+            latest=auto
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            # Set 'latest' tag for the most recent semver tag (following proper semver ordering)
+            type=semver,pattern=latest,priority=1000
+            # Keep dev tag for main/master branch
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
       # Build and push Docker image with multiarch support
