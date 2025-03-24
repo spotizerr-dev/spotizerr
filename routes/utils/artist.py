@@ -146,6 +146,18 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
             logger.warning(f"Skipping album without URL: {album_name}")
             continue
         
+        # Create album-specific request args instead of using original artist request
+        album_request_args = {
+            "url": album_url,
+            "name": album_name,
+            "artist": album_artist,
+            "type": "album",
+            "service": "spotify",
+            # Add reference to parent artist request if needed
+            "parent_artist_url": url,
+            "parent_request_type": "artist"
+        }
+        
         # Create task for this album
         task_data = {
             "download_type": "album",
@@ -155,7 +167,7 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
             "retry_url": album_url,  # Use album URL for retry logic, not artist URL
             "name": album_name,
             "artist": album_artist,
-            "orig_request": request_args or {}  # Store original request params
+            "orig_request": album_request_args  # Store album-specific request params
         }
         
         # Debug log the task data being sent to the queue

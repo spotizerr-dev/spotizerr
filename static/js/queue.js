@@ -65,14 +65,6 @@ class DownloadQueue {
               <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Skull" class="skull-icon">
               Cancel all
             </button>
-            <button id="refreshQueueBtn" aria-label="Refresh queue" title="Refresh queue">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19.91 15.51H15.38V20.04" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M4.09 8.49H8.62V3.96" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M8.62 8.49C8.62 8.49 5.19 12.57 4.09 15.51C2.99 18.45 4.09 20.04 4.09 20.04" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M15.38 15.51C15.38 15.51 18.81 11.43 19.91 8.49C21.01 5.55 19.91 3.96 19.91 3.96" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
           </div>
         </div>
         <div id="queueItems" aria-live="polite"></div>
@@ -145,24 +137,6 @@ class DownloadQueue {
               })
               .catch(error => console.error('Cancel error:', error));
           }
-        }
-      });
-    }
-    
-    // "Refresh queue" button
-    const refreshQueueBtn = document.getElementById('refreshQueueBtn');
-    if (refreshQueueBtn) {
-      refreshQueueBtn.addEventListener('click', async () => {
-        try {
-          refreshQueueBtn.disabled = true;
-          refreshQueueBtn.classList.add('refreshing');
-          await this.loadExistingPrgFiles();
-          console.log('Queue refreshed');
-        } catch (error) {
-          console.error('Error refreshing queue:', error);
-        } finally {
-          refreshQueueBtn.disabled = false;
-          refreshQueueBtn.classList.remove('refreshing');
         }
       });
     }
@@ -585,47 +559,13 @@ class DownloadQueue {
       }
     });
 
-    // Calculate statistics to display in the header
-    const totalEntries = entries.length;
-    const completedEntries = entries.filter(e => e.hasEnded && e.lastStatus && e.lastStatus.status === 'complete').length;
-    const errorEntries = entries.filter(e => e.hasEnded && e.lastStatus && e.lastStatus.status === 'error').length;
-    const activeEntries = entries.filter(e => !e.hasEnded).length;
+    // Update the header with just the total count
+    document.getElementById('queueTotalCount').textContent = entries.length;
     
-    // Update the header with detailed count
-    document.getElementById('queueTotalCount').textContent = totalEntries;
-    
-    // Update subtitle with detailed stats if we have entries
-    if (totalEntries > 0) {
-      let statsHtml = '';
-      if (activeEntries > 0) {
-        statsHtml += `<span class="queue-stat queue-stat-active">${activeEntries} active</span>`;
-      }
-      if (completedEntries > 0) {
-        statsHtml += `<span class="queue-stat queue-stat-completed">${completedEntries} completed</span>`;
-      }
-      if (errorEntries > 0) {
-        statsHtml += `<span class="queue-stat queue-stat-error">${errorEntries} failed</span>`;
-      }
-      
-      // Only add the subtitle if we have stats to show
-      if (statsHtml) {
-        const subtitleEl = document.getElementById('queueSubtitle');
-        if (subtitleEl) {
-          subtitleEl.innerHTML = statsHtml;
-        } else {
-          // Create the subtitle if it doesn't exist
-          const headerEl = document.querySelector('.sidebar-header h2');
-          if (headerEl) {
-            headerEl.insertAdjacentHTML('afterend', `<div id="queueSubtitle" class="queue-subtitle">${statsHtml}</div>`);
-          }
-        }
-      }
-    } else {
-      // Remove subtitle if no entries
-      const subtitleEl = document.getElementById('queueSubtitle');
-      if (subtitleEl) {
-        subtitleEl.remove();
-      }
+    // Remove subtitle with detailed stats if it exists
+    const subtitleEl = document.getElementById('queueSubtitle');
+    if (subtitleEl) {
+      subtitleEl.remove();
     }
     
     // Only recreate the container content if really needed
@@ -925,10 +865,14 @@ class DownloadQueue {
     // Stop polling
     this.closeSSEConnection(queueId);
     
-    // Clean up after a delay
+    // For error state, use longer timeout (30 seconds)
+    const isError = entry.lastStatus && entry.lastStatus.status === 'error';
+    const cleanupDelay = isError ? 30000 : 5000;
+    
+    // Clean up after the appropriate delay
     setTimeout(() => {
       this.cleanupEntry(queueId);
-    }, 5000);
+    }, cleanupDelay);
   }
 
   handleInactivity(entry, queueId, logElement) {
@@ -955,9 +899,30 @@ class DownloadQueue {
     
     logElement.textContent = 'Retrying download...';
     
-    // If we don't have the request URL, we can't retry
-    if (!entry.requestUrl) {
-      logElement.textContent = 'Retry not available: missing original request information.';
+    // Find a retry URL from various possible sources
+    const getRetryUrl = () => {
+      if (entry.requestUrl) return entry.requestUrl;
+      
+      // If we have lastStatus with original_request, check there
+      if (entry.lastStatus && entry.lastStatus.original_request) {
+        if (entry.lastStatus.original_request.retry_url) 
+          return entry.lastStatus.original_request.retry_url;
+        if (entry.lastStatus.original_request.url) 
+          return entry.lastStatus.original_request.url;
+      }
+      
+      // Check if there's a URL directly in the lastStatus
+      if (entry.lastStatus && entry.lastStatus.url) 
+        return entry.lastStatus.url;
+      
+      return null;
+    };
+    
+    const retryUrl = getRetryUrl();
+    
+    // If we don't have any retry URL, show error
+    if (!retryUrl) {
+      logElement.textContent = 'Retry not available: missing URL information.';
       return;
     }
     
@@ -965,14 +930,22 @@ class DownloadQueue {
       // Close any existing SSE connection
       this.closeSSEConnection(queueId);
       
-      // For album tasks created from artist downloads, we need to ensure
-      // we're using the album URL, not the original artist URL
-      let retryUrl = entry.requestUrl;
-      
       console.log(`Retrying download for ${entry.type} with URL: ${retryUrl}`);
       
+      // Build the API URL based on the entry's type
+      const apiUrl = `/api/${entry.type}/download?url=${encodeURIComponent(retryUrl)}`;
+      
+      // Add name and artist if available for better progress display
+      let fullRetryUrl = apiUrl;
+      if (entry.item && entry.item.name) {
+        fullRetryUrl += `&name=${encodeURIComponent(entry.item.name)}`;
+      }
+      if (entry.item && entry.item.artist) {
+        fullRetryUrl += `&artist=${encodeURIComponent(entry.item.artist)}`;
+      }
+      
       // Use the stored original request URL to create a new download
-      const retryResponse = await fetch(retryUrl);
+      const retryResponse = await fetch(fullRetryUrl);
       if (!retryResponse.ok) {
         throw new Error(`Server returned ${retryResponse.status}`);
       }
@@ -1096,6 +1069,15 @@ class DownloadQueue {
           
           // Fetch the latest tasks to show all newly created album downloads
           await this.loadExistingPrgFiles();
+          
+          // Start monitoring all new tasks immediately
+          for (const queueId in this.queueEntries) {
+            const entry = this.queueEntries[queueId];
+            // Only start monitoring if the entry is not in a terminal state
+            if (!entry.hasEnded && !this.sseConnections[queueId]) {
+              this.setupSSEConnection(queueId);
+            }
+          }
           
           return data.task_ids;
         } 
@@ -1474,25 +1456,130 @@ class DownloadQueue {
       progress = statusData.progress;
     }
     
-    // Update the log element with the latest message
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    if (logElement && message) {
-      logElement.textContent = message;
-    }
-    
-    // Set the proper status classes on the list item
-    this.applyStatusClasses(entry, status);
-    
-    // Handle progress indicators
-    const progressBar = entry.element.querySelector('.progress-bar');
-    if (progressBar && typeof progress === 'number') {
-      progressBar.style.width = `${progress}%`;
-      progressBar.setAttribute('aria-valuenow', progress);
+    // Special handling for error status
+    if (status === 'error') {
+      entry.hasEnded = true;
       
-      if (progress >= 100) {
-        progressBar.classList.add('bg-success');
-      } else {
-        progressBar.classList.remove('bg-success');
+      // Hide the cancel button
+      const cancelBtn = entry.element.querySelector('.cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.style.display = 'none';
+      }
+      
+      // Find a valid URL to use for retry from multiple possible sources
+      const getRetryUrl = () => {
+        // Check direct properties first
+        if (entry.requestUrl) return entry.requestUrl;
+        if (data.retry_url) return data.retry_url;
+        if (statusData.retry_url) return statusData.retry_url;
+        
+        // Check in original_request object
+        if (data.original_request) {
+          if (data.original_request.retry_url) return data.original_request.retry_url;
+          if (data.original_request.url) return data.original_request.url;
+        }
+        
+        // Last resort - check if there's a URL directly in the data
+        if (data.url) return data.url;
+        
+        return null;
+      };
+      
+      // Determine if we can retry by finding a valid URL
+      const retryUrl = getRetryUrl();
+      
+      // Save the retry URL if found
+      if (retryUrl) {
+        entry.requestUrl = retryUrl;
+      }
+      
+      console.log(`Error for ${entry.type} download. Retry URL: ${retryUrl}`);
+      
+      // Get or create the log element
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        // Always show retry if we have a URL, even if we've reached retry limit
+        const canRetry = !!retryUrl;
+        
+        if (canRetry) {
+          // Create error UI with retry button
+          logElement.innerHTML = `
+            <div class="error-message">${message || this.getStatusMessage(statusData)}</div>
+            <div class="error-buttons">
+              <button class="close-error-btn" title="Close">&times;</button>
+              <button class="retry-btn" title="Retry download">Retry</button>
+            </div>
+          `;
+          
+          // Add event listeners
+          logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+            if (entry.autoRetryInterval) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+            }
+            this.cleanupEntry(queueId);
+          });
+          
+          logElement.querySelector('.retry-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Replace retry button with loading indicator
+            const retryBtn = logElement.querySelector('.retry-btn');
+            if (retryBtn) {
+              retryBtn.disabled = true;
+              retryBtn.innerHTML = '<span class="loading-spinner small"></span> Retrying...';
+            }
+            
+            if (entry.autoRetryInterval) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+            }
+            
+            this.retryDownload(queueId, logElement);
+          });
+        } else {
+          // Cannot retry - just show error with close button
+          logElement.innerHTML = `
+            <div class="error-message">${message || this.getStatusMessage(statusData)}</div>
+            <div class="error-buttons">
+              <button class="close-error-btn" title="Close">&times;</button>
+            </div>
+          `;
+          
+          logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+            this.cleanupEntry(queueId);
+          });
+        }
+      }
+      
+      // Update CSS classes for error state
+      entry.element.classList.remove('queued', 'initializing', 'downloading', 'processing', 'progress');
+      entry.element.classList.add('error');
+      
+      // Close SSE connection
+      this.closeSSEConnection(queueId);
+    } else {
+      // For non-error states, update the log element with the latest message
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement && message) {
+        logElement.textContent = message;
+      }
+      
+      // Set the proper status classes on the list item
+      this.applyStatusClasses(entry, status);
+      
+      // Handle progress indicators
+      const progressBar = entry.element.querySelector('.progress-bar');
+      if (progressBar && typeof progress === 'number') {
+        progressBar.style.width = `${progress}%`;
+        progressBar.setAttribute('aria-valuenow', progress);
+        
+        if (progress >= 100) {
+          progressBar.classList.add('bg-success');
+        } else {
+          progressBar.classList.remove('bg-success');
+        }
       }
     }
     
@@ -1508,8 +1595,8 @@ class DownloadQueue {
     this.queueCache[entry.prgFile] = entry.lastStatus;
     localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
     
-    // Handle terminal states
-    if (['complete', 'error', 'cancelled', 'done'].includes(status)) {
+    // Handle terminal states (except errors which we handle separately above)
+    if (['complete', 'cancelled', 'done'].includes(status)) {
       this.handleTerminalState(entry, queueId, progress);
     }
   }
