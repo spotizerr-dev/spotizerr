@@ -104,6 +104,14 @@ function setupEventListeners() {
   // Formatting settings
   document.getElementById('customDirFormat').addEventListener('change', saveConfig);
   document.getElementById('customTrackFormat').addEventListener('change', saveConfig);
+  
+  // Copy to clipboard when selecting placeholders
+  document.getElementById('dirFormatHelp').addEventListener('change', function() {
+    copyPlaceholderToClipboard(this);
+  });
+  document.getElementById('trackFormatHelp').addEventListener('change', function() {
+    copyPlaceholderToClipboard(this);
+  });
 
   // Max concurrent downloads change listener
   document.getElementById('maxConcurrentDownloads').addEventListener('change', saveConfig);
@@ -698,4 +706,58 @@ function showConfigSuccess(message) {
   const successDiv = document.getElementById('configSuccess');
   successDiv.textContent = message;
   setTimeout(() => (successDiv.textContent = ''), 5000);
+}
+
+// Function to copy the selected placeholder to clipboard
+function copyPlaceholderToClipboard(select) {
+  const placeholder = select.value;
+  
+  if (!placeholder) return; // If nothing selected
+  
+  // Copy to clipboard
+  navigator.clipboard.writeText(placeholder)
+    .then(() => {
+      // Show success notification
+      showCopyNotification(`Copied ${placeholder} to clipboard`);
+      
+      // Reset select to default after a short delay
+      setTimeout(() => {
+        select.selectedIndex = 0;
+      }, 500);
+    })
+    .catch(err => {
+      console.error('Failed to copy: ', err);
+    });
+}
+
+// Function to show a notification when copying
+function showCopyNotification(message) {
+  // Check if notification container exists, create if not
+  let notificationContainer = document.getElementById('copyNotificationContainer');
+  if (!notificationContainer) {
+    notificationContainer = document.createElement('div');
+    notificationContainer.id = 'copyNotificationContainer';
+    document.body.appendChild(notificationContainer);
+  }
+  
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.className = 'copy-notification';
+  notification.textContent = message;
+  
+  // Add to container
+  notificationContainer.appendChild(notification);
+  
+  // Trigger animation
+  setTimeout(() => {
+    notification.classList.add('show');
+  }, 10);
+  
+  // Remove after animation completes
+  setTimeout(() => {
+    notification.classList.remove('show');
+    setTimeout(() => {
+      notificationContainer.removeChild(notification);
+    }, 300);
+  }, 2000);
 }

@@ -69,54 +69,6 @@ Access at: `http://localhost:7171`
 
 _Note: If you want Spotify-only mode, just keep "Download fallback" setting disabled and don't bother adding Deezer credentials. Deezer-only mode is not, and will not be supported since there already is a much better tool for that called "Deemix"_
 
-### Spotify Developer Setup
-
-Due to Spotify's ToS changes, anonymous API calls are now more limited. You need to set up your own Spotify Developer application:
-
-1. Visit the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
-2. Log in with your Spotify account
-3. Click "Create app"
-4. Fill in:
-   - App name (e.g., "My Spotizerr App")
-   - App description
-   - Redirect URI: `http://localhost:7171/callback` (or your custom domain if exposed)
-   - Check the Developer Terms agreement box
-5. Click "Create"
-6. On your app page, note your "Client ID" 
-7. Click "Show client secret" to reveal your "Client Secret"
-8. Add these credentials in Spotizerr's settings page under the Spotify service section
-
-### Deezer ARL Setup
-
-#### Chrome-based browsers
-
-Open the [web player](https://www.deezer.com/)
-
-There, press F12 and select "Application"
-
-![image](https://github.com/user-attachments/assets/22e61d91-50b4-48f2-bba7-28ef45b45ee5)
-
-Expand Cookies section and select the "https://www.deezer.com". Find the "arl" cookie and double-click the "Cookie Value" tab's text.
-
-![image](https://github.com/user-attachments/assets/75a67906-596e-42a0-beb0-540f2748b16e)
-
-Copy that value and paste it into the correspondant setting in Spotizerr
-
-#### Firefox-based browsers
-
-Open the [web player](https://www.deezer.com/)
-
-There, press F12 and select "Storage"
-
-![image](https://github.com/user-attachments/assets/601be3fb-1ec9-44d9-be4f-28b1d853df2f)
-
-Click the cookies host "https://www.deezer.com" and find the "arl" cookie.
-
-![image](https://github.com/user-attachments/assets/ef8ea256-2c13-4780-ae9f-71527466df56)
-
-Copy that value and paste it into the correspondant setting in Spotizerr
-
-
 ### Spotify Credentials Setup
 
 First create a Spotify credentials file using the 3rd-party `librespot-auth` tool, this step has to be done in a PC/Laptop that has the Spotify desktop app installed.
@@ -200,6 +152,53 @@ In the terminal, you can directly print these parameters using jq:
 ```
 jq -r '.username, .auth_data' credentials.json
 ```
+
+### Spotify Developer Setup
+
+In order for searching to work, you need to set up your own Spotify Developer application:
+
+1. Visit the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
+2. Log in with your Spotify account
+3. Click "Create app"
+4. Fill in:
+   - App name (e.g., "My Spotizerr App")
+   - App description
+   - Redirect URI: `http://localhost:7171/callback` (or your custom domain if exposed)
+   - Check the Developer Terms agreement box
+5. Click "Create"
+6. On your app page, note your "Client ID" 
+7. Click "Show client secret" to reveal your "Client Secret"
+8. Add these credentials in Spotizerr's settings page under the Spotify service section
+
+### Deezer ARL Setup
+
+#### Chrome-based browsers
+
+Open the [web player](https://www.deezer.com/)
+
+There, press F12 and select "Application"
+
+![image](https://github.com/user-attachments/assets/22e61d91-50b4-48f2-bba7-28ef45b45ee5)
+
+Expand Cookies section and select the "https://www.deezer.com". Find the "arl" cookie and double-click the "Cookie Value" tab's text.
+
+![image](https://github.com/user-attachments/assets/75a67906-596e-42a0-beb0-540f2748b16e)
+
+Copy that value and paste it into the correspondant setting in Spotizerr
+
+#### Firefox-based browsers
+
+Open the [web player](https://www.deezer.com/)
+
+There, press F12 and select "Storage"
+
+![image](https://github.com/user-attachments/assets/601be3fb-1ec9-44d9-be4f-28b1d853df2f)
+
+Click the cookies host "https://www.deezer.com" and find the "arl" cookie.
+
+![image](https://github.com/user-attachments/assets/ef8ea256-2c13-4780-ae9f-71527466df56)
+
+Copy that value and paste it into the correspondant setting in Spotizerr
 
 ## Usage
 
