@@ -21,12 +21,24 @@ class DownloadQueue {
     this.RETRY_DELAY = 5;      // Default retry delay in seconds
     this.RETRY_DELAY_INCREASE = 5; // Default retry delay increase in seconds
 
-    this.downloadQueue = {}; // keyed by unique queueId
-    this.currentConfig = {}; // Cache for current config
+    // Cache for queue items
+    this.queueCache = {};
+    
+    // Queue entry objects
+    this.queueEntries = {};
     
     // EventSource connections for SSE tracking
-    this.sseConnections = {}; // keyed by prgFile/task_id
-
+    this.sseConnections = {};
+    
+    // DOM elements cache
+    this.elements = {};
+    
+    // Event handlers
+    this.eventHandlers = {};
+    
+    // Configuration
+    this.config = null;
+    
     // Load the saved visible count (or default to 10)
     const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
     this.visibleCount = storedVisibleCount ? parseInt(storedVisibleCount, 10) : 10;
@@ -75,17 +87,17 @@ class DownloadQueue {
     // Override the server value with locally persisted queue visibility (if present).
     const storedVisible = localStorage.getItem("downloadQueueVisible");
     if (storedVisible !== null) {
-      this.currentConfig.downloadQueueVisible = storedVisible === "true";
+      this.config.downloadQueueVisible = storedVisible === "true";
     }
 
     const queueSidebar = document.getElementById('downloadQueue');
-    queueSidebar.hidden = !this.currentConfig.downloadQueueVisible;
-    queueSidebar.classList.toggle('active', this.currentConfig.downloadQueueVisible);
+    queueSidebar.hidden = !this.config.downloadQueueVisible;
+    queueSidebar.classList.toggle('active', this.config.downloadQueueVisible);
     
     // Initialize the queue icon based on sidebar visibility
     const queueIcon = document.getElementById('queueIcon');
     if (queueIcon) {
-      if (this.currentConfig.downloadQueueVisible) {
+      if (this.config.downloadQueueVisible) {
         queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
         queueIcon.setAttribute('aria-expanded', 'true');
         queueIcon.classList.add('queue-icon-active'); // Add red tint class
@@ -111,8 +123,8 @@ class DownloadQueue {
     const cancelAllBtn = document.getElementById('cancelAllBtn');
     if (cancelAllBtn) {
       cancelAllBtn.addEventListener('click', () => {
-        for (const queueId in this.downloadQueue) {
-          const entry = this.downloadQueue[queueId];
+        for (const queueId in this.queueEntries) {
+          const entry = this.queueEntries[queueId];
           if (!entry.hasEnded) {
             fetch(`/api/${entry.type}/download/cancel?prg_file=${entry.prgFile}`)
               .then(response => response.json())
@@ -191,7 +203,7 @@ class DownloadQueue {
 
     try {
       await this.loadConfig();
-      const updatedConfig = { ...this.currentConfig, downloadQueueVisible: isVisible };
+      const updatedConfig = { ...this.config, downloadQueueVisible: isVisible };
       await this.saveConfig(updatedConfig);
       this.dispatchEvent('queueVisibilityChanged', { visible: isVisible });
     } catch (error) {
@@ -230,7 +242,7 @@ class DownloadQueue {
   addDownload(item, type, prgFile, requestUrl = null, startMonitoring = false) {
     const queueId = this.generateQueueId();
     const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
-    this.downloadQueue[queueId] = entry;
+    this.queueEntries[queueId] = entry;
     // Re-render and update which entries are processed.
     this.updateQueueOrder();
     
@@ -245,7 +257,7 @@ class DownloadQueue {
 
   /* Start processing the entry only if it is visible. */
   async startEntryMonitoring(queueId) {
-    const entry = this.downloadQueue[queueId];
+    const entry = this.queueEntries[queueId];
     if (!entry || entry.hasEnded) return;
     
     // Don't restart monitoring if SSE connection already exists
@@ -417,7 +429,7 @@ class DownloadQueue {
     }
     
     // Store it in our queue object
-    this.downloadQueue[queueId] = entry;
+    this.queueEntries[queueId] = entry;
     
     return entry;
   }
@@ -456,31 +468,42 @@ class DownloadQueue {
 
   // Add a helper method to apply the right CSS classes based on status
   applyStatusClasses(entry, status) {
-    if (!entry || !entry.element || !status) return;
+    // If no element, nothing to do
+    if (!entry.element) return;
     
-    // Clear existing status classes
-    entry.element.classList.remove('queue-item--processing', 'queue-item--error', 'download-success');
+    // Remove all status classes first
+    entry.element.classList.remove(
+      'queued', 'initializing', 'downloading', 'processing', 
+      'error', 'complete', 'cancelled', 'progress'
+    );
     
-    // Apply appropriate class based on status
-    if (status.status === 'processing' || status.status === 'downloading' || status.status === 'progress') {
-      entry.element.classList.add('queue-item--processing');
-    } else if (status.status === 'error') {
-      entry.element.classList.add('queue-item--error');
-      entry.hasEnded = true;
-    } else if (status.status === 'complete' || status.status === 'done') {
-      entry.element.classList.add('download-success');
-      entry.hasEnded = true;
-    // Distinguish 'track_complete' from final 'complete' state
-    } else if (status.status === 'track_complete') {
-      // Don't mark as ended, just show it's in progress
-      entry.element.classList.add('queue-item--processing');
-    } else if (status.status === 'cancel' || status.status === 'interrupted') {
-      entry.hasEnded = true;
-    }
-    
-    // Special case for retry status
-    if (status.retrying || status.status === 'retrying') {
-      entry.element.classList.add('queue-item--processing');
+    // Handle various status types
+    switch (status) {
+      case 'queued':
+        entry.element.classList.add('queued');
+        break;
+      case 'initializing':
+        entry.element.classList.add('initializing');
+        break;
+      case 'processing':
+      case 'downloading':
+        entry.element.classList.add('processing');
+        break;
+      case 'progress':
+      case 'track_progress':
+      case 'real_time':
+        entry.element.classList.add('progress');
+        break;
+      case 'error':
+        entry.element.classList.add('error');
+        break;
+      case 'complete':
+      case 'done': 
+        entry.element.classList.add('complete');
+        break;
+      case 'cancelled':
+        entry.element.classList.add('cancelled');
+        break;
     }
   }
 
@@ -495,7 +518,7 @@ class DownloadQueue {
       if (data.status === "cancel") {
         const logElement = document.getElementById(`log-${queueid}-${prg}`);
         logElement.textContent = "Download cancelled";
-        const entry = this.downloadQueue[queueid];
+        const entry = this.queueEntries[queueid];
         if (entry) {
           entry.hasEnded = true;
           
@@ -535,7 +558,7 @@ class DownloadQueue {
   updateQueueOrder() {
     const container = document.getElementById('queueItems');
     const footer = document.getElementById('queueFooter');
-    const entries = Object.values(this.downloadQueue);
+    const entries = Object.values(this.queueEntries);
 
     // Sorting: errors/canceled first (group 0), ongoing next (group 1), queued last (group 2, sorted by position).
     entries.sort((a, b) => {
@@ -673,7 +696,7 @@ class DownloadQueue {
 
   /* Checks if an entry is visible in the queue display. */
   isEntryVisible(queueId) {
-    const entries = Object.values(this.downloadQueue);
+    const entries = Object.values(this.queueEntries);
     entries.sort((a, b) => {
       const getGroup = (entry) => {
         if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
@@ -702,7 +725,7 @@ class DownloadQueue {
   }
 
   async cleanupEntry(queueId) {
-    const entry = this.downloadQueue[queueId];
+    const entry = this.queueEntries[queueId];
     if (entry) {
       // Close any SSE connection
       this.closeSSEConnection(queueId);
@@ -719,7 +742,7 @@ class DownloadQueue {
       entry.element.remove();
       
       // Delete from in-memory queue
-      delete this.downloadQueue[queueId];
+      delete this.queueEntries[queueId];
       
       // Remove the cached info
       if (this.queueCache[entry.prgFile]) {
@@ -886,102 +909,26 @@ class DownloadQueue {
 
   /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
   handleTerminalState(entry, queueId, progress) {
+    // Mark the entry as ended
     entry.hasEnded = true;
-    clearInterval(entry.intervalId);
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    if (!logElement) return;
     
-    // Save the terminal state to the cache for persistence across reloads
-    this.queueCache[entry.prgFile] = progress;
-    localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-    
-    // Add status classes without triggering animations
-    this.applyStatusClasses(entry, progress);
-    
-    if (progress.status === 'error') {
-      const cancelBtn = entry.element.querySelector('.cancel-btn');
-      if (cancelBtn) {
-        cancelBtn.style.display = 'none';
+    // Update progress bar if available
+    if (typeof progress === 'number') {
+      const progressBar = entry.element.querySelector('.progress-bar');
+      if (progressBar) {
+        progressBar.style.width = '100%';
+        progressBar.setAttribute('aria-valuenow', 100);
+        progressBar.classList.add('bg-success');
       }
-      
-      // Check if we're under the max retries threshold for auto-retry
-      const canRetry = entry.retryCount < this.MAX_RETRIES;
-      
-      if (canRetry) {
-        logElement.innerHTML = `
-          <div class="error-message">${this.getStatusMessage(progress)}</div>
-          <div class="error-buttons">
-            <button class="close-error-btn" title="Close">&times;</button>
-            <button class="retry-btn" title="Retry">Retry</button>
-          </div>
-        `;
-        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-          if (entry.autoRetryInterval) {
-            clearInterval(entry.autoRetryInterval);
-            entry.autoRetryInterval = null;
-          }
-          this.cleanupEntry(queueId);
-        });
-        logElement.querySelector('.retry-btn').addEventListener('click', async () => {
-          if (entry.autoRetryInterval) {
-            clearInterval(entry.autoRetryInterval);
-            entry.autoRetryInterval = null;
-          }
-          this.retryDownload(queueId, logElement);
-        });
-        
-        // Implement auto-retry if we have the original request URL
-        if (entry.requestUrl) {
-          const maxRetries = this.MAX_RETRIES;
-          if (entry.retryCount < maxRetries) {
-            // Calculate the delay based on retry count (exponential backoff)
-            const baseDelay = this.RETRY_DELAY || 5; // seconds, use server's retry delay or default to 5
-            const increase = this.RETRY_DELAY_INCREASE || 5;
-            const retryDelay = baseDelay + (entry.retryCount * increase);
-            
-            let secondsLeft = retryDelay;
-            entry.autoRetryInterval = setInterval(() => {
-              secondsLeft--;
-              const errorMsgEl = logElement.querySelector('.error-message');
-              if (errorMsgEl) {
-                errorMsgEl.textContent = `Error: ${progress.message || 'Unknown error'}. Retrying in ${secondsLeft} seconds... (attempt ${entry.retryCount + 1}/${maxRetries})`;
-              }
-              if (secondsLeft <= 0) {
-                clearInterval(entry.autoRetryInterval);
-                entry.autoRetryInterval = null;
-                this.retryDownload(queueId, logElement);
-              }
-            }, 1000);
-          }
-        }
-      } else {
-        // Cannot be retried - just show the error
-        logElement.innerHTML = `
-          <div class="error-message">${this.getStatusMessage(progress)}</div>
-          <div class="error-buttons">
-            <button class="close-error-btn" title="Close">&times;</button>
-          </div>
-        `;
-        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-          this.cleanupEntry(queueId);
-        });
-      }
-      return;
-    } else if (progress.status === 'interrupted') {
-      logElement.textContent = 'Download was interrupted';
-      setTimeout(() => this.cleanupEntry(queueId), 5000);
-    } else if (progress.status === 'complete') {
-      logElement.textContent = 'Download completed successfully';
-      // Hide the cancel button
-      const cancelBtn = entry.element.querySelector('.cancel-btn');
-      if (cancelBtn) {
-        cancelBtn.style.display = 'none';
-      }
-      setTimeout(() => this.cleanupEntry(queueId), 5000);
-    } else {
-      logElement.textContent = this.getStatusMessage(progress);
-      setTimeout(() => this.cleanupEntry(queueId), 5000);
     }
+    
+    // Stop polling
+    this.closeSSEConnection(queueId);
+    
+    // Clean up after a delay
+    setTimeout(() => {
+      this.cleanupEntry(queueId);
+    }, 5000);
   }
 
   handleInactivity(entry, queueId, logElement) {
@@ -1003,7 +950,7 @@ class DownloadQueue {
   }
 
   async retryDownload(queueId, logElement) {
-    const entry = this.downloadQueue[queueId];
+    const entry = this.queueEntries[queueId];
     if (!entry) return;
     
     logElement.textContent = 'Retrying download...';
@@ -1075,8 +1022,8 @@ class DownloadQueue {
    * Start monitoring for all active entries in the queue that are visible
    */
   startMonitoringActiveEntries() {
-    for (const queueId in this.downloadQueue) {
-      const entry = this.downloadQueue[queueId];
+    for (const queueId in this.queueEntries) {
+      const entry = this.queueEntries[queueId];
       // Only start monitoring if the entry is not in a terminal state and is visible
       if (!entry.hasEnded && this.isEntryVisible(queueId) && !this.sseConnections[queueId]) {
         this.setupSSEConnection(queueId);
@@ -1170,7 +1117,7 @@ class DownloadQueue {
           
           // Set up SSE connections for each entry
           for (const {queueId, prgFile} of queueIds) {
-            const entry = this.downloadQueue[queueId];
+            const entry = this.queueEntries[queueId];
             if (entry && !entry.hasEnded) {
               this.setupSSEConnection(queueId);
             }
@@ -1188,7 +1135,7 @@ class DownloadQueue {
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Set up SSE connection
-        const entry = this.downloadQueue[queueId];
+        const entry = this.queueEntries[queueId];
         if (entry && !entry.hasEnded) {
           this.setupSSEConnection(queueId);
         }
@@ -1209,13 +1156,13 @@ class DownloadQueue {
   async loadExistingPrgFiles() {
     try {
       // Clear existing queue entries first to avoid duplicates when refreshing
-      for (const queueId in this.downloadQueue) {
-        const entry = this.downloadQueue[queueId];
+      for (const queueId in this.queueEntries) {
+        const entry = this.queueEntries[queueId];
         // Close any active connections
         this.closeSSEConnection(queueId);
         
         // Don't remove the entry from DOM - we'll rebuild it entirely
-        delete this.downloadQueue[queueId];
+        delete this.queueEntries[queueId];
       }
       
       const response = await fetch('/api/prgs/list');
@@ -1329,7 +1276,7 @@ class DownloadQueue {
             this.applyStatusClasses(entry, prgData.last_line);
           }
           
-          this.downloadQueue[queueId] = entry;
+          this.queueEntries[queueId] = entry;
         } catch (error) {
           console.error("Error fetching details for", prgFile, error);
         }
@@ -1353,23 +1300,23 @@ class DownloadQueue {
     try {
       const response = await fetch('/api/config');
       if (!response.ok) throw new Error('Failed to fetch config');
-      this.currentConfig = await response.json();
+      this.config = await response.json();
       
       // Update our retry constants from the server config
-      if (this.currentConfig.maxRetries !== undefined) {
-        this.MAX_RETRIES = this.currentConfig.maxRetries;
+      if (this.config.maxRetries !== undefined) {
+        this.MAX_RETRIES = this.config.maxRetries;
       }
-      if (this.currentConfig.retryDelaySeconds !== undefined) {
-        this.RETRY_DELAY = this.currentConfig.retryDelaySeconds;
+      if (this.config.retryDelaySeconds !== undefined) {
+        this.RETRY_DELAY = this.config.retryDelaySeconds;
       }
-      if (this.currentConfig.retry_delay_increase !== undefined) {
-        this.RETRY_DELAY_INCREASE = this.currentConfig.retry_delay_increase;
+      if (this.config.retry_delay_increase !== undefined) {
+        this.RETRY_DELAY_INCREASE = this.config.retry_delay_increase;
       }
       
       console.log(`Loaded retry settings from config: max=${this.MAX_RETRIES}, delay=${this.RETRY_DELAY}, increase=${this.RETRY_DELAY_INCREASE}`);
     } catch (error) {
       console.error('Error loading config:', error);
-      this.currentConfig = {};
+      this.config = {};
     }
   }
 
@@ -1381,7 +1328,7 @@ class DownloadQueue {
         body: JSON.stringify(updatedConfig)
       });
       if (!response.ok) throw new Error('Failed to save config');
-      this.currentConfig = await response.json();
+      this.config = await response.json();
     } catch (error) {
       console.error('Error saving config:', error);
       throw error;
@@ -1390,330 +1337,181 @@ class DownloadQueue {
 
   // Add a method to check if explicit filter is enabled
   isExplicitFilterEnabled() {
-    return !!this.currentConfig.explicitFilter;
+    return !!this.config.explicitFilter;
   }
 
   /* Sets up a Server-Sent Events connection for real-time status updates */
   setupSSEConnection(queueId) {
-    const entry = this.downloadQueue[queueId];
-    if (!entry || entry.hasEnded) return;
+    console.log(`Setting up polling for ${queueId}`);
+    const entry = this.queueEntries[queueId];
+    if (!entry || !entry.prgFile) {
+      console.warn(`No entry or prgFile for ${queueId}`);
+      return;
+    }
     
     // Close any existing connection
     this.closeSSEConnection(queueId);
     
-    // Create a new EventSource connection
     try {
-      const sse = new EventSource(`/api/prgs/stream/${entry.prgFile}`);
+      // Immediately fetch initial data
+      this.fetchTaskStatus(queueId);
       
-      // Store the connection
-      this.sseConnections[queueId] = sse;
+      // Create a polling interval of 1 second
+      const intervalId = setInterval(() => {
+        this.fetchTaskStatus(queueId);
+      }, 1000);
       
-      // Set up event handlers
-      sse.addEventListener('start', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE start event:', data);
-        
-        const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-        if (logElement) {
-          logElement.textContent = `Starting ${data.type} download: ${data.name}${data.artist ? ` by ${data.artist}` : ''}`;
-        }
-        
-        // IMPORTANT: Save the download type from the start event
-        if (data.type) {
-          console.log(`Setting entry type to: ${data.type}`);
-          entry.type = data.type;
-          
-          // Update type display if element exists
-          const typeElement = entry.element.querySelector('.type');
-          if (typeElement) {
-            typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
-            // Update type class without triggering animation
-            typeElement.className = `type ${data.type}`;
-          }
-        }
-        
-        // Store the initial status
-        entry.lastStatus = data;
-        entry.lastUpdated = Date.now();
-        entry.status = data.status;
-      });
+      // Store the interval ID for later cleanup
+      this.sseConnections[queueId] = intervalId;
+    } catch (error) {
+      console.error(`Error creating polling for ${queueId}:`, error);
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        logElement.textContent = `Error with download: ${error.message}`;
+        entry.element.classList.add('error');
+      }
+    }
+  }
+  
+  async fetchTaskStatus(queueId) {
+    const entry = this.queueEntries[queueId];
+    if (!entry || !entry.prgFile) {
+      console.warn(`No entry or prgFile for ${queueId}`);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/prgs/${entry.prgFile}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
       
-      sse.addEventListener('update', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE update event:', data);
-        this.handleSSEUpdate(queueId, data);
-      });
+      const data = await response.json();
       
-      sse.addEventListener('progress', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE progress event:', data);
-        this.handleSSEUpdate(queueId, data);
-      });
+      // Initialize the download type if needed
+      if (data.type && !entry.type) {
+        console.log(`Setting entry type to: ${data.type}`);
+        entry.type = data.type;
+        
+        // Update type display if element exists
+        const typeElement = entry.element.querySelector('.type');
+        if (typeElement) {
+          typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
+          // Update type class without triggering animation
+          typeElement.className = `type ${data.type}`;
+        }
+      }
       
-      // Add specific handler for track_complete events
-      sse.addEventListener('track_complete', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE track_complete event:', data);
-        console.log(`Current entry type: ${entry.type}`);
-        
-        // Mark this status as a track completion
-        data.status = 'track_complete';
-        
-        // Only update the log message without changing status colors
-        const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-        if (logElement) {
-          let message = `Completed track: ${data.title || data.track || 'Unknown'}`;
-          if (data.artist) message += ` by ${data.artist}`;
-          logElement.textContent = message;
-        }
-        
-        // For single track downloads, track_complete is a terminal state
-        if (entry.type === 'track') {
-          console.log('Single track download completed - terminating');
-          // Mark the track as ended
-          entry.hasEnded = true;
-          
-          // Handle as a terminal state
-          setTimeout(() => {
-            this.closeSSEConnection(queueId);
-            this.cleanupEntry(queueId);
-          }, 5000);
-        } else {
-          console.log(`Album/playlist track completed - continuing download (type: ${entry.type})`);
-          // For albums/playlists, just update entry data without changing status
-          entry.lastStatus = data;
-          entry.lastUpdated = Date.now();
-          
-          // Save to cache
-          this.queueCache[entry.prgFile] = data;
-          localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-        }
-      });
+      // Process the update
+      this.handleSSEUpdate(queueId, data);
       
-      // Also handle 'done' events which can come for individual tracks
-      sse.addEventListener('done', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE done event (individual track):', data);
-        console.log(`Current entry type: ${entry.type}`);
-        
-        // Only update the log message without changing status colors for album tracks
-        const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-        if (logElement) {
-          let message = `Completed track: ${data.song || data.title || data.track || 'Unknown'}`;
-          if (data.artist) message += ` by ${data.artist}`;
-          logElement.textContent = message;
-        }
-        
-        // For single track downloads, done is a terminal state
-        if (entry.type === 'track') {
-          console.log('Single track download completed (done) - terminating');
-          // Mark the track as ended
-          entry.hasEnded = true;
-          
-          // Handle as a terminal state
-          setTimeout(() => {
-            this.closeSSEConnection(queueId);
-            this.cleanupEntry(queueId);
-          }, 5000);
-        } else if (data.song) {
-          console.log(`Album/playlist individual track done - continuing download (type: ${entry.type})`);
-          // For albums/playlists, just update entry data without changing status
-          data._isIndividualTrack = true; // Mark it for special handling in update logic
-          entry.lastStatus = data;
-          entry.lastUpdated = Date.now();
-          
-          // Save to cache
-          this.queueCache[entry.prgFile] = data;
-          localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-        } else {
-          // This is a real done event for the entire album/playlist
-          console.log(`Entire ${entry.type} completed - finalizing`);
-          this.handleSSEUpdate(queueId, data);
-          entry.hasEnded = true;
-          
-          setTimeout(() => {
-            this.closeSSEConnection(queueId);
-            this.cleanupEntry(queueId);
-          }, 5000);
-        }
-      });
-      
-      sse.addEventListener('complete', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE complete event:', data);
-        console.log(`Current entry type: ${entry.type}`);
-        
-        // Skip terminal processing for track_complete status in albums/playlists
-        // Also skip for "done" status when it's for an individual track in an album/playlist
-        if ((data.status === 'track_complete' && entry.type !== 'track') || 
-            (data.status === 'done' && data.song && entry.type !== 'track')) {
-          console.log(`Track ${data.status} in ${entry.type} download - continuing`);
-          // Don't process individual track completion events here
-          return;
-        }
-        
-        // Make sure the status is set to 'complete' for UI purposes
-        if (!data.status || data.status === '') {
-          data.status = 'complete';
-        }
-        
-        // For track downloads, make sure we have a proper name
-        if (entry.type === 'track' && !data.name && entry.lastStatus) {
-          data.name = entry.lastStatus.name || '';
-          data.artist = entry.lastStatus.artist || '';
-        }
-        
-        this.handleSSEUpdate(queueId, data);
-        
-        // Always mark as terminal state for 'complete' events (except individual track completions in albums)
+      // Handle terminal states
+      if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status)) {
+        console.log(`Terminal state detected: ${data.last_line.status} for ${queueId}`);
         entry.hasEnded = true;
         
-        // Close the connection after a short delay
         setTimeout(() => {
           this.closeSSEConnection(queueId);
           this.cleanupEntry(queueId);
         }, 5000);
-      });
+      }
       
-      sse.addEventListener('error', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE error event:', data);
-        this.handleSSEUpdate(queueId, data);
-        
-        // Mark the download as ended with error
-        entry.hasEnded = true;
-        
-        // Close the connection, but don't automatically clean up the entry
-        // to allow for potential retry
-        this.closeSSEConnection(queueId);
-      });
-      
-      sse.addEventListener('end', (event) => {
-        const data = JSON.parse(event.data);
-        console.log('SSE end event:', data);
-        
-        // For track downloads, ensure we have the proper fields for UI display
-        if (entry.type === 'track') {
-          // If the end event doesn't have a name/artist, copy from lastStatus
-          if ((!data.name || !data.artist) && entry.lastStatus) {
-            data.name = data.name || entry.lastStatus.name || '';
-            data.artist = data.artist || entry.lastStatus.artist || '';
-          }
-          
-          // Force status to 'complete' if not provided
-          if (!data.status || data.status === '') {
-            data.status = 'complete';
-          }
-        }
-        
-        // Update with final status
-        this.handleSSEUpdate(queueId, data);
-        
-        // Mark the download as ended
-        entry.hasEnded = true;
-        
-        // Close the connection
-        this.closeSSEConnection(queueId);
-        
-        // Clean up the entry after a delay if it's a success
-        if (data.status === 'complete' || data.status === 'done') {
-          setTimeout(() => this.cleanupEntry(queueId), 5000);
-        }
-      });
-      
-      // Handle connection error
-      sse.onerror = (error) => {
-        console.error('SSE connection error:', error);
-        
-        // If the connection is closed, try to reconnect after a delay
-        if (sse.readyState === EventSource.CLOSED) {
-          console.log('SSE connection closed, will try to reconnect');
-          
-          // Only attempt to reconnect if the entry is still active
-          if (entry && !entry.hasEnded) {
-            setTimeout(() => {
-              this.setupSSEConnection(queueId);
-            }, 5000);
-          }
-        }
-      };
-      
-      return sse;
     } catch (error) {
-      console.error('Error setting up SSE connection:', error);
-      return null;
+      console.error(`Error fetching status for ${queueId}:`, error);
+      
+      // Show error in log
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        logElement.textContent = `Error updating status: ${error.message}`;
+      }
     }
   }
   
-  /* Close an existing SSE connection */
   closeSSEConnection(queueId) {
     if (this.sseConnections[queueId]) {
+      console.log(`Stopping polling for ${queueId}`);
       try {
-        this.sseConnections[queueId].close();
+        // Clear the interval instead of closing the SSE connection
+        clearInterval(this.sseConnections[queueId]);
       } catch (error) {
-        console.error('Error closing SSE connection:', error);
+        console.error(`Error stopping polling for ${queueId}:`, error);
       }
       delete this.sseConnections[queueId];
     }
   }
-  
+
   /* Handle SSE update events */
   handleSSEUpdate(queueId, data) {
-    const entry = this.downloadQueue[queueId];
-    if (!entry) return;
-    
-    // Skip if the status hasn't changed
-    if (entry.lastStatus && 
-        entry.lastStatus.id === data.id && 
-        entry.lastStatus.status === data.status) {
+    const entry = this.queueEntries[queueId];
+    if (!entry) {
+      console.warn(`No entry for ${queueId}`);
       return;
     }
     
-    console.log(`handleSSEUpdate for ${queueId} with type ${entry.type} and status ${data.status}`);
+    // Get status from the appropriate location in the data structure
+    // For the new polling API, data is structured differently than the SSE events
+    let status, message, progress;
     
-    // Track completion is special - don't change visible status ONLY for albums/playlists
-    // Check for both 'track_complete' and 'done' statuses for individual tracks in albums
-    const isTrackCompletion = data.status === 'track_complete' || 
-                             (data.status === 'done' && data.song && entry.type !== 'track');
-    const isAlbumOrPlaylist = entry.type !== 'track'; // Anything that's not a track is treated as multi-track
-    const skipStatusChange = isTrackCompletion && isAlbumOrPlaylist;
+    // Extract the actual status data from the API response
+    const statusData = data.last_line || {};
+    status = statusData.status || data.event || 'unknown';
     
-    if (skipStatusChange) {
-      console.log(`Skipping status change for ${data.status} in ${entry.type} download - track: ${data.song || data.track || 'Unknown'}`);
+    // For new polling API structure
+    if (data.progress_message) {
+      message = data.progress_message;
+    } else if (statusData.message) {
+      message = statusData.message;
+    } else {
+      message = `Status: ${status}`;
     }
     
-    // Update the entry
-    entry.lastStatus = data;
+    // Track progress data
+    if (data.progress_percent) {
+      progress = data.progress_percent;
+    } else if (statusData.overall_progress) {
+      progress = statusData.overall_progress;
+    } else if (statusData.progress) {
+      progress = statusData.progress;
+    }
+    
+    // Update the log element with the latest message
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+    if (logElement && message) {
+      logElement.textContent = message;
+    }
+    
+    // Set the proper status classes on the list item
+    this.applyStatusClasses(entry, status);
+    
+    // Handle progress indicators
+    const progressBar = entry.element.querySelector('.progress-bar');
+    if (progressBar && typeof progress === 'number') {
+      progressBar.style.width = `${progress}%`;
+      progressBar.setAttribute('aria-valuenow', progress);
+      
+      if (progress >= 100) {
+        progressBar.classList.add('bg-success');
+      } else {
+        progressBar.classList.remove('bg-success');
+      }
+    }
+    
+    // Store the last status update
+    entry.lastStatus = {
+      ...statusData,
+      message: message,
+      status: status
+    };
     entry.lastUpdated = Date.now();
     
-    // Only update visible status if not skipping status change
-    if (!skipStatusChange) {
-      entry.status = data.status;
-    }
-    
-    // Update status message in the UI
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    if (logElement) {
-      const statusMessage = this.getStatusMessage(data);
-      logElement.textContent = statusMessage;
-    }
-    
-    // Apply appropriate CSS classes based on status only if not skipping status change
-    if (!skipStatusChange) {
-      this.applyStatusClasses(entry, data);
-    }
-    
-    // Save updated status to cache
-    this.queueCache[entry.prgFile] = data;
+    // Store in cache
+    this.queueCache[entry.prgFile] = entry.lastStatus;
     localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
     
-    // Special handling for error status
-    if (data.status === 'error') {
-      this.handleTerminalState(entry, queueId, data);
+    // Handle terminal states
+    if (['complete', 'error', 'cancelled', 'done'].includes(status)) {
+      this.handleTerminalState(entry, queueId, progress);
     }
-    
-    // Update the queue order
-    this.updateQueueOrder();
   }
 
   /* Close all active SSE connections */
