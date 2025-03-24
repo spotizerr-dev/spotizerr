@@ -762,7 +762,7 @@ class DownloadQueue {
       
       case 'done':
         if (data.type === 'track') {
-          return `Finished track "${data.song}" by ${data.artist}`;
+          return `Finished track "${data.song || data.name}" by ${data.artist}`;
         } else if (data.type === 'playlist') {
           return `Finished playlist "${data.name}" with ${data.total_tracks} tracks`;
         } else if (data.type === 'album') {
@@ -771,6 +771,18 @@ class DownloadQueue {
           return `Finished artist "${data.artist}" (${data.album_type})`;
         }
         return `Finished ${data.type}`;
+      
+      case 'complete':
+        if (data.type === 'track') {
+          return `Finished track "${data.name || data.song}" by ${data.artist}`;
+        } else if (data.type === 'playlist') {
+          return `Finished playlist "${data.name}" with ${data.total_tracks || ''} tracks`;
+        } else if (data.type === 'album') {
+          return `Finished album "${data.album || data.name}" by ${data.artist}`;
+        } else if (data.type === 'artist') {
+          return `Finished artist "${data.artist}" (${data.album_type || ''})`;
+        }
+        return `Download completed successfully`;
       
       case 'retrying':
         if (data.retry_count !== undefined) {
@@ -788,9 +800,6 @@ class DownloadQueue {
           }
         }
         return errorMsg;
-      
-      case 'complete':
-        return 'Download completed successfully';
       
       case 'skipped':
         return `Track "${data.song}" skipped, it already exists!`;
@@ -1426,6 +1435,17 @@ class DownloadQueue {
           return;
         }
         
+        // Make sure the status is set to 'complete' for UI purposes
+        if (!data.status || data.status === '') {
+          data.status = 'complete';
+        }
+        
+        // For track downloads, make sure we have a proper name
+        if (entry.type === 'track' && !data.name && entry.lastStatus) {
+          data.name = entry.lastStatus.name || '';
+          data.artist = entry.lastStatus.artist || '';
+        }
+        
         this.handleSSEUpdate(queueId, data);
         
         // Always mark as terminal state for 'complete' events (except individual track completions in albums)
@@ -1454,6 +1474,20 @@ class DownloadQueue {
       sse.addEventListener('end', (event) => {
         const data = JSON.parse(event.data);
         console.log('SSE end event:', data);
+        
+        // For track downloads, ensure we have the proper fields for UI display
+        if (entry.type === 'track') {
+          // If the end event doesn't have a name/artist, copy from lastStatus
+          if ((!data.name || !data.artist) && entry.lastStatus) {
+            data.name = data.name || entry.lastStatus.name || '';
+            data.artist = data.artist || entry.lastStatus.artist || '';
+          }
+          
+          // Force status to 'complete' if not provided
+          if (!data.status || data.status === '') {
+            data.status = 'complete';
+          }
+        }
         
         // Update with final status
         this.handleSSEUpdate(queueId, data);
