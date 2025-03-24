@@ -126,7 +126,7 @@ class DownloadQueue {
                 entry.hasEnded = true;
                 
                 // Close SSE connection
-                this.closeSSEConnection(queueId);
+                this.clearPollingInterval(queueId);
                 
                 if (entry.intervalId) {
                   clearInterval(entry.intervalId);
@@ -143,7 +143,7 @@ class DownloadQueue {
     
     // Close all SSE connections when the page is about to unload
     window.addEventListener('beforeunload', () => {
-      this.closeAllSSEConnections();
+      this.clearAllPollingIntervals();
     });
   }
 
@@ -222,7 +222,7 @@ class DownloadQueue {
     
     // Only start monitoring if explicitly requested
     if (startMonitoring && this.isEntryVisible(queueId)) {
-      this.startEntryMonitoring(queueId);
+      this.startDownloadStatusMonitoring(queueId);
     }
     
     this.dispatchEvent('downloadAdded', { queueId, item, type });
@@ -230,7 +230,7 @@ class DownloadQueue {
   }
 
   /* Start processing the entry only if it is visible. */
-  async startEntryMonitoring(queueId) {
+  async startDownloadStatusMonitoring(queueId) {
     const entry = this.queueEntries[queueId];
     if (!entry || entry.hasEnded) return;
     
@@ -295,7 +295,7 @@ class DownloadQueue {
           // If the entry is already in a terminal state, don't set up SSE
           if (['error', 'complete', 'cancel', 'cancelled', 'done'].includes(data.last_line.status)) {
             entry.hasEnded = true;
-            this.handleTerminalState(entry, queueId, data.last_line);
+            this.handleDownloadCompletion(entry, queueId, data.last_line);
             return;
           }
         }
@@ -305,7 +305,7 @@ class DownloadQueue {
     }
     
     // Set up SSE connection for real-time updates
-    this.setupSSEConnection(queueId);
+    this.setupPollingInterval(queueId);
   }
 
   /* Helper Methods */
@@ -415,7 +415,8 @@ class DownloadQueue {
     const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
     
     // Use display values if available, or fall back to standard fields
-    const displayTitle = item.name || 'Unknown';
+    // Support both 'name' and 'music' fields which may be used by the backend
+    const displayTitle = item.name || item.music || item.song || 'Unknown';
     const displayType = type.charAt(0).toUpperCase() + type.slice(1);
     
     const div = document.createElement('article');
@@ -497,7 +498,7 @@ class DownloadQueue {
           entry.hasEnded = true;
           
           // Close any active connections
-          this.closeSSEConnection(queueid);
+          this.clearPollingInterval(queueid);
           
           if (entry.intervalId) {
             clearInterval(entry.intervalId);
@@ -668,7 +669,7 @@ class DownloadQueue {
     const entry = this.queueEntries[queueId];
     if (entry) {
       // Close any SSE connection
-      this.closeSSEConnection(queueId);
+      this.clearPollingInterval(queueId);
       
       // Clean up any intervals
       if (entry.intervalId) {
@@ -723,12 +724,16 @@ class DownloadQueue {
     function pluralize(word) {
       return word.endsWith('s') ? word : word + 's';
     }
+    
+    // Extract the track name - check 'music' field first (from backend), then 'song', then 'name'
+    const trackName = data.music || data.song || data.name || 'Unknown';
+    
     switch (data.status) {
       case 'queued':
         if (data.type === 'album' || data.type === 'playlist') {
           return `Queued ${data.type} "${data.name}"${data.position ? ` (position ${data.position})` : ''}`;
         } else if (data.type === 'track') {
-          return `Queued track "${data.name}"${data.artist ? ` by ${data.artist}` : ''}`;
+          return `Queued track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}`;
         }
         return `Queued ${data.type} "${data.name}"`;
       
@@ -746,7 +751,7 @@ class DownloadQueue {
       
       case 'downloading':
         if (data.type === 'track') {
-          return `Downloading track "${data.song}" by ${data.artist}...`;
+          return `Downloading track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}...`;
         }
         return `Downloading ${data.type}...`;
       
@@ -792,7 +797,7 @@ class DownloadQueue {
       
       case 'done':
         if (data.type === 'track') {
-          return `Finished track "${data.song || data.name}" by ${data.artist}`;
+          return `Finished track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}`;
         } else if (data.type === 'playlist') {
           return `Finished playlist "${data.name}" with ${data.total_tracks} tracks`;
         } else if (data.type === 'album') {
@@ -804,7 +809,7 @@ class DownloadQueue {
       
       case 'complete':
         if (data.type === 'track') {
-          return `Finished track "${data.name || data.song}" by ${data.artist}`;
+          return `Finished track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}`;
         } else if (data.type === 'playlist') {
           return `Finished playlist "${data.name}" with ${data.total_tracks || ''} tracks`;
         } else if (data.type === 'album') {
@@ -832,14 +837,14 @@ class DownloadQueue {
         return errorMsg;
       
       case 'skipped':
-        return `Track "${data.song}" skipped, it already exists!`;
+        return `Track "${trackName}" skipped, it already exists!`;
       
       case 'real_time': {
         const totalMs = data.time_elapsed;
         const minutes = Math.floor(totalMs / 60000);
         const seconds = Math.floor((totalMs % 60000) / 1000);
         const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
-        return `Real-time downloading track "${data.song}" by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
+        return `Real-time downloading track "${trackName}"${data.artist ? ` by ${data.artist}` : ''} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
       }
       
       default:
@@ -848,7 +853,7 @@ class DownloadQueue {
   }
 
   /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
-  handleTerminalState(entry, queueId, progress) {
+  handleDownloadCompletion(entry, queueId, progress) {
     // Mark the entry as ended
     entry.hasEnded = true;
     
@@ -863,11 +868,10 @@ class DownloadQueue {
     }
     
     // Stop polling
-    this.closeSSEConnection(queueId);
+    this.clearPollingInterval(queueId);
     
-    // For error state, use longer timeout (30 seconds)
-    const isError = entry.lastStatus && entry.lastStatus.status === 'error';
-    const cleanupDelay = isError ? 30000 : 5000;
+    // Use 10 seconds cleanup delay for all states including errors
+    const cleanupDelay = 10000;
     
     // Clean up after the appropriate delay
     setTimeout(() => {
@@ -885,7 +889,7 @@ class DownloadQueue {
     const now = Date.now();
     if (now - entry.lastUpdated > 300000) {
       const progress = { status: 'error', message: 'Inactivity timeout' };
-      this.handleTerminalState(entry, queueId, progress);
+      this.handleDownloadCompletion(entry, queueId, progress);
     } else {
       if (logElement) {
         logElement.textContent = this.getStatusMessage(entry.lastStatus);
@@ -928,7 +932,7 @@ class DownloadQueue {
     
     try {
       // Close any existing SSE connection
-      this.closeSSEConnection(queueId);
+      this.clearPollingInterval(queueId);
       
       console.log(`Retrying download for ${entry.type} with URL: ${retryUrl}`);
       
@@ -981,7 +985,7 @@ class DownloadQueue {
         }
         
         // Set up a new SSE connection for the retried download
-        this.setupSSEConnection(queueId);
+        this.setupPollingInterval(queueId);
       } else {
         logElement.textContent = 'Retry failed: invalid response from server';
       }
@@ -999,7 +1003,7 @@ class DownloadQueue {
       const entry = this.queueEntries[queueId];
       // Only start monitoring if the entry is not in a terminal state and is visible
       if (!entry.hasEnded && this.isEntryVisible(queueId) && !this.sseConnections[queueId]) {
-        this.setupSSEConnection(queueId);
+        this.setupPollingInterval(queueId);
       }
     }
   }
@@ -1075,7 +1079,7 @@ class DownloadQueue {
             const entry = this.queueEntries[queueId];
             // Only start monitoring if the entry is not in a terminal state
             if (!entry.hasEnded && !this.sseConnections[queueId]) {
-              this.setupSSEConnection(queueId);
+              this.setupPollingInterval(queueId);
             }
           }
           
@@ -1084,6 +1088,13 @@ class DownloadQueue {
         // Check for older API response format
         else if (data.album_prg_files && Array.isArray(data.album_prg_files)) {
           console.log(`Queued artist discography with ${data.album_prg_files.length} albums (old format)`);
+          
+          // Show a temporary message about the artist download
+          const artistMessage = document.createElement('div');
+          artistMessage.className = 'queue-artist-message';
+          artistMessage.textContent = `Queued ${data.album_prg_files.length} albums for ${item.name || 'artist'}. Loading...`;
+          document.getElementById('queueItems').prepend(artistMessage);
+          
           // Add each album to the download queue separately
           const queueIds = [];
           data.album_prg_files.forEach(prgFile => {
@@ -1095,17 +1106,55 @@ class DownloadQueue {
           this.toggleVisibility(true);
           
           // Wait a short time before setting up SSE connections
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Remove the temporary message
+          artistMessage.remove();
+          
+          // Fetch the latest tasks to show all newly created album downloads
+          await this.loadExistingPrgFiles();
           
           // Set up SSE connections for each entry
-          for (const {queueId, prgFile} of queueIds) {
+          for (const queueId in this.queueEntries) {
             const entry = this.queueEntries[queueId];
             if (entry && !entry.hasEnded) {
-              this.setupSSEConnection(queueId);
+              this.setupPollingInterval(queueId);
             }
           }
           
           return queueIds.map(({queueId}) => queueId);
+        }
+        // Handle any other response format for artist downloads
+        else {
+          console.log(`Queued artist discography with unknown format:`, data);
+          
+          // Show a temporary message
+          const artistMessage = document.createElement('div');
+          artistMessage.className = 'queue-artist-message';
+          artistMessage.textContent = `Queued albums for ${item.name || 'artist'}. Loading...`;
+          document.getElementById('queueItems').prepend(artistMessage);
+          
+          // Make queue visible
+          this.toggleVisibility(true);
+          
+          // Wait a moment for tasks to be created on the backend
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Remove the temporary message
+          artistMessage.remove();
+          
+          // Fetch the latest tasks to show all newly created album downloads
+          await this.loadExistingPrgFiles();
+          
+          // Start monitoring all entries
+          for (const queueId in this.queueEntries) {
+            const entry = this.queueEntries[queueId];
+            if (entry && !entry.hasEnded) {
+              this.setupPollingInterval(queueId);
+            }
+          }
+          
+          return data;
         }
       }
       
@@ -1119,7 +1168,7 @@ class DownloadQueue {
         // Set up SSE connection
         const entry = this.queueEntries[queueId];
         if (entry && !entry.hasEnded) {
-          this.setupSSEConnection(queueId);
+          this.setupPollingInterval(queueId);
         }
         
         return queueId;
@@ -1141,7 +1190,7 @@ class DownloadQueue {
       for (const queueId in this.queueEntries) {
         const entry = this.queueEntries[queueId];
         // Close any active connections
-        this.closeSSEConnection(queueId);
+        this.clearPollingInterval(queueId);
         
         // Don't remove the entry from DOM - we'll rebuild it entirely
         delete this.queueEntries[queueId];
@@ -1323,7 +1372,7 @@ class DownloadQueue {
   }
 
   /* Sets up a Server-Sent Events connection for real-time status updates */
-  setupSSEConnection(queueId) {
+  setupPollingInterval(queueId) {
     console.log(`Setting up polling for ${queueId}`);
     const entry = this.queueEntries[queueId];
     if (!entry || !entry.prgFile) {
@@ -1332,15 +1381,15 @@ class DownloadQueue {
     }
     
     // Close any existing connection
-    this.closeSSEConnection(queueId);
+    this.clearPollingInterval(queueId);
     
     try {
       // Immediately fetch initial data
-      this.fetchTaskStatus(queueId);
+      this.fetchDownloadStatus(queueId);
       
       // Create a polling interval of 1 second
       const intervalId = setInterval(() => {
-        this.fetchTaskStatus(queueId);
+        this.fetchDownloadStatus(queueId);
       }, 1000);
       
       // Store the interval ID for later cleanup
@@ -1355,7 +1404,7 @@ class DownloadQueue {
     }
   }
   
-  async fetchTaskStatus(queueId) {
+  async fetchDownloadStatus(queueId) {
     const entry = this.queueEntries[queueId];
     if (!entry || !entry.prgFile) {
       console.warn(`No entry or prgFile for ${queueId}`);
@@ -1384,8 +1433,14 @@ class DownloadQueue {
         }
       }
       
+      // Filter the last_line if it doesn't match the entry's type
+      if (data.last_line && data.last_line.type && entry.type && data.last_line.type !== entry.type) {
+        console.log(`Skipping status update with type '${data.last_line.type}' for entry with type '${entry.type}'`);
+        return;
+      }
+      
       // Process the update
-      this.handleSSEUpdate(queueId, data);
+      this.handleStatusUpdate(queueId, data);
       
       // Handle terminal states
       if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status)) {
@@ -1393,7 +1448,7 @@ class DownloadQueue {
         entry.hasEnded = true;
         
         setTimeout(() => {
-          this.closeSSEConnection(queueId);
+          this.clearPollingInterval(queueId);
           this.cleanupEntry(queueId);
         }, 5000);
       }
@@ -1409,7 +1464,7 @@ class DownloadQueue {
     }
   }
   
-  closeSSEConnection(queueId) {
+  clearPollingInterval(queueId) {
     if (this.sseConnections[queueId]) {
       console.log(`Stopping polling for ${queueId}`);
       try {
@@ -1423,7 +1478,7 @@ class DownloadQueue {
   }
 
   /* Handle SSE update events */
-  handleSSEUpdate(queueId, data) {
+  handleStatusUpdate(queueId, data) {
     const entry = this.queueEntries[queueId];
     if (!entry) {
       console.warn(`No entry for ${queueId}`);
@@ -1436,6 +1491,12 @@ class DownloadQueue {
     
     // Extract the actual status data from the API response
     const statusData = data.last_line || {};
+    
+    // Skip updates where the type doesn't match the entry's type
+    if (statusData.type && entry.type && statusData.type !== entry.type) {
+      return;
+    }
+    
     status = statusData.status || data.event || 'unknown';
     
     // For new polling API structure
@@ -1445,6 +1506,16 @@ class DownloadQueue {
       message = statusData.message;
     } else {
       message = `Status: ${status}`;
+    }
+
+    // Extract trackName from different possible fields
+    const trackName = statusData.music || statusData.song || statusData.name || 'Unknown';
+    if (trackName && trackName !== 'Unknown') {
+      // Update the title in the queue item if we have a track name
+      const titleEl = entry.element.querySelector('.title');
+      if (titleEl && trackName !== titleEl.textContent) {
+        titleEl.textContent = trackName;
+      }
     }
     
     // Track progress data
@@ -1538,6 +1609,13 @@ class DownloadQueue {
             
             this.retryDownload(queueId, logElement);
           });
+          
+          // Set up automatic cleanup after 10 seconds
+          setTimeout(() => {
+            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded) {
+              this.cleanupEntry(queueId);
+            }
+          }, 10000);
         } else {
           // Cannot retry - just show error with close button
           logElement.innerHTML = `
@@ -1550,6 +1628,13 @@ class DownloadQueue {
           logElement.querySelector('.close-error-btn').addEventListener('click', () => {
             this.cleanupEntry(queueId);
           });
+          
+          // Set up automatic cleanup after 10 seconds
+          setTimeout(() => {
+            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded) {
+              this.cleanupEntry(queueId);
+            }
+          }, 10000);
         }
       }
       
@@ -1558,12 +1643,15 @@ class DownloadQueue {
       entry.element.classList.add('error');
       
       // Close SSE connection
-      this.closeSSEConnection(queueId);
+      this.clearPollingInterval(queueId);
     } else {
       // For non-error states, update the log element with the latest message
       const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (logElement && message) {
         logElement.textContent = message;
+      } else if (logElement) {
+        // Generate a message if none provided
+        logElement.textContent = this.getStatusMessage(statusData);
       }
       
       // Set the proper status classes on the list item
@@ -1597,14 +1685,14 @@ class DownloadQueue {
     
     // Handle terminal states (except errors which we handle separately above)
     if (['complete', 'cancelled', 'done'].includes(status)) {
-      this.handleTerminalState(entry, queueId, progress);
+      this.handleDownloadCompletion(entry, queueId, progress);
     }
   }
 
   /* Close all active SSE connections */
-  closeAllSSEConnections() {
+  clearAllPollingIntervals() {
     for (const queueId in this.sseConnections) {
-      this.closeSSEConnection(queueId);
+      this.clearPollingInterval(queueId);
     }
   }
 }

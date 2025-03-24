@@ -95,7 +95,8 @@ def download_playlist(
                         pad_tracks=pad_tracks,
                         initial_retry_delay=initial_retry_delay,
                         retry_delay_increase=retry_delay_increase,
-                        max_retries=max_retries
+                        max_retries=max_retries,
+                        spotify_quality=fall_quality
                     )
                     print(f"DEBUG: Playlist download completed successfully using Deezer credentials")
                 except Exception as e:

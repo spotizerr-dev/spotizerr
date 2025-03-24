@@ -1041,7 +1041,11 @@ def download_playlist(self, **task_data):
             custom_dir_format=custom_dir_format,
             custom_track_format=custom_track_format,
             pad_tracks=pad_tracks,
-            progress_callback=self.progress_callback
+            initial_retry_delay=initial_retry_delay,
+            retry_delay_increase=retry_delay_increase,
+            max_retries=max_retries,
+            progress_callback=self.progress_callback,
+            spotify_quality=fall_quality
         )
         
         return {"status": "success", "message": "Playlist download completed"}
