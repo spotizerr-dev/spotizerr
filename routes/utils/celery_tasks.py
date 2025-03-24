@@ -85,6 +85,9 @@ def store_task_status(task_id, status_data):
         # Convert to JSON and store in Redis
         redis_client.rpush(f"task:{task_id}:status", json.dumps(status_data))
         
+        # Trim the list to keep only the most recent 100 updates to avoid excessive memory usage
+        redis_client.ltrim(f"task:{task_id}:status", -100, -1)
+        
         # Set expiry for the list to avoid filling up Redis with old data
         redis_client.expire(f"task:{task_id}:status", 60 * 60 * 24 * 7)  # 7 days
         redis_client.expire(f"task:{task_id}:status:next_id", 60 * 60 * 24 * 7)  # 7 days
@@ -243,6 +246,8 @@ def retry_task(task_id):
         if not task_info:
             return {"status": "error", "message": f"Task {task_id} not found"}
         
+        logger.debug(f"Retry task {task_id} - Initial task_info: {json.dumps({k: v for k, v in task_info.items() if k != 'orig_request'})}")
+        
         # Check if task has retry_count information
         last_status = get_last_task_status(task_id)
         if last_status and last_status.get("status") == "error":
@@ -271,6 +276,19 @@ def retry_task(task_id):
             # Update task info for the retry
             task_info["retry_count"] = retry_count + 1
             task_info["retry_of"] = task_id
+            
+            # Log current URL before potentially updating it
+            logger.debug(f"Retry task {task_id} - Current URL: {task_info.get('url', 'N/A')}")
+            logger.debug(f"Retry task {task_id} - Retry URL available: {'Yes' if 'retry_url' in task_info and task_info['retry_url'] else 'No'}")
+            
+            # Use retry_url if available, otherwise use the original url
+            # This is crucial for album tasks created from artist downloads
+            if "retry_url" in task_info and task_info["retry_url"]:
+                logger.info(f"Using retry_url for task {task_id}: {task_info['retry_url']}")
+                logger.debug(f"Retry task {task_id} - Replacing URL {task_info.get('url', 'N/A')} with retry_url {task_info['retry_url']}")
+                task_info["url"] = task_info["retry_url"]
+            else:
+                logger.debug(f"Retry task {task_id} - No retry_url found, keeping original URL: {task_info.get('url', 'N/A')}")
             
             # Get the service and fallback configuration from config
             service = config_params.get("service")
@@ -317,6 +335,9 @@ def retry_task(task_id):
             task_info["custom_dir_format"] = task_info.get("custom_dir_format", config_params.get("customDirFormat", "%ar_album%/%album%"))
             task_info["custom_track_format"] = task_info.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
             task_info["pad_tracks"] = task_info.get("pad_tracks", config_params.get("tracknum_padding", True))
+            
+            # Log the final URL that will be used
+            logger.debug(f"Retry task {task_id} - Final URL for retry: {task_info.get('url', 'N/A')}")
             
             # Store the updated task info
             store_task_info(new_task_id, task_info)

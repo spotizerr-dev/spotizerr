@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import time
+import random
 
 from routes.utils.celery_tasks import (
     get_task_info,
@@ -412,8 +413,8 @@ def stream_task_status(task_id):
             # Sort updates by id
             sorted_updates = sorted(all_updates, key=lambda x: x.get("id", 0))
             
-            # Send the most recent updates first (up to 10)
-            for i, update in enumerate(sorted_updates[-10:]):
+            # Limit to send only the 5 most recent updates to reduce initial payload
+            for i, update in enumerate(sorted_updates[-5:]):
                 # Add the task_id to each update message
                 update["task_id"] = task_id
                 yield f"event: update\ndata: {json.dumps(update)}\n\n"
@@ -429,65 +430,76 @@ def stream_task_status(task_id):
             
             # Hold the connection open and check for updates
             last_heartbeat = time.time()
-            heartbeat_interval = 15  # Send heartbeat every 15 seconds
+            heartbeat_interval = 30  # Increased from 15 to 30 seconds to reduce overhead
+            
+            # Optimize polling with a more efficient loop structure
+            check_interval = 0.2  # Check for messages every 200ms instead of continuously
+            message_batch_size = 5  # Process up to 5 messages at a time
             
             while True:
-                # Check for new updates via Redis Pub/Sub
-                message = redis_pubsub.get_message(timeout=1.0)
-                
-                if message and message['type'] == 'message':
-                    # Got a new message from Redis Pub/Sub
-                    try:
-                        data = json.loads(message['data'].decode('utf-8'))
-                        status_id = data.get('status_id', 0)
-                        
-                        # Fetch the actual status data
-                        if status_id > last_sent_id:
-                            all_status = redis_client.lrange(f"task:{task_id}:status", 0, -1)
+                # Process a batch of messages to reduce CPU usage
+                messages_processed = 0
+                while messages_processed < message_batch_size:
+                    # Check for new updates via Redis Pub/Sub with a timeout
+                    message = redis_pubsub.get_message(timeout=check_interval)
+                    
+                    if not message:
+                        break  # No more messages to process
+                    
+                    if message['type'] == 'message':
+                        messages_processed += 1
+                        # Got a new message from Redis Pub/Sub
+                        try:
+                            data = json.loads(message['data'].decode('utf-8'))
+                            status_id = data.get('status_id', 0)
                             
-                            for status_data in all_status:
-                                try:
-                                    status = json.loads(status_data.decode('utf-8'))
-                                    if status.get("id") == status_id:
-                                        # Add the task_id to the update
-                                        status["task_id"] = task_id
-                                        
-                                        # Choose the appropriate event type based on status
-                                        status_type = status.get("status", "")
-                                        event_type = "update"
-                                        
-                                        if status_type == ProgressState.COMPLETE or status_type == ProgressState.DONE:
-                                            event_type = "complete"
-                                        elif status_type == ProgressState.TRACK_COMPLETE:
-                                            # Create a distinct event type for track completion to prevent UI issues
-                                            event_type = "track_complete"
-                                        elif status_type == ProgressState.ERROR:
-                                            event_type = "error"
-                                        elif status_type in [ProgressState.TRACK_PROGRESS, ProgressState.REAL_TIME]:
-                                            event_type = "progress"
-                                        
-                                        # Send the update
-                                        yield f"event: {event_type}\ndata: {json.dumps(status)}\n\n"
-                                        last_sent_id = status_id
-                                        break
-                                except Exception as e:
-                                    logger.error(f"Error parsing status data: {e}")
-                    except Exception as e:
-                        logger.error(f"Error processing Redis Pub/Sub message: {e}")
+                            # Only process if this is a new status update
+                            if status_id > last_sent_id:
+                                # Efficient fetch - only get the specific status update we need
+                                for idx in range(-10, 0):  # Check last 10 entries for efficiency
+                                    status_data = redis_client.lindex(f"task:{task_id}:status", idx)
+                                    if status_data:
+                                        status = json.loads(status_data.decode('utf-8'))
+                                        if status.get("id") == status_id:
+                                            # Add the task_id to the update
+                                            status["task_id"] = task_id
+                                            
+                                            # Choose the appropriate event type based on status
+                                            status_type = status.get("status", "")
+                                            event_type = "update"
+                                            
+                                            if status_type == ProgressState.COMPLETE or status_type == ProgressState.DONE:
+                                                event_type = "complete"
+                                            elif status_type == ProgressState.TRACK_COMPLETE:
+                                                # Create a distinct event type for track completion to prevent UI issues
+                                                event_type = "track_complete"
+                                            elif status_type == ProgressState.ERROR:
+                                                event_type = "error"
+                                            elif status_type in [ProgressState.TRACK_PROGRESS, ProgressState.REAL_TIME]:
+                                                event_type = "progress"
+                                            
+                                            # Send the update
+                                            yield f"event: {event_type}\ndata: {json.dumps(status)}\n\n"
+                                            last_sent_id = status_id
+                                            break
+                        except Exception as e:
+                            logger.error(f"Error processing Redis Pub/Sub message: {e}")
                 
                 # Check if task is complete, error, or cancelled - if so, end the stream
-                last_status = get_last_task_status(task_id)
-                if last_status and last_status.get("status") in [ProgressState.COMPLETE, ProgressState.ERROR, ProgressState.CANCELLED, ProgressState.DONE]:
-                    # Send final message
-                    final_data = {
-                        "event": "end",
-                        "task_id": task_id,
-                        "status": last_status.get("status"),
-                        "message": last_status.get("message", "Download complete"),
-                        "timestamp": time.time()
-                    }
-                    yield f"event: end\ndata: {json.dumps(final_data)}\n\n"
-                    break
+                # Only do this check every 5 loops to reduce load
+                if random.random() < 0.2:  # ~20% chance to check terminal status each loop
+                    last_status = get_last_task_status(task_id)
+                    if last_status and last_status.get("status") in [ProgressState.COMPLETE, ProgressState.ERROR, ProgressState.CANCELLED, ProgressState.DONE]:
+                        # Send final message
+                        final_data = {
+                            "event": "end",
+                            "task_id": task_id,
+                            "status": last_status.get("status"),
+                            "message": last_status.get("message", "Download complete"),
+                            "timestamp": time.time()
+                        }
+                        yield f"event: end\ndata: {json.dumps(final_data)}\n\n"
+                        break
                 
                 # Send a heartbeat periodically to keep the connection alive
                 now = time.time()
@@ -495,8 +507,8 @@ def stream_task_status(task_id):
                     yield f"event: heartbeat\ndata: {json.dumps({'timestamp': now})}\n\n"
                     last_heartbeat = now
                 
-                # Small sleep to prevent CPU spinning
-                time.sleep(0.1)
+                # More efficient sleep between batch checks
+                time.sleep(check_interval)
         
         except Exception as e:
             logger.error(f"Error in SSE stream: {e}")

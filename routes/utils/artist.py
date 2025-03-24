@@ -90,6 +90,9 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
     # Get artist info with albums
     artist_data = get_spotify_info(artist_id, "artist")
     
+    # Debug logging to inspect the structure of artist_data
+    logger.debug(f"Artist data structure has keys: {list(artist_data.keys() if isinstance(artist_data, dict) else [])}")
+    
     if not artist_data or 'items' not in artist_data:
         raise ValueError(f"Failed to retrieve artist data or no albums found for artist ID {artist_id}")
     
@@ -125,10 +128,19 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
     album_task_ids = []
     
     for album in filtered_albums:
-        album_url = album.get('external_urls', {}).get('spotify', '')
+        # Add detailed logging to inspect each album's structure and URLs
+        logger.debug(f"Processing album: {album.get('name', 'Unknown')}")
+        logger.debug(f"Album structure has keys: {list(album.keys())}")
+        
+        external_urls = album.get('external_urls', {})
+        logger.debug(f"Album external_urls: {external_urls}")
+        
+        album_url = external_urls.get('spotify', '')
         album_name = album.get('name', 'Unknown Album')
         album_artists = album.get('artists', [])
         album_artist = album_artists[0].get('name', 'Unknown Artist') if album_artists else 'Unknown Artist'
+        
+        logger.debug(f"Extracted album URL: {album_url}")
         
         if not album_url:
             logger.warning(f"Skipping album without URL: {album_name}")
@@ -145,6 +157,9 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
             "artist": album_artist,
             "orig_request": request_args or {}  # Store original request params
         }
+        
+        # Debug log the task data being sent to the queue
+        logger.debug(f"Album task data: url={task_data['url']}, retry_url={task_data['retry_url']}")
         
         # Add the task to the queue manager
         task_id = download_queue_manager.add_task(task_data)

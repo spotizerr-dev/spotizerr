@@ -29,11 +29,11 @@ CONFIG_PATH = './config/main.json'
 try:
     with open(CONFIG_PATH, 'r') as f:
         config_data = json.load(f)
-    MAX_CONCURRENT_DL = config_data.get("maxConcurrentDownloads", 3)
+    MAX_CONCURRENT_DL = config_data.get("maxConcurrentDownloads", 10)
 except Exception as e:
     print(f"Error loading configuration: {e}")
     # Fallback default
-    MAX_CONCURRENT_DL = 3
+    MAX_CONCURRENT_DL = 10
 
 def get_config_params():
     """
@@ -96,50 +96,36 @@ class CeleryDownloadQueueManager:
     
     def add_task(self, task):
         """
-        Adds a new download task to the queue.
+        Add a new download task to the Celery queue
         
         Args:
-            task (dict): Dictionary containing task parameters
+            task (dict): Task parameters including download_type, url, etc.
             
         Returns:
-            str: The task ID for status tracking
+            str: Task ID
         """
         try:
+            # Extract essential parameters
             download_type = task.get("download_type", "unknown")
-            service = task.get("service", "")
             
-            # Get common parameters from config
-            config_params = get_config_params()
+            # Debug existing task data
+            logger.debug(f"Adding {download_type} task with data: {json.dumps({k: v for k, v in task.items() if k != 'orig_request'})}")
             
-            # Use service from config instead of task
-            service = config_params.get('service')
-            
-            # Generate a unique task ID
+            # Create a unique task ID
             task_id = str(uuid.uuid4())
             
-            # Store the original request in task info
-            original_request = task.get("orig_request", {}).copy()
+            # Get config parameters and process original request
+            config_params = get_config_params()
             
-            # Add essential metadata for retry operations
-            original_request["download_type"] = download_type
+            # Extract original request or use empty dict
+            original_request = task.get("orig_request", task.get("original_request", {}))
             
-            # Add type from download_type if not provided
-            if "type" not in task:
-                task["type"] = download_type
+            # Determine service (spotify or deezer) from config or request
+            service = original_request.get("service", config_params.get("service", "spotify"))
             
-            # Ensure key information is included
-            for key in ["type", "name", "artist", "service", "url"]:
-                if key in task and key not in original_request:
-                    original_request[key] = task[key]
-            
-            # Add API endpoint information
-            if "endpoint" not in original_request:
-                original_request["endpoint"] = f"/api/{download_type}/download"
-            
-            # Add explicit display information for the frontend
-            original_request["display_title"] = task.get("name", original_request.get("name", "Unknown"))
-            original_request["display_type"] = task.get("type", original_request.get("type", download_type))
-            original_request["display_artist"] = task.get("artist", original_request.get("artist", ""))
+            # Debug retry_url if present
+            if "retry_url" in task:
+                logger.debug(f"Task has retry_url: {task['retry_url']}")
             
             # Build the complete task with config parameters
             complete_task = {
@@ -149,6 +135,9 @@ class CeleryDownloadQueueManager:
                 "artist": task.get("artist", ""),
                 "service": service,
                 "url": task.get("url", ""),
+                
+                # Preserve retry_url if present
+                "retry_url": task.get("retry_url", ""),
                 
                 # Use config values but allow override from request
                 "main": original_request.get("main", 

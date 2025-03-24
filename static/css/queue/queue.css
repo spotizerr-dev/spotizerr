@@ -43,10 +43,86 @@
     margin: 0;
 }
 
+/* Queue subtitle with statistics */
+.queue-subtitle {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+    font-size: 0.8rem;
+    color: #b3b3b3;
+}
+
+.queue-stat {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.queue-stat-active {
+    color: #4a90e2;
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+.queue-stat-completed {
+    color: #1DB954;
+    background-color: rgba(29, 185, 84, 0.1);
+}
+
+.queue-stat-error {
+    color: #ff5555;
+    background-color: rgba(255, 85, 85, 0.1);
+}
+
 .header-actions {
     display: flex;
     gap: 10px;
     align-items: center;
+}
+
+/* Refresh queue button */
+#refreshQueueBtn {
+    background: #2a2a2a;
+    border: none;
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#refreshQueueBtn:hover {
+    background: #333;
+    transform: translateY(-1px);
+}
+
+#refreshQueueBtn:active {
+    transform: scale(0.95);
+}
+
+#refreshQueueBtn.refreshing {
+    animation: spin 1s linear infinite;
+}
+
+/* Artist queue message */
+.queue-artist-message {
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    color: #fff;
+    text-align: center;
+    border-left: 4px solid #4a90e2;
+    animation: pulse 1.5s infinite;
+    font-weight: 500;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.8; }
+    50% { opacity: 1; }
+    100% { opacity: 0.8; }
 }
 
 /* Cancel all button styling */
