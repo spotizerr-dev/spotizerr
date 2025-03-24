@@ -88,12 +88,17 @@ function renderArtist(artistData, artistId) {
         artistUrl,
         'artist',
         { name: artistName, artist: artistName },
-        'album,single,compilation'
+        'album,single,compilation,appears_on'
       )
-        .then(() => {
+        .then((taskIds) => {
           downloadArtistBtn.textContent = 'Artist queued';
           // Make the queue visible after queueing
           downloadQueue.toggleVisibility(true);
+          
+          // Optionally show number of albums queued
+          if (Array.isArray(taskIds)) {
+            downloadArtistBtn.title = `${taskIds.length} albums queued for download`;
+          }
         })
         .catch(err => {
           downloadArtistBtn.textContent = 'Download All Discography';
@@ -103,25 +108,34 @@ function renderArtist(artistData, artistId) {
     });
   }
 
-  // Group albums by type (album, single, compilation, etc.)
-  const albumGroups = (artistData.items || []).reduce((groups, album) => {
-    if (!album) return groups;
+  // Group albums by type (album, single, compilation, etc.) and separate "appears_on" albums
+  const albumGroups = {};
+  const appearingAlbums = [];
+
+  (artistData.items || []).forEach(album => {
+    if (!album) return;
     
     // Skip explicit albums if filter is enabled
     if (isExplicitFilterEnabled && album.explicit) {
-      return groups;
+      return;
     }
     
-    const type = (album.album_type || 'unknown').toLowerCase();
-    if (!groups[type]) groups[type] = [];
-    groups[type].push(album);
-    return groups;
-  }, {});
+    // Check if this is an "appears_on" album
+    if (album.album_group === 'appears_on') {
+      appearingAlbums.push(album);
+    } else {
+      // Group by album_type for the artist's own releases
+      const type = (album.album_type || 'unknown').toLowerCase();
+      if (!albumGroups[type]) albumGroups[type] = [];
+      albumGroups[type].push(album);
+    }
+  });
 
   // Render album groups
   const groupsContainer = document.getElementById('album-groups');
   groupsContainer.innerHTML = '';
 
+  // Render regular album groups first
   for (const [groupType, albums] of Object.entries(albumGroups)) {
     const groupSection = document.createElement('section');
     groupSection.className = 'album-group';
@@ -192,6 +206,77 @@ function renderArtist(artistData, artistId) {
     groupsContainer.appendChild(groupSection);
   }
 
+  // Render "Featuring" section if there are any appearing albums
+  if (appearingAlbums.length > 0) {
+    const featuringSection = document.createElement('section');
+    featuringSection.className = 'album-group';
+
+    const featuringHeaderHTML = isExplicitFilterEnabled ? 
+      `<div class="album-group-header">
+        <h3>Featuring</h3>
+        <div class="download-note">Visit album pages to download content</div>
+      </div>` : 
+      `<div class="album-group-header">
+        <h3>Featuring</h3>
+        <button class="download-btn download-btn--main group-download-btn" 
+                data-group-type="appears_on">
+          Download All Featuring Albums
+        </button>
+      </div>`;
+
+    featuringSection.innerHTML = `
+      ${featuringHeaderHTML}
+      <div class="albums-list"></div>
+    `;
+
+    const albumsContainer = featuringSection.querySelector('.albums-list');
+    appearingAlbums.forEach(album => {
+      if (!album) return;
+      
+      const albumElement = document.createElement('div');
+      albumElement.className = 'album-card';
+
+      // Create album card with or without download button based on explicit filter setting
+      if (isExplicitFilterEnabled) {
+        albumElement.innerHTML = `
+          <a href="/album/${album.id || ''}" class="album-link">
+            <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}" 
+                 alt="Album cover" 
+                 class="album-cover">
+          </a>
+          <div class="album-info">
+            <div class="album-title">${album.name || 'Unknown Album'}</div>
+            <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
+          </div>
+        `;
+      } else {
+        albumElement.innerHTML = `
+          <a href="/album/${album.id || ''}" class="album-link">
+            <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}" 
+                 alt="Album cover" 
+                 class="album-cover">
+          </a>
+          <div class="album-info">
+            <div class="album-title">${album.name || 'Unknown Album'}</div>
+            <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
+          </div>
+          <button class="download-btn download-btn--circle" 
+                  data-url="${album.external_urls?.spotify || ''}" 
+                  data-type="${album.album_type || 'album'}"
+                  data-name="${album.name || 'Unknown Album'}"
+                  title="Download">
+            <img src="/static/images/download.svg" alt="Download">
+          </button>
+        `;
+      }
+      
+      albumsContainer.appendChild(albumElement);
+    });
+
+    // Add to the end so it appears at the bottom
+    groupsContainer.appendChild(featuringSection);
+  }
+
   document.getElementById('artist-header').classList.remove('hidden');
   document.getElementById('albums-container').classList.remove('hidden');
 
@@ -207,25 +292,33 @@ function renderArtist(artistData, artistId) {
 function attachGroupDownloadListeners(artistUrl, artistName) {
   document.querySelectorAll('.group-download-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      const groupType = e.target.dataset.groupType || 'album'; // e.g. "album", "single", "compilation"
+      const groupType = e.target.dataset.groupType || 'album'; // e.g. "album", "single", "compilation", "appears_on"
       e.target.disabled = true;
-      e.target.textContent = `Queueing all ${capitalize(groupType)}s...`;
+      
+      // Custom text for the 'appears_on' group
+      const displayType = groupType === 'appears_on' ? 'Featuring Albums' : `${capitalize(groupType)}s`;
+      e.target.textContent = `Queueing all ${displayType}...`;
 
       try {
         // Use our local startDownload function with the group type filter
-        await startDownload(
+        const taskIds = await startDownload(
           artistUrl,
           'artist',
           { name: artistName || 'Unknown Artist', artist: artistName || 'Unknown Artist' },
           groupType // Only queue releases of this specific type.
         );
-        e.target.textContent = `Queued all ${capitalize(groupType)}s`;
+        
+        // Optionally show number of albums queued
+        const totalQueued = Array.isArray(taskIds) ? taskIds.length : 0;
+        e.target.textContent = `Queued all ${displayType}`;
+        e.target.title = `${totalQueued} albums queued for download`;
+        
         // Make the queue visible after queueing
         downloadQueue.toggleVisibility(true);
       } catch (error) {
-        e.target.textContent = `Download All ${capitalize(groupType)}s`;
+        e.target.textContent = `Download All ${displayType}`;
         e.target.disabled = false;
-        showError(`Failed to queue download for all ${groupType}s: ${error?.message || 'Unknown error'}`);
+        showError(`Failed to queue download for all ${groupType}: ${error?.message || 'Unknown error'}`);
       }
     });
   });
@@ -259,11 +352,14 @@ async function startDownload(url, type, item, albumType) {
   }
   
   try {
-    // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, type, item, albumType);
+    // Use the centralized downloadQueue.download method for all downloads including artist downloads
+    const result = await downloadQueue.download(url, type, item, albumType);
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
+    
+    // Return the result for tracking
+    return result;
   } catch (error) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;

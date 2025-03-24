@@ -3,17 +3,9 @@
 from deezspot.easy_spoty import Spo
 import json
 from pathlib import Path
+from routes.utils.celery_queue_manager import get_config_params
 
-# Load configuration from ./config/main.json
-CONFIG_PATH = './config/main.json'
-try:
-    with open(CONFIG_PATH, 'r') as f:
-        config_data = json.load(f)
-    # Get the main Spotify account from config
-    DEFAULT_SPOTIFY_ACCOUNT = config_data.get("spotify", "")
-except Exception as e:
-    print(f"Error loading configuration: {e}")
-    DEFAULT_SPOTIFY_ACCOUNT = ""
+# We'll rely on get_config_params() instead of directly loading the config file
 
 def get_spotify_info(spotify_id, spotify_type):
     """
@@ -29,8 +21,9 @@ def get_spotify_info(spotify_id, spotify_type):
     client_id = None
     client_secret = None
     
-    # Use the default account from config
-    main = DEFAULT_SPOTIFY_ACCOUNT
+    # Get config parameters including Spotify account
+    config_params = get_config_params()
+    main = config_params.get('spotify', '')
     
     if not main:
         raise ValueError("No Spotify account configured in settings")

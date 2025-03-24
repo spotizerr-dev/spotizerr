@@ -21,9 +21,24 @@ class DownloadQueue {
     this.RETRY_DELAY = 5;      // Default retry delay in seconds
     this.RETRY_DELAY_INCREASE = 5; // Default retry delay increase in seconds
 
-    this.downloadQueue = {}; // keyed by unique queueId
-    this.currentConfig = {}; // Cache for current config
-
+    // Cache for queue items
+    this.queueCache = {};
+    
+    // Queue entry objects
+    this.queueEntries = {};
+    
+    // EventSource connections for SSE tracking
+    this.sseConnections = {};
+    
+    // DOM elements cache
+    this.elements = {};
+    
+    // Event handlers
+    this.eventHandlers = {};
+    
+    // Configuration
+    this.config = null;
+    
     // Load the saved visible count (or default to 10)
     const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
     this.visibleCount = storedVisibleCount ? parseInt(storedVisibleCount, 10) : 10;
@@ -64,17 +79,17 @@ class DownloadQueue {
     // Override the server value with locally persisted queue visibility (if present).
     const storedVisible = localStorage.getItem("downloadQueueVisible");
     if (storedVisible !== null) {
-      this.currentConfig.downloadQueueVisible = storedVisible === "true";
+      this.config.downloadQueueVisible = storedVisible === "true";
     }
 
     const queueSidebar = document.getElementById('downloadQueue');
-    queueSidebar.hidden = !this.currentConfig.downloadQueueVisible;
-    queueSidebar.classList.toggle('active', this.currentConfig.downloadQueueVisible);
+    queueSidebar.hidden = !this.config.downloadQueueVisible;
+    queueSidebar.classList.toggle('active', this.config.downloadQueueVisible);
     
     // Initialize the queue icon based on sidebar visibility
     const queueIcon = document.getElementById('queueIcon');
     if (queueIcon) {
-      if (this.currentConfig.downloadQueueVisible) {
+      if (this.config.downloadQueueVisible) {
         queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
         queueIcon.setAttribute('aria-expanded', 'true');
         queueIcon.classList.add('queue-icon-active'); // Add red tint class
@@ -100,8 +115,8 @@ class DownloadQueue {
     const cancelAllBtn = document.getElementById('cancelAllBtn');
     if (cancelAllBtn) {
       cancelAllBtn.addEventListener('click', () => {
-        for (const queueId in this.downloadQueue) {
-          const entry = this.downloadQueue[queueId];
+        for (const queueId in this.queueEntries) {
+          const entry = this.queueEntries[queueId];
           if (!entry.hasEnded) {
             fetch(`/api/${entry.type}/download/cancel?prg_file=${entry.prgFile}`)
               .then(response => response.json())
@@ -109,6 +124,10 @@ class DownloadQueue {
                 const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
                 if (logElement) logElement.textContent = "Download cancelled";
                 entry.hasEnded = true;
+                
+                // Close SSE connection
+                this.clearPollingInterval(queueId);
+                
                 if (entry.intervalId) {
                   clearInterval(entry.intervalId);
                   entry.intervalId = null;
@@ -121,6 +140,11 @@ class DownloadQueue {
         }
       });
     }
+    
+    // Close all SSE connections when the page is about to unload
+    window.addEventListener('beforeunload', () => {
+      this.clearAllPollingIntervals();
+    });
   }
 
   /* Public API */
@@ -153,7 +177,7 @@ class DownloadQueue {
 
     try {
       await this.loadConfig();
-      const updatedConfig = { ...this.currentConfig, downloadQueueVisible: isVisible };
+      const updatedConfig = { ...this.config, downloadQueueVisible: isVisible };
       await this.saveConfig(updatedConfig);
       this.dispatchEvent('queueVisibilityChanged', { visible: isVisible });
     } catch (error) {
@@ -192,59 +216,44 @@ class DownloadQueue {
   addDownload(item, type, prgFile, requestUrl = null, startMonitoring = false) {
     const queueId = this.generateQueueId();
     const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
-    this.downloadQueue[queueId] = entry;
+    this.queueEntries[queueId] = entry;
     // Re-render and update which entries are processed.
     this.updateQueueOrder();
     
-    // Only start monitoring if explicitly requested
-    if (startMonitoring && this.isEntryVisible(queueId)) {
-      this.startEntryMonitoring(queueId);
+    // Start monitoring if explicitly requested, regardless of visibility
+    if (startMonitoring) {
+      this.startDownloadStatusMonitoring(queueId);
     }
     
     this.dispatchEvent('downloadAdded', { queueId, item, type });
     return queueId; // Return the queueId so callers can reference it
   }
 
-  /* Start processing the entry only if it is visible. */
-  async startEntryMonitoring(queueId) {
-    const entry = this.downloadQueue[queueId];
+  /* Start processing the entry. Removed visibility check to ensure all entries are monitored. */
+  async startDownloadStatusMonitoring(queueId) {
+    const entry = this.queueEntries[queueId];
     if (!entry || entry.hasEnded) return;
-    if (entry.intervalId) return;
+    
+    // Don't restart monitoring if SSE connection already exists
+    if (this.sseConnections[queueId]) return;
 
     // Show a preparing message for new entries
     if (entry.isNew) {
       const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (logElement) {
-        logElement.textContent = "Reading status...";
+        logElement.textContent = "Initializing download...";
       }
     }
     
-    // Track status check failures
-    entry.statusCheckFailures = 0;
-    const MAX_STATUS_CHECK_FAILURES = 5; // Maximum number of consecutive failures before showing error
+    console.log(`Starting monitoring for ${entry.type} with PRG file: ${entry.prgFile}`);
     
-    entry.intervalId = setInterval(async () => {
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-      if (entry.hasEnded) {
-        clearInterval(entry.intervalId);
-        return;
-      }
-      try {
-        // Show checking status message on first few attempts
-        if (entry.statusCheckFailures > 0 && entry.statusCheckFailures < MAX_STATUS_CHECK_FAILURES && logElement) {
-          logElement.textContent = `Checking download status (attempt ${entry.statusCheckFailures+1})...`;
-        }
-        
-        const response = await fetch(`/api/prgs/${entry.prgFile}`);
-        if (!response.ok) {
-          throw new Error(`Server returned ${response.status}`);
-        }
-        
-        // Reset failure counter on success
-        entry.statusCheckFailures = 0;
-        
+    // For backward compatibility, first try to get initial status from the REST API
+    try {
+      const response = await fetch(`/api/prgs/${entry.prgFile}`);
+      if (response.ok) {
         const data = await response.json();
-
+        
+        // Update entry type if available
         if (data.type) {
           entry.type = data.type;
           
@@ -252,11 +261,11 @@ class DownloadQueue {
           const typeElement = entry.element.querySelector('.type');
           if (typeElement) {
             typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
-            // Update type class without triggering animation
             typeElement.className = `type ${data.type}`;
           }
         }
-
+        
+        // Update request URL if available
         if (!entry.requestUrl && data.original_request) {
           const params = new CustomURLSearchParams();
           for (const key in data.original_request) {
@@ -264,69 +273,41 @@ class DownloadQueue {
           }
           entry.requestUrl = `/api/${entry.type}/download?${params.toString()}`;
         }
-
-        const progress = data.last_line;
-
-        if (progress && typeof progress.status === 'undefined') {
-          if (entry.type === 'playlist') {
-            logElement.textContent = "Reading tracks list...";
+        
+        // Process the initial status
+        if (data.last_line) {
+          entry.lastStatus = data.last_line;
+          entry.lastUpdated = Date.now();
+          entry.status = data.last_line.status;
+          
+          // Update status message without recreating the element
+          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+          if (logElement) {
+            const statusMessage = this.getStatusMessage(data.last_line);
+            logElement.textContent = statusMessage;
           }
-          this.updateQueueOrder();
-          return;
-        }
-        if (!progress) {
-          if (entry.type === 'playlist') {
-            logElement.textContent = "Reading tracks list...";
-          } else {
-            this.handleInactivity(entry, queueId, logElement);
+          
+          // Apply appropriate CSS classes based on status
+          this.applyStatusClasses(entry, data.last_line);
+          
+          // Save updated status to cache
+          this.queueCache[entry.prgFile] = data.last_line;
+          localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
+          
+          // If the entry is already in a terminal state, don't set up SSE
+          if (['error', 'complete', 'cancel', 'cancelled', 'done'].includes(data.last_line.status)) {
+            entry.hasEnded = true;
+            this.handleDownloadCompletion(entry, queueId, data.last_line);
+            return;
           }
-          this.updateQueueOrder();
-          return;
-        }
-        if (JSON.stringify(entry.lastStatus) === JSON.stringify(progress)) {
-          this.handleInactivity(entry, queueId, logElement);
-          this.updateQueueOrder();
-          return;
-        }
-
-        // Update the entry and cache.
-        entry.lastStatus = progress;
-        entry.lastUpdated = Date.now();
-        entry.status = progress.status;
-        
-        // Update status message without recreating the element
-        if (logElement) {
-          const statusMessage = this.getStatusMessage(progress);
-          logElement.textContent = statusMessage;
-        }
-        
-        // Apply appropriate CSS classes based on status
-        this.applyStatusClasses(entry, progress);
-        
-        // Save updated status to cache.
-        this.queueCache[entry.prgFile] = progress;
-        localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-
-        if (['error', 'complete', 'cancel'].includes(progress.status)) {
-          this.handleTerminalState(entry, queueId, progress);
-        }
-      } catch (error) {
-        console.error('Status check failed:', error);
-        
-        // Increment failure counter
-        entry.statusCheckFailures = (entry.statusCheckFailures || 0) + 1;
-        
-        // Only show error after multiple consecutive failures
-        if (entry.statusCheckFailures >= MAX_STATUS_CHECK_FAILURES) {
-          this.handleTerminalState(entry, queueId, { 
-            status: 'error', 
-            message: 'Status check error: ' + error.message,
-            can_retry: !!entry.requestUrl
-          });
         }
       }
-      this.updateQueueOrder();
-    }, 2000);
+    } catch (error) {
+      console.error('Initial status check failed:', error);
+    }
+    
+    // Set up SSE connection for real-time updates
+    this.setupPollingInterval(queueId);
   }
 
   /* Helper Methods */
@@ -338,6 +319,8 @@ class DownloadQueue {
    * Creates a new queue entry. It checks localStorage for any cached info.
    */
   createQueueEntry(item, type, prgFile, queueId, requestUrl) {
+    console.log(`Creating queue entry with initial type: ${type}`);
+    
     // Build the basic entry.
     const entry = {
       item,
@@ -352,8 +335,11 @@ class DownloadQueue {
       uniqueId: queueId,
       retryCount: 0,
       autoRetryInterval: null,
-      isNew: true // Add flag to track if this is a new entry
+      isNew: true, // Add flag to track if this is a new entry
+      status: 'initializing',
+      lastMessage: `Initializing ${type} download...`
     };
+    
     // If cached info exists for this PRG file, use it.
     if (this.queueCache[prgFile]) {
       entry.lastStatus = this.queueCache[prgFile];
@@ -417,6 +403,10 @@ class DownloadQueue {
       // Apply appropriate CSS classes based on cached status
       this.applyStatusClasses(entry, this.queueCache[prgFile]);
     }
+    
+    // Store it in our queue object
+    this.queueEntries[queueId] = entry;
+    
     return entry;
   }
 
@@ -427,7 +417,8 @@ class DownloadQueue {
     const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
     
     // Use display values if available, or fall back to standard fields
-    const displayTitle = item.name || 'Unknown';
+    // Support both 'name' and 'music' fields which may be used by the backend
+    const displayTitle = item.name || item.music || item.song || 'Unknown';
     const displayType = type.charAt(0).toUpperCase() + type.slice(1);
     
     const div = document.createElement('article');
@@ -454,27 +445,42 @@ class DownloadQueue {
 
   // Add a helper method to apply the right CSS classes based on status
   applyStatusClasses(entry, status) {
-    if (!entry || !entry.element || !status) return;
+    // If no element, nothing to do
+    if (!entry.element) return;
     
-    // Clear existing status classes
-    entry.element.classList.remove('queue-item--processing', 'queue-item--error', 'download-success');
+    // Remove all status classes first
+    entry.element.classList.remove(
+      'queued', 'initializing', 'downloading', 'processing', 
+      'error', 'complete', 'cancelled', 'progress'
+    );
     
-    // Apply appropriate class based on status
-    if (status.status === 'processing' || status.status === 'downloading' || status.status === 'progress') {
-      entry.element.classList.add('queue-item--processing');
-    } else if (status.status === 'error') {
-      entry.element.classList.add('queue-item--error');
-      entry.hasEnded = true;
-    } else if (status.status === 'complete' || status.status === 'done') {
-      entry.element.classList.add('download-success');
-      entry.hasEnded = true;
-    } else if (status.status === 'cancel' || status.status === 'interrupted') {
-      entry.hasEnded = true;
-    }
-    
-    // Special case for retry status
-    if (status.retrying || status.status === 'retrying') {
-      entry.element.classList.add('queue-item--processing');
+    // Handle various status types
+    switch (status) {
+      case 'queued':
+        entry.element.classList.add('queued');
+        break;
+      case 'initializing':
+        entry.element.classList.add('initializing');
+        break;
+      case 'processing':
+      case 'downloading':
+        entry.element.classList.add('processing');
+        break;
+      case 'progress':
+      case 'track_progress':
+      case 'real_time':
+        entry.element.classList.add('progress');
+        break;
+      case 'error':
+        entry.element.classList.add('error');
+        break;
+      case 'complete':
+      case 'done': 
+        entry.element.classList.add('complete');
+        break;
+      case 'cancelled':
+        entry.element.classList.add('cancelled');
+        break;
     }
   }
 
@@ -483,17 +489,41 @@ class DownloadQueue {
     btn.style.display = 'none';
     const { prg, type, queueid } = btn.dataset;
     try {
+      // First cancel the download
       const response = await fetch(`/api/${type}/download/cancel?prg_file=${prg}`);
       const data = await response.json();
       if (data.status === "cancel") {
         const logElement = document.getElementById(`log-${queueid}-${prg}`);
         logElement.textContent = "Download cancelled";
-        const entry = this.downloadQueue[queueid];
+        const entry = this.queueEntries[queueid];
         if (entry) {
           entry.hasEnded = true;
-          clearInterval(entry.intervalId);
-          entry.intervalId = null;
+          
+          // Close any active connections
+          this.clearPollingInterval(queueid);
+          
+          if (entry.intervalId) {
+            clearInterval(entry.intervalId);
+            entry.intervalId = null;
+          }
+          
+          // Mark as cancelled in the cache to prevent re-loading on page refresh
+          entry.status = "cancelled";
+          this.queueCache[prg] = { status: "cancelled" };
+          localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
+          
+          // Immediately delete from server instead of just waiting for UI cleanup
+          try {
+            await fetch(`/api/prgs/delete/${prg}`, {
+              method: 'DELETE'
+            });
+            console.log(`Deleted cancelled task from server: ${prg}`);
+          } catch (deleteError) {
+            console.error('Error deleting cancelled task:', deleteError);
+          }
         }
+        
+        // Still do UI cleanup after a short delay
         setTimeout(() => this.cleanupEntry(queueid), 5000);
       }
     } catch (error) {
@@ -505,7 +535,7 @@ class DownloadQueue {
   updateQueueOrder() {
     const container = document.getElementById('queueItems');
     const footer = document.getElementById('queueFooter');
-    const entries = Object.values(this.downloadQueue);
+    const entries = Object.values(this.queueEntries);
 
     // Sorting: errors/canceled first (group 0), ongoing next (group 1), queued last (group 2, sorted by position).
     entries.sort((a, b) => {
@@ -532,7 +562,14 @@ class DownloadQueue {
       }
     });
 
+    // Update the header with just the total count
     document.getElementById('queueTotalCount').textContent = entries.length;
+    
+    // Remove subtitle with detailed stats if it exists
+    const subtitleEl = document.getElementById('queueSubtitle');
+    if (subtitleEl) {
+      subtitleEl.remove();
+    }
     
     // Only recreate the container content if really needed
     const visibleEntries = entries.slice(0, this.visibleCount);
@@ -602,7 +639,7 @@ class DownloadQueue {
 
   /* Checks if an entry is visible in the queue display. */
   isEntryVisible(queueId) {
-    const entries = Object.values(this.downloadQueue);
+    const entries = Object.values(this.queueEntries);
     entries.sort((a, b) => {
       const getGroup = (entry) => {
         if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
@@ -630,24 +667,45 @@ class DownloadQueue {
     return index >= 0 && index < this.visibleCount;
   }
 
-  cleanupEntry(queueId) {
-    const entry = this.downloadQueue[queueId];
+  async cleanupEntry(queueId) {
+    const entry = this.queueEntries[queueId];
     if (entry) {
+      // Close any SSE connection
+      this.clearPollingInterval(queueId);
+      
+      // Clean up any intervals
       if (entry.intervalId) {
         clearInterval(entry.intervalId);
       }
       if (entry.autoRetryInterval) {
         clearInterval(entry.autoRetryInterval);
       }
+      
+      // Remove from the DOM
       entry.element.remove();
-      delete this.downloadQueue[queueId];
-      // Remove the cached info.
+      
+      // Delete from in-memory queue
+      delete this.queueEntries[queueId];
+      
+      // Remove the cached info
       if (this.queueCache[entry.prgFile]) {
         delete this.queueCache[entry.prgFile];
         localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
       }
-      fetch(`/api/prgs/delete/${entry.prgFile}`, { method: 'DELETE' })
-        .catch(console.error);
+      
+      // Delete the entry from the server
+      try {
+        const response = await fetch(`/api/prgs/delete/${entry.prgFile}`, { method: 'DELETE' });
+        if (response.ok) {
+          console.log(`Successfully deleted task ${entry.prgFile} from server`);
+        } else {
+          console.warn(`Failed to delete task ${entry.prgFile}: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        console.error(`Error deleting task ${entry.prgFile}:`, error);
+      }
+      
+      // Update the queue display
       this.updateQueueOrder();
     }
   }
@@ -659,99 +717,78 @@ class DownloadQueue {
 
   /* Status Message Handling */
   getStatusMessage(data) {
-    function formatList(items) {
-      if (!items || items.length === 0) return '';
-      if (items.length === 1) return items[0];
-      if (items.length === 2) return `${items[0]} and ${items[1]}`;
-      return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
-    }
-    function pluralize(word) {
-      return word.endsWith('s') ? word : word + 's';
-    }
+    // Extract common fields
+    const trackName = data.music || data.song || data.name || 'Unknown';
+    const artist = data.artist || '';
+    const percentage = data.percentage || data.percent || 0;
+    const currentTrack = data.parsed_current_track || data.current_track || '';
+    const totalTracks = data.parsed_total_tracks || data.total_tracks || '';
+    const playlistOwner = data.owner || '';
+    
+    // Format percentage for display
+    const formattedPercentage = (percentage * 100).toFixed(1);
+    
     switch (data.status) {
       case 'queued':
-        if (data.type === 'album' || data.type === 'playlist') {
-          return `Queued ${data.type} "${data.name}"${data.position ? ` (position ${data.position})` : ''}`;
+        if (data.type === 'album') {
+          return `Queued album "${data.name}"${artist ? ` by ${artist}` : ''}`;
+        } else if (data.type === 'playlist') {
+          return `Queued playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''}`;
         } else if (data.type === 'track') {
-          return `Queued track "${data.name}"${data.artist ? ` by ${data.artist}` : ''}`;
+          return `Queued track "${trackName}"${artist ? ` by ${artist}` : ''}`;
         }
         return `Queued ${data.type} "${data.name}"`;
       
-      case 'started':
-        return `Download started`;
-      
-      case 'processing':
-        return `Processing download...`;
-        
-      case 'cancel':
-        return 'Download cancelled';
-        
-      case 'interrupted':
-        return 'Download was interrupted';
-      
-      case 'downloading':
-        if (data.type === 'track') {
-          return `Downloading track "${data.song}" by ${data.artist}...`;
-        }
-        return `Downloading ${data.type}...`;
-      
       case 'initializing':
         if (data.type === 'playlist') {
-          return `Initializing playlist download "${data.name}" with ${data.total_tracks} tracks...`;
+          return `Initializing playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''} with ${totalTracks} tracks...`;
         } else if (data.type === 'album') {
-          return `Initializing album download "${data.album}" by ${data.artist}...`;
-        } else if (data.type === 'artist') {
-          let subsets = [];
-          if (data.subsets && Array.isArray(data.subsets) && data.subsets.length > 0) {
-            subsets = data.subsets;
-          } else if (data.album_type) {
-            subsets = data.album_type
-              .split(',')
-              .map(item => item.trim())
-              .map(item => pluralize(item));
-          }
-          if (subsets.length > 0) {
-            const subsetsMessage = formatList(subsets);
-            return `Initializing download for ${data.artist}'s ${subsetsMessage}`;
-          }
-          return `Initializing download for ${data.artist} with ${data.total_albums} album(s) [${data.album_type}]...`;
+          return `Initializing album "${data.album || data.name}"${artist ? ` by ${artist}` : ''}...`;
+        } else if (data.type === 'track') {
+          return `Initializing track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
         }
         return `Initializing ${data.type} download...`;
       
-      case 'progress':
-        if (data.track && data.current_track) {
-          const parts = data.current_track.split('/');
-          const current = parts[0];
-          const total = parts[1] || '?';
-          if (data.type === 'playlist') {
-            return `Downloading playlist: Track ${current} of ${total} - ${data.track}`;
-          } else if (data.type === 'album') {
-            if (data.album && data.artist) {
-              return `Downloading album "${data.album}" by ${data.artist}: track ${current} of ${total} - ${data.track}`;
-            } else {
-              return `Downloading track ${current} of ${total}: ${data.track} from ${data.album}`;
-            }
-          }
+      case 'processing':
+        if (data.type === 'track') {
+          return `Processing track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
+        } else if (data.type === 'album' && currentTrack && totalTracks) {
+          return `Processing track ${currentTrack}/${totalTracks}: ${trackName}...`;
+        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
+          return `Processing track ${currentTrack}/${totalTracks}: ${trackName}...`;
         }
-        return `Progress: ${data.status}...`;
+        return `Processing ${data.type} download...`;
       
+      case 'real_time':
+        if (data.type === 'track') {
+          return `Track "${trackName}"${artist ? ` by ${artist}` : ''} is ${formattedPercentage}% downloaded...`;
+        } else if (data.type === 'album' && currentTrack && totalTracks) {
+          return `Track "${trackName}" (${currentTrack}/${totalTracks}) is ${formattedPercentage}% downloaded...`;
+        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
+          return `Track "${trackName}" (${currentTrack}/${totalTracks}) is ${formattedPercentage}% downloaded...`;
+        }
+        return `Downloading ${data.type}...`;
+      
+      case 'progress':
+        if (data.type === 'track') {
+          return `Downloading track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
+        } else if (data.type === 'album' && currentTrack && totalTracks) {
+          return `Downloading track "${trackName}" (${currentTrack}/${totalTracks})...`;
+        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
+          return `Downloading track "${trackName}" (${currentTrack}/${totalTracks})...`;
+        }
+        return `Downloading  ${data.type}...`;
+      
+      case 'complete':
       case 'done':
         if (data.type === 'track') {
-          return `Finished track "${data.song}" by ${data.artist}`;
-        } else if (data.type === 'playlist') {
-          return `Finished playlist "${data.name}" with ${data.total_tracks} tracks`;
+          return `Finished track "${trackName}"${artist ? ` by ${artist}` : ''}`;
         } else if (data.type === 'album') {
-          return `Finished album "${data.album}" by ${data.artist}`;
-        } else if (data.type === 'artist') {
-          return `Finished artist "${data.artist}" (${data.album_type})`;
+          return `Finished album "${data.album || data.name}"${artist ? ` by ${artist}` : ''}`;
+        } else if (data.type === 'playlist') {
+          return `Finished playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''}`;
         }
-        return `Finished ${data.type}`;
-      
-      case 'retrying':
-        if (data.retry_count !== undefined) {
-          return `Retrying download (attempt ${data.retry_count}/${this.MAX_RETRIES})`;
-        }
-        return `Retrying download...`;
+        return `Finished ${data.type} download`;
       
       case 'error':
         let errorMsg = `Error: ${data.message || 'Unknown error'}`;
@@ -764,19 +801,14 @@ class DownloadQueue {
         }
         return errorMsg;
       
-      case 'complete':
-        return 'Download completed successfully';
+      case 'cancelled':
+        return 'Download cancelled';
       
-      case 'skipped':
-        return `Track "${data.song}" skipped, it already exists!`;
-      
-      case 'real_time': {
-        const totalMs = data.time_elapsed;
-        const minutes = Math.floor(totalMs / 60000);
-        const seconds = Math.floor((totalMs % 60000) / 1000);
-        const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
-        return `Real-time downloading track "${data.song}" by ${data.artist} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
-      }
+      case 'retrying':
+        if (data.retry_count !== undefined) {
+          return `Retrying download (attempt ${data.retry_count}/${this.MAX_RETRIES})`;
+        }
+        return `Retrying download...`;
       
       default:
         return data.status;
@@ -784,103 +816,30 @@ class DownloadQueue {
   }
 
   /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
-  handleTerminalState(entry, queueId, progress) {
+  handleDownloadCompletion(entry, queueId, progress) {
+    // Mark the entry as ended
     entry.hasEnded = true;
-    clearInterval(entry.intervalId);
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    if (!logElement) return;
     
-    // Save the terminal state to the cache for persistence across reloads
-    this.queueCache[entry.prgFile] = progress;
-    localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-    
-    // Add status classes without triggering animations
-    this.applyStatusClasses(entry, progress);
-    
-    if (progress.status === 'error') {
-      const cancelBtn = entry.element.querySelector('.cancel-btn');
-      if (cancelBtn) {
-        cancelBtn.style.display = 'none';
+    // Update progress bar if available
+    if (typeof progress === 'number') {
+      const progressBar = entry.element.querySelector('.progress-bar');
+      if (progressBar) {
+        progressBar.style.width = '100%';
+        progressBar.setAttribute('aria-valuenow', 100);
+        progressBar.classList.add('bg-success');
       }
-      
-      // Check if we're under the max retries threshold for auto-retry
-      const canRetry = entry.retryCount < this.MAX_RETRIES;
-      
-      if (canRetry) {
-        logElement.innerHTML = `
-          <div class="error-message">${this.getStatusMessage(progress)}</div>
-          <div class="error-buttons">
-            <button class="close-error-btn" title="Close">&times;</button>
-            <button class="retry-btn" title="Retry">Retry</button>
-          </div>
-        `;
-        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-          if (entry.autoRetryInterval) {
-            clearInterval(entry.autoRetryInterval);
-            entry.autoRetryInterval = null;
-          }
-          this.cleanupEntry(queueId);
-        });
-        logElement.querySelector('.retry-btn').addEventListener('click', async () => {
-          if (entry.autoRetryInterval) {
-            clearInterval(entry.autoRetryInterval);
-            entry.autoRetryInterval = null;
-          }
-          this.retryDownload(queueId, logElement);
-        });
-        
-        // Implement auto-retry if we have the original request URL
-        if (entry.requestUrl) {
-          const maxRetries = this.MAX_RETRIES;
-          if (entry.retryCount < maxRetries) {
-            // Calculate the delay based on retry count (exponential backoff)
-            const baseDelay = this.RETRY_DELAY || 5; // seconds, use server's retry delay or default to 5
-            const increase = this.RETRY_DELAY_INCREASE || 5;
-            const retryDelay = baseDelay + (entry.retryCount * increase);
-            
-            let secondsLeft = retryDelay;
-            entry.autoRetryInterval = setInterval(() => {
-              secondsLeft--;
-              const errorMsgEl = logElement.querySelector('.error-message');
-              if (errorMsgEl) {
-                errorMsgEl.textContent = `Error: ${progress.message || 'Unknown error'}. Retrying in ${secondsLeft} seconds... (attempt ${entry.retryCount + 1}/${maxRetries})`;
-              }
-              if (secondsLeft <= 0) {
-                clearInterval(entry.autoRetryInterval);
-                entry.autoRetryInterval = null;
-                this.retryDownload(queueId, logElement);
-              }
-            }, 1000);
-          }
-        }
-      } else {
-        // Cannot be retried - just show the error
-        logElement.innerHTML = `
-          <div class="error-message">${this.getStatusMessage(progress)}</div>
-          <div class="error-buttons">
-            <button class="close-error-btn" title="Close">&times;</button>
-          </div>
-        `;
-        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-          this.cleanupEntry(queueId);
-        });
-      }
-      return;
-    } else if (progress.status === 'interrupted') {
-      logElement.textContent = 'Download was interrupted';
-      setTimeout(() => this.cleanupEntry(queueId), 5000);
-    } else if (progress.status === 'complete') {
-      logElement.textContent = 'Download completed successfully';
-      // Hide the cancel button
-      const cancelBtn = entry.element.querySelector('.cancel-btn');
-      if (cancelBtn) {
-        cancelBtn.style.display = 'none';
-      }
-      setTimeout(() => this.cleanupEntry(queueId), 5000);
-    } else {
-      logElement.textContent = this.getStatusMessage(progress);
-      setTimeout(() => this.cleanupEntry(queueId), 5000);
     }
+    
+    // Stop polling
+    this.clearPollingInterval(queueId);
+    
+    // Use 10 seconds cleanup delay for all states including errors
+    const cleanupDelay = 10000;
+    
+    // Clean up after the appropriate delay
+    setTimeout(() => {
+      this.cleanupEntry(queueId);
+    }, cleanupDelay);
   }
 
   handleInactivity(entry, queueId, logElement) {
@@ -893,7 +852,7 @@ class DownloadQueue {
     const now = Date.now();
     if (now - entry.lastUpdated > 300000) {
       const progress = { status: 'error', message: 'Inactivity timeout' };
-      this.handleTerminalState(entry, queueId, progress);
+      this.handleDownloadCompletion(entry, queueId, progress);
     } else {
       if (logElement) {
         logElement.textContent = this.getStatusMessage(entry.lastStatus);
@@ -902,20 +861,58 @@ class DownloadQueue {
   }
 
   async retryDownload(queueId, logElement) {
-    const entry = this.downloadQueue[queueId];
+    const entry = this.queueEntries[queueId];
     if (!entry) return;
     
     logElement.textContent = 'Retrying download...';
     
-    // If we don't have the request URL, we can't retry
-    if (!entry.requestUrl) {
-      logElement.textContent = 'Retry not available: missing original request information.';
+    // Find a retry URL from various possible sources
+    const getRetryUrl = () => {
+      if (entry.requestUrl) return entry.requestUrl;
+      
+      // If we have lastStatus with original_request, check there
+      if (entry.lastStatus && entry.lastStatus.original_request) {
+        if (entry.lastStatus.original_request.retry_url) 
+          return entry.lastStatus.original_request.retry_url;
+        if (entry.lastStatus.original_request.url) 
+          return entry.lastStatus.original_request.url;
+      }
+      
+      // Check if there's a URL directly in the lastStatus
+      if (entry.lastStatus && entry.lastStatus.url) 
+        return entry.lastStatus.url;
+      
+      return null;
+    };
+    
+    const retryUrl = getRetryUrl();
+    
+    // If we don't have any retry URL, show error
+    if (!retryUrl) {
+      logElement.textContent = 'Retry not available: missing URL information.';
       return;
     }
     
     try {
+      // Close any existing SSE connection
+      this.clearPollingInterval(queueId);
+      
+      console.log(`Retrying download for ${entry.type} with URL: ${retryUrl}`);
+      
+      // Build the API URL based on the entry's type
+      const apiUrl = `/api/${entry.type}/download?url=${encodeURIComponent(retryUrl)}`;
+      
+      // Add name and artist if available for better progress display
+      let fullRetryUrl = apiUrl;
+      if (entry.item && entry.item.name) {
+        fullRetryUrl += `&name=${encodeURIComponent(entry.item.name)}`;
+      }
+      if (entry.item && entry.item.artist) {
+        fullRetryUrl += `&artist=${encodeURIComponent(entry.item.artist)}`;
+      }
+      
       // Use the stored original request URL to create a new download
-      const retryResponse = await fetch(entry.requestUrl);
+      const retryResponse = await fetch(fullRetryUrl);
       if (!retryResponse.ok) {
         throw new Error(`Server returned ${retryResponse.status}`);
       }
@@ -923,15 +920,8 @@ class DownloadQueue {
       const retryData = await retryResponse.json();
       
       if (retryData.prg_file) {
-        // If the old PRG file exists, we should delete it
+        // Store the old PRG file for cleanup
         const oldPrgFile = entry.prgFile;
-        if (oldPrgFile) {
-          try {
-            await fetch(`/api/prgs/delete/${oldPrgFile}`, { method: 'DELETE' });
-          } catch (deleteError) {
-            console.error('Error deleting old PRG file:', deleteError);
-          }
-        }
         
         // Update the entry with the new PRG file
         const logEl = entry.element.querySelector('.log');
@@ -944,24 +934,25 @@ class DownloadQueue {
         entry.statusCheckFailures = 0; // Reset failure counter
         logEl.textContent = 'Retry initiated...';
         
-        // Make sure any existing interval is cleared before starting a new one
+        // Make sure any existing interval is cleared
         if (entry.intervalId) {
           clearInterval(entry.intervalId);
           entry.intervalId = null;
         }
         
-        // Always start monitoring right away - don't wait for verification
-        this.startEntryMonitoring(queueId);
+        // Set up a new SSE connection for the retried download
+        this.setupPollingInterval(queueId);
         
-        // Verify the PRG file exists as a secondary check, but don't wait for it to start monitoring
-        try {
-          const verifyResponse = await fetch(`/api/prgs/${retryData.prg_file}`);
-          // Just log the verification result, monitoring is already started
-          if (!verifyResponse.ok) {
-            console.log(`PRG file verification failed for ${retryData.prg_file}, but monitoring already started`);
-          }
-        } catch (verifyError) {
-          console.log(`PRG file verification error for ${retryData.prg_file}, but monitoring already started:`, verifyError);
+        // Delete the old PRG file after a short delay to ensure the new one is properly set up
+        if (oldPrgFile) {
+          setTimeout(async () => {
+            try {
+              await fetch(`/api/prgs/delete/${oldPrgFile}`, { method: 'DELETE' });
+              console.log(`Cleaned up old PRG file: ${oldPrgFile}`);
+            } catch (deleteError) {
+              console.error('Error deleting old PRG file:', deleteError);
+            }
+          }, 2000); // Wait 2 seconds before deleting the old file
         }
       } else {
         logElement.textContent = 'Retry failed: invalid response from server';
@@ -976,11 +967,11 @@ class DownloadQueue {
    * Start monitoring for all active entries in the queue that are visible
    */
   startMonitoringActiveEntries() {
-    for (const queueId in this.downloadQueue) {
-      const entry = this.downloadQueue[queueId];
+    for (const queueId in this.queueEntries) {
+      const entry = this.queueEntries[queueId];
       // Only start monitoring if the entry is not in a terminal state and is visible
-      if (!entry.hasEnded && this.isEntryVisible(queueId) && !entry.intervalId) {
-        this.startEntryMonitoring(queueId);
+      if (!entry.hasEnded && this.isEntryVisible(queueId) && !this.sseConnections[queueId]) {
+        this.setupPollingInterval(queueId);
       }
     }
   }
@@ -1026,56 +1017,87 @@ class DownloadQueue {
       
       const data = await response.json();
       
-      // Handle artist downloads which return multiple album_prg_files
-      if (type === 'artist' && data.album_prg_files && Array.isArray(data.album_prg_files)) {
-        // Add each album to the download queue separately
-        const queueIds = [];
-        data.album_prg_files.forEach(prgFile => {
-          const queueId = this.addDownload(item, 'album', prgFile, apiUrl, false);
-          queueIds.push({queueId, prgFile});
-        });
-        
-        // Wait a short time before checking the status to give server time to create files
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Start monitoring each entry after confirming PRG files exist
-        for (const {queueId, prgFile} of queueIds) {
-          try {
-            const statusResponse = await fetch(`/api/prgs/${prgFile}`);
-            if (statusResponse.ok) {
-              // Only start monitoring after confirming the PRG file exists
-              const entry = this.downloadQueue[queueId];
-              if (entry) {
-                // Start monitoring regardless of visibility
-                this.startEntryMonitoring(queueId);
-              }
-            }
-          } catch (statusError) {
-            console.log(`Initial status check pending for ${prgFile}, will retry on next interval`);
+      // Handle artist downloads which return multiple album tasks
+      if (type === 'artist') {
+        // Check for new API response format
+        if (data.task_ids && Array.isArray(data.task_ids)) {
+          console.log(`Queued artist discography with ${data.task_ids.length} albums`);
+          
+          // Make queue visible to show progress
+          this.toggleVisibility(true);
+          
+          // Create entries directly from task IDs and start monitoring them
+          const queueIds = [];
+          for (const taskId of data.task_ids) {
+            console.log(`Adding album task with ID: ${taskId}`);
+            // Create an album item with better display information
+            const albumItem = {
+              name: `${item.name || 'Artist'} - Album (loading...)`, 
+              artist: item.name || 'Unknown artist',
+              type: 'album'
+            };
+            // Use improved addDownload with forced monitoring
+            const queueId = this.addDownload(albumItem, 'album', taskId, apiUrl, true);
+            queueIds.push(queueId);
           }
+          
+          return queueIds;
+        } 
+        // Check for older API response format
+        else if (data.album_prg_files && Array.isArray(data.album_prg_files)) {
+          console.log(`Queued artist discography with ${data.album_prg_files.length} albums (old format)`);
+          
+          // Make queue visible to show progress
+          this.toggleVisibility(true);
+          
+          // Add each album to the download queue separately with forced monitoring
+          const queueIds = [];
+          data.album_prg_files.forEach(prgFile => {
+            console.log(`Adding album with PRG file: ${prgFile}`);
+            // Create an album item with better display information
+            const albumItem = {
+              name: `${item.name || 'Artist'} - Album (loading...)`, 
+              artist: item.name || 'Unknown artist',
+              type: 'album'
+            };
+            // Use improved addDownload with forced monitoring
+            const queueId = this.addDownload(albumItem, 'album', prgFile, apiUrl, true);
+            queueIds.push(queueId);
+          });
+          
+          return queueIds;
         }
-        
-        return queueIds.map(({queueId}) => queueId);
-      } else if (data.prg_file) {
-        // Handle single-file downloads (tracks, albums, playlists)
-        const queueId = this.addDownload(item, type, data.prg_file, apiUrl, false);
-        
-        // Wait a short time before checking the status to give server time to create the file
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Ensure the PRG file exists and has initial data by making a status check
-        try {
-          const statusResponse = await fetch(`/api/prgs/${data.prg_file}`);
-          if (statusResponse.ok) {
-            // Only start monitoring after confirming the PRG file exists
-            const entry = this.downloadQueue[queueId];
-            if (entry) {
-              // Start monitoring regardless of visibility
-              this.startEntryMonitoring(queueId);
+        // Handle any other response format for artist downloads
+        else {
+          console.log(`Queued artist discography with unknown format:`, data);
+          
+          // Make queue visible
+          this.toggleVisibility(true);
+          
+          // Just load existing PRG files as a fallback
+          await this.loadExistingPrgFiles();
+          
+          // Force start monitoring for all loaded entries
+          for (const queueId in this.queueEntries) {
+            const entry = this.queueEntries[queueId];
+            if (!entry.hasEnded) {
+              this.startDownloadStatusMonitoring(queueId);
             }
           }
-        } catch (statusError) {
-          console.log('Initial status check pending, will retry on next interval');
+          
+          return data;
+        }
+      }
+      
+      // Handle single-file downloads (tracks, albums, playlists)
+      if (data.prg_file) {
+        console.log(`Adding ${type} with PRG file: ${data.prg_file}`);
+        // Use direct monitoring for all downloads for consistency
+        const queueId = this.addDownload(item, type, data.prg_file, apiUrl, true);
+        
+        // Make queue visible to show progress if not already visible
+        if (!this.config.downloadQueueVisible) {
+          this.toggleVisibility(true);
         }
         
         return queueId;
@@ -1093,6 +1115,16 @@ class DownloadQueue {
    */
   async loadExistingPrgFiles() {
     try {
+      // Clear existing queue entries first to avoid duplicates when refreshing
+      for (const queueId in this.queueEntries) {
+        const entry = this.queueEntries[queueId];
+        // Close any active connections
+        this.clearPollingInterval(queueId);
+        
+        // Don't remove the entry from DOM - we'll rebuild it entirely
+        delete this.queueEntries[queueId];
+      }
+      
       const response = await fetch('/api/prgs/list');
       const prgFiles = await response.json();
       
@@ -1110,9 +1142,11 @@ class DownloadQueue {
           if (!prgResponse.ok) continue;
           const prgData = await prgResponse.json();
           
-          // Skip prg files that are marked as cancelled or completed
+          // Skip prg files that are marked as cancelled, completed, or interrupted
           if (prgData.last_line && 
               (prgData.last_line.status === 'cancel' || 
+               prgData.last_line.status === 'cancelled' ||
+               prgData.last_line.status === 'interrupted' ||
                prgData.last_line.status === 'complete')) {
             // Delete old completed or cancelled PRG files
             try {
@@ -1120,6 +1154,22 @@ class DownloadQueue {
               console.log(`Cleaned up old PRG file: ${prgFile}`);
             } catch (error) {
               console.error(`Failed to delete completed/cancelled PRG file ${prgFile}:`, error);
+            }
+            continue;
+          }
+          
+          // Check cached status - if we marked it cancelled locally, delete it and skip
+          const cachedStatus = this.queueCache[prgFile];
+          if (cachedStatus && 
+              (cachedStatus.status === 'cancelled' || 
+               cachedStatus.status === 'cancel' ||
+               cachedStatus.status === 'interrupted' ||
+               cachedStatus.status === 'complete')) {
+            try {
+              await fetch(`/api/prgs/delete/${prgFile}`, { method: 'DELETE' });
+              console.log(`Cleaned up cached cancelled PRG file: ${prgFile}`);
+            } catch (error) {
+              console.error(`Failed to delete cached cancelled PRG file ${prgFile}:`, error);
             }
             continue;
           }
@@ -1186,7 +1236,7 @@ class DownloadQueue {
             this.applyStatusClasses(entry, prgData.last_line);
           }
           
-          this.downloadQueue[queueId] = entry;
+          this.queueEntries[queueId] = entry;
         } catch (error) {
           console.error("Error fetching details for", prgFile, error);
         }
@@ -1210,23 +1260,23 @@ class DownloadQueue {
     try {
       const response = await fetch('/api/config');
       if (!response.ok) throw new Error('Failed to fetch config');
-      this.currentConfig = await response.json();
+      this.config = await response.json();
       
       // Update our retry constants from the server config
-      if (this.currentConfig.maxRetries !== undefined) {
-        this.MAX_RETRIES = this.currentConfig.maxRetries;
+      if (this.config.maxRetries !== undefined) {
+        this.MAX_RETRIES = this.config.maxRetries;
       }
-      if (this.currentConfig.retryDelaySeconds !== undefined) {
-        this.RETRY_DELAY = this.currentConfig.retryDelaySeconds;
+      if (this.config.retryDelaySeconds !== undefined) {
+        this.RETRY_DELAY = this.config.retryDelaySeconds;
       }
-      if (this.currentConfig.retry_delay_increase !== undefined) {
-        this.RETRY_DELAY_INCREASE = this.currentConfig.retry_delay_increase;
+      if (this.config.retry_delay_increase !== undefined) {
+        this.RETRY_DELAY_INCREASE = this.config.retry_delay_increase;
       }
       
       console.log(`Loaded retry settings from config: max=${this.MAX_RETRIES}, delay=${this.RETRY_DELAY}, increase=${this.RETRY_DELAY_INCREASE}`);
     } catch (error) {
       console.error('Error loading config:', error);
-      this.currentConfig = {};
+      this.config = {};
     }
   }
 
@@ -1238,7 +1288,7 @@ class DownloadQueue {
         body: JSON.stringify(updatedConfig)
       });
       if (!response.ok) throw new Error('Failed to save config');
-      this.currentConfig = await response.json();
+      this.config = await response.json();
     } catch (error) {
       console.error('Error saving config:', error);
       throw error;
@@ -1247,7 +1297,342 @@ class DownloadQueue {
 
   // Add a method to check if explicit filter is enabled
   isExplicitFilterEnabled() {
-    return !!this.currentConfig.explicitFilter;
+    return !!this.config.explicitFilter;
+  }
+
+  /* Sets up a Server-Sent Events connection for real-time status updates */
+  setupPollingInterval(queueId) {
+    console.log(`Setting up polling for ${queueId}`);
+    const entry = this.queueEntries[queueId];
+    if (!entry || !entry.prgFile) {
+      console.warn(`No entry or prgFile for ${queueId}`);
+      return;
+    }
+    
+    // Close any existing connection
+    this.clearPollingInterval(queueId);
+    
+    try {
+      // Immediately fetch initial data
+      this.fetchDownloadStatus(queueId);
+      
+      // Create a polling interval of 1 second
+      const intervalId = setInterval(() => {
+        this.fetchDownloadStatus(queueId);
+      }, 1000);
+      
+      // Store the interval ID for later cleanup
+      this.sseConnections[queueId] = intervalId;
+    } catch (error) {
+      console.error(`Error creating polling for ${queueId}:`, error);
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        logElement.textContent = `Error with download: ${error.message}`;
+        entry.element.classList.add('error');
+      }
+    }
+  }
+  
+  async fetchDownloadStatus(queueId) {
+    const entry = this.queueEntries[queueId];
+    if (!entry || !entry.prgFile) {
+      console.warn(`No entry or prgFile for ${queueId}`);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/prgs/${entry.prgFile}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Initialize the download type if needed
+      if (data.type && !entry.type) {
+        console.log(`Setting entry type to: ${data.type}`);
+        entry.type = data.type;
+        
+        // Update type display if element exists
+        const typeElement = entry.element.querySelector('.type');
+        if (typeElement) {
+          typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
+          // Update type class without triggering animation
+          typeElement.className = `type ${data.type}`;
+        }
+      }
+      
+      // Filter the last_line if it doesn't match the entry's type
+      if (data.last_line && data.last_line.type && entry.type && data.last_line.type !== entry.type) {
+        console.log(`Skipping status update with type '${data.last_line.type}' for entry with type '${entry.type}'`);
+        return;
+      }
+      
+      // Process the update
+      this.handleStatusUpdate(queueId, data);
+      
+      // Handle terminal states
+      if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status)) {
+        console.log(`Terminal state detected: ${data.last_line.status} for ${queueId}`);
+        entry.hasEnded = true;
+        
+        setTimeout(() => {
+          this.clearPollingInterval(queueId);
+          this.cleanupEntry(queueId);
+        }, 5000);
+      }
+      
+    } catch (error) {
+      console.error(`Error fetching status for ${queueId}:`, error);
+      
+      // Show error in log
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        logElement.textContent = `Error updating status: ${error.message}`;
+      }
+    }
+  }
+  
+  clearPollingInterval(queueId) {
+    if (this.sseConnections[queueId]) {
+      console.log(`Stopping polling for ${queueId}`);
+      try {
+        // Clear the interval instead of closing the SSE connection
+        clearInterval(this.sseConnections[queueId]);
+      } catch (error) {
+        console.error(`Error stopping polling for ${queueId}:`, error);
+      }
+      delete this.sseConnections[queueId];
+    }
+  }
+
+  /* Handle SSE update events */
+  handleStatusUpdate(queueId, data) {
+    const entry = this.queueEntries[queueId];
+    if (!entry) {
+      console.warn(`No entry for ${queueId}`);
+      return;
+    }
+    
+    // Get status from the appropriate location in the data structure
+    // For the new polling API, data is structured differently than the SSE events
+    let status, message, progress;
+    
+    // Extract the actual status data from the API response
+    const statusData = data.last_line || {};
+    
+    // Skip updates where the type doesn't match the entry's type
+    if (statusData.type && entry.type && statusData.type !== entry.type) {
+      return;
+    }
+    
+    status = statusData.status || data.event || 'unknown';
+    
+    // For new polling API structure
+    if (data.progress_message) {
+      message = data.progress_message;
+    } else if (statusData.message) {
+      message = statusData.message;
+    } else {
+      message = `Status: ${status}`;
+    }
+
+    // Update the title with better information if available
+    // This is crucial for artist discography downloads which initially use generic titles
+    const titleEl = entry.element.querySelector('.title');
+    if (titleEl) {
+      // Check various data sources for a better title
+      let betterTitle = null;
+      
+      // First check if data has original_request with name
+      if (data.original_request && data.original_request.name) {
+        betterTitle = data.original_request.name;
+      }
+      // Then check if statusData has album or name
+      else if (statusData.album) {
+        betterTitle = statusData.album;
+      }
+      else if (statusData.name) {
+        betterTitle = statusData.name;
+      }
+      // Then check display_title from various sources
+      else if (data.display_title) {
+        betterTitle = data.display_title;
+      }
+      else if (statusData.display_title) {
+        betterTitle = statusData.display_title;
+      }
+      
+      // If we found a better title and it's different from what we already have
+      if (betterTitle && betterTitle !== titleEl.textContent && 
+          // Don't replace if current title is more specific than "Artist - Album" 
+          (titleEl.textContent.includes(' - Album') || titleEl.textContent === 'Unknown Album')) {
+        console.log(`Updating title from "${titleEl.textContent}" to "${betterTitle}"`);
+        titleEl.textContent = betterTitle;
+        // Also update the item's name for future reference
+        entry.item.name = betterTitle;
+      }
+    }
+    
+    // Track progress data
+    if (data.progress_percent) {
+      progress = data.progress_percent;
+    } else if (statusData.overall_progress) {
+      progress = statusData.overall_progress;
+    } else if (statusData.progress) {
+      progress = statusData.progress;
+    }
+    
+    // Special handling for error status
+    if (status === 'error') {
+      entry.hasEnded = true;
+      
+      // Hide the cancel button
+      const cancelBtn = entry.element.querySelector('.cancel-btn');
+      if (cancelBtn) {
+        cancelBtn.style.display = 'none';
+      }
+      
+      // Find a valid URL to use for retry from multiple possible sources
+      const getRetryUrl = () => {
+        // Check direct properties first
+        if (entry.requestUrl) return entry.requestUrl;
+        if (data.retry_url) return data.retry_url;
+        if (statusData.retry_url) return statusData.retry_url;
+        
+        // Check in original_request object
+        if (data.original_request) {
+          if (data.original_request.retry_url) return data.original_request.retry_url;
+          if (data.original_request.url) return data.original_request.url;
+        }
+        
+        // Last resort - check if there's a URL directly in the data
+        if (data.url) return data.url;
+        
+        return null;
+      };
+      
+      // Determine if we can retry by finding a valid URL
+      const retryUrl = getRetryUrl();
+      
+      // Save the retry URL if found
+      if (retryUrl) {
+        entry.requestUrl = retryUrl;
+      }
+      
+      console.log(`Error for ${entry.type} download. Retry URL: ${retryUrl}`);
+      
+      // Get or create the log element
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement) {
+        // Always show retry if we have a URL, even if we've reached retry limit
+        const canRetry = !!retryUrl;
+        
+        if (canRetry) {
+          // Create error UI with retry button
+          logElement.innerHTML = `
+            <div class="error-message">${message || this.getStatusMessage(statusData)}</div>
+            <div class="error-buttons">
+              <button class="close-error-btn" title="Close">&times;</button>
+              <button class="retry-btn" title="Retry download">Retry</button>
+            </div>
+          `;
+          
+          // Add event listeners
+          logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+            if (entry.autoRetryInterval) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+            }
+            this.cleanupEntry(queueId);
+          });
+          
+          logElement.querySelector('.retry-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Replace retry button with loading indicator
+            const retryBtn = logElement.querySelector('.retry-btn');
+            if (retryBtn) {
+              retryBtn.disabled = true;
+              retryBtn.innerHTML = '<span class="loading-spinner small"></span> Retrying...';
+            }
+            
+            if (entry.autoRetryInterval) {
+              clearInterval(entry.autoRetryInterval);
+              entry.autoRetryInterval = null;
+            }
+            
+            this.retryDownload(queueId, logElement);
+          });
+          
+          // Set up automatic cleanup after 10 seconds
+          setTimeout(() => {
+            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded) {
+              this.cleanupEntry(queueId);
+            }
+          }, 10000);
+        } else {
+          // Cannot retry - just show error with close button
+          logElement.innerHTML = `
+            <div class="error-message">${message || this.getStatusMessage(statusData)}</div>
+            <div class="error-buttons">
+              <button class="close-error-btn" title="Close">&times;</button>
+            </div>
+          `;
+          
+          logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+            this.cleanupEntry(queueId);
+          });
+          
+          // Set up automatic cleanup after 10 seconds
+          setTimeout(() => {
+            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded) {
+              this.cleanupEntry(queueId);
+            }
+          }, 10000);
+        }
+      }
+      
+      // Update CSS classes for error state
+      entry.element.classList.remove('queued', 'initializing', 'downloading', 'processing', 'progress');
+      entry.element.classList.add('error');
+      
+      // Close SSE connection
+      this.clearPollingInterval(queueId);
+    } else {
+      // For non-error states, update the log element with the latest message
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      if (logElement && message) {
+        logElement.textContent = message;
+      } else if (logElement) {
+        // Generate a message if none provided
+        logElement.textContent = this.getStatusMessage(statusData);
+      }
+      
+      // Set the proper status classes on the list item
+      this.applyStatusClasses(entry, status);
+      
+      // Handle progress indicators
+      const progressBar = entry.element.querySelector('.progress-bar');
+      if (progressBar && typeof progress === 'number') {
+        progressBar.style.width = `${progress}%`;
+        progressBar.setAttribute('aria-valuenow', progress);
+        
+        if (progress >= 100) {
+          progressBar.classList.add('bg-success');
+        } else {
+          progressBar.classList.remove('bg-success');
+        }
+      }
+    }
+  }
+
+  /* Close all active SSE connections */
+  clearAllPollingIntervals() {
+    for (const queueId in this.sseConnections) {
+      this.clearPollingInterval(queueId);
+    }
   }
 }
 

@@ -109,6 +109,50 @@
             placeholder="e.g. %artist%/%album%" 
             class="form-input"
           />
+          <div class="format-help">
+            <select id="dirFormatHelp" class="format-selector">
+              <option value="">-- Select placeholder --</option>
+              <optgroup label="Common">
+                <option value="%music%">%music% - Track title</option>
+                <option value="%artist%">%artist% - Track artist</option>
+                <option value="%album%">%album% - Album name</option>
+                <option value="%album_artist%">%album_artist% - Album artist</option>
+                <option value="%tracknum%">%tracknum% - Track number</option>
+                <option value="%year%">%year% - Year of release</option>
+              </optgroup>
+              <optgroup label="Additional">
+                <option value="%discnum%">%discnum% - Disc number</option>
+                <option value="%date%">%date% - Release date</option>
+                <option value="%genre%">%genre% - Music genre</option>
+                <option value="%isrc%">%isrc% - International Standard Recording Code</option>
+                <option value="%explicit%">%explicit% - Explicit content flag</option>
+                <option value="%duration%">%duration% - Track duration (seconds)</option>
+              </optgroup>
+              <optgroup label="Metadata">
+                <option value="%publisher%">%publisher% - Publisher information</option>
+                <option value="%composer%">%composer% - Track composer</option>
+                <option value="%copyright%">%copyright% - Copyright information</option>
+                <option value="%author%">%author% - Author information</option>
+                <option value="%lyricist%">%lyricist% - Lyricist information</option>
+                <option value="%version%">%version% - Version information</option>
+                <option value="%comment%">%comment% - Comment field</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="%encodedby%">%encodedby% - Encoded by information</option>
+                <option value="%language%">%language% - Language information</option>
+                <option value="%lyrics%">%lyrics% - Track lyrics</option>
+                <option value="%mood%">%mood% - Mood information</option>
+                <option value="%rating%">%rating% - Track rating</option>
+                <option value="%website%">%website% - Website information</option>
+              </optgroup>
+              <optgroup label="ReplayGain">
+                <option value="%replaygain_album_gain%">%replaygain_album_gain% - Album gain</option>
+                <option value="%replaygain_album_peak%">%replaygain_album_peak% - Album peak</option>
+                <option value="%replaygain_track_gain%">%replaygain_track_gain% - Track gain</option>
+                <option value="%replaygain_track_peak%">%replaygain_track_peak% - Track peak</option>
+              </optgroup>
+            </select>
+          </div>
         </div>
         <div class="config-item">
           <label>Custom Track Format:</label>
@@ -118,6 +162,53 @@
             placeholder="e.g. %tracknum% - %music%" 
             class="form-input"
           />
+          <div class="format-help">
+            <select id="trackFormatHelp" class="format-selector">
+              <option value="">-- Select placeholder --</option>
+              <optgroup label="Common">
+                <option value="%music%">%music% - Track title</option>
+                <option value="%artist%">%artist% - Track artist</option>
+                <option value="%album%">%album% - Album name</option>
+                <option value="%album_artist%">%album_artist% - Album artist</option>
+                <option value="%tracknum%">%tracknum% - Track number</option>
+                <option value="%year%">%year% - Year of release</option>
+              </optgroup>
+              <optgroup label="Additional">
+                <option value="%discnum%">%discnum% - Disc number</option>
+                <option value="%date%">%date% - Release date</option>
+                <option value="%genre%">%genre% - Music genre</option>
+                <option value="%isrc%">%isrc% - International Standard Recording Code</option>
+                <option value="%explicit%">%explicit% - Explicit content flag</option>
+                <option value="%duration%">%duration% - Track duration (seconds)</option>
+              </optgroup>
+              <optgroup label="Metadata">
+                <option value="%publisher%">%publisher% - Publisher information</option>
+                <option value="%composer%">%composer% - Track composer</option>
+                <option value="%copyright%">%copyright% - Copyright information</option>
+                <option value="%author%">%author% - Author information</option>
+                <option value="%lyricist%">%lyricist% - Lyricist information</option>
+                <option value="%version%">%version% - Version information</option>
+                <option value="%comment%">%comment% - Comment field</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="%encodedby%">%encodedby% - Encoded by information</option>
+                <option value="%language%">%language% - Language information</option>
+                <option value="%lyrics%">%lyrics% - Track lyrics</option>
+                <option value="%mood%">%mood% - Mood information</option>
+                <option value="%rating%">%rating% - Track rating</option>
+                <option value="%website%">%website% - Website information</option>
+              </optgroup>
+              <optgroup label="ReplayGain">
+                <option value="%replaygain_album_gain%">%replaygain_album_gain% - Album gain</option>
+                <option value="%replaygain_album_peak%">%replaygain_album_peak% - Album peak</option>
+                <option value="%replaygain_track_gain%">%replaygain_track_gain% - Track gain</option>
+                <option value="%replaygain_track_peak%">%replaygain_track_peak% - Track peak</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="setting-description">
+            Note that these placeholder depend on the metadata of the track, if one entry is not available in a track, the placeholder will be replaced with an empty string.
+          </div>
         </div>
         <!-- New Track Number Padding Toggle -->
         <div class="config-item">

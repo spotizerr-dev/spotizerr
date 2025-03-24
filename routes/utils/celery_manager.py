@@ -9,6 +9,7 @@ from pathlib import Path
 import threading
 import queue
 import sys
+import uuid
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -102,16 +103,36 @@ class CeleryManager:
         # Stop existing workers if running
         if self.celery_process:
             try:
+                logger.info("Stopping existing Celery workers...")
                 os.killpg(os.getpgid(self.celery_process.pid), signal.SIGTERM)
                 self.celery_process.wait(timeout=5)
             except (subprocess.TimeoutExpired, ProcessLookupError):
                 try:
+                    logger.warning("Forcibly killing Celery workers with SIGKILL")
                     os.killpg(os.getpgid(self.celery_process.pid), signal.SIGKILL)
                 except ProcessLookupError:
                     pass
             
             # Clear output threads list
             self.output_threads = []
+            
+            # Wait a moment to ensure processes are terminated
+            time.sleep(2)
+        
+        # Additional cleanup - find and kill any stray Celery processes
+        try:
+            # This runs a shell command to find and kill all celery processes
+            subprocess.run(
+                "ps aux | grep 'celery -A routes.utils.celery_tasks.celery_app worker' | grep -v grep | awk '{print $2}' | xargs -r kill -9",
+                shell=True,
+                stderr=subprocess.PIPE
+            )
+            logger.info("Killed any stray Celery processes")
+            
+            # Wait a moment to ensure processes are terminated
+            time.sleep(1)
+        except Exception as e:
+            logger.error(f"Error during stray process cleanup: {e}")
         
         # Start new workers with updated concurrency
         try:
@@ -127,12 +148,15 @@ class CeleryManager:
                 '--loglevel=info',
                 f'--concurrency={new_worker_count}',
                 '-Q', 'downloads',
-                # Add timestamp to Celery logs
                 '--logfile=-',  # Output logs to stdout
                 '--without-heartbeat',  # Reduce log noise
                 '--without-gossip',     # Reduce log noise
-                '--without-mingle'      # Reduce log noise
+                '--without-mingle',     # Reduce log noise
+                # Add unique worker name to prevent conflicts
+                f'--hostname=worker@%h-{uuid.uuid4()}'
             ]
+            
+            logger.info(f"Starting new Celery workers with command: {' '.join(cmd)}")
             
             self.celery_process = subprocess.Popen(
                 cmd,
@@ -145,7 +169,23 @@ class CeleryManager:
             )
             
             self.current_worker_count = new_worker_count
-            logger.info(f"Started Celery workers with concurrency {new_worker_count}")
+            logger.info(f"Started Celery workers with concurrency {new_worker_count}, PID: {self.celery_process.pid}")
+            
+            # Verify the process started correctly
+            time.sleep(2)
+            if self.celery_process.poll() is not None:
+                # Process exited prematurely
+                stdout, stderr = "", ""
+                try:
+                    stdout, stderr = self.celery_process.communicate(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass
+                
+                logger.error(f"Celery workers failed to start. Exit code: {self.celery_process.poll()}")
+                logger.error(f"Stdout: {stdout}")
+                logger.error(f"Stderr: {stderr}")
+                self.celery_process = None
+                raise RuntimeError("Celery workers failed to start")
             
             # Start non-blocking output reader threads for both stdout and stderr
             stdout_thread = threading.Thread(
@@ -166,6 +206,13 @@ class CeleryManager:
             
         except Exception as e:
             logger.error(f"Error starting Celery workers: {e}")
+            # In case of failure, make sure we don't leave orphaned processes
+            if self.celery_process and self.celery_process.poll() is None:
+                try:
+                    os.killpg(os.getpgid(self.celery_process.pid), signal.SIGKILL)
+                except (ProcessLookupError, OSError):
+                    pass
+            self.celery_process = None
     
     def _process_output_reader(self, pipe, stream_name):
         """Read and log output from the process"""

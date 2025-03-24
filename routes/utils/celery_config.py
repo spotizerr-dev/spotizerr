@@ -148,4 +148,16 @@ result_expires = 60 * 60 * 24 * 7  # 7 days
 # Configure visibility timeout for task messages
 broker_transport_options = {
     'visibility_timeout': 3600,  # 1 hour
-} 
+    'fanout_prefix': True,
+    'fanout_patterns': True,
+    'priority_steps': [0, 3, 6, 9],
+}
+
+# Important broker connection settings
+broker_connection_retry = True
+broker_connection_retry_on_startup = True
+broker_connection_max_retries = 10
+broker_pool_limit = 10
+worker_prefetch_multiplier = 1  # Process one task at a time per worker
+worker_max_tasks_per_child = 100  # Restart worker after 100 tasks
+worker_disable_rate_limits = False 

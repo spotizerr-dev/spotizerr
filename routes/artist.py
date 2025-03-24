@@ -18,7 +18,7 @@ def log_json(message_dict):
 @artist_bp.route('/download', methods=['GET'])
 def handle_artist_download():
     """
-    Enqueues album download tasks for the given artist using the new artist module.
+    Enqueues album download tasks for the given artist.
     Expected query parameters:
       - url: string (a Spotify artist URL)
       - album_type: string(s); comma-separated values such as "album,single,appears_on,compilation"
@@ -39,8 +39,8 @@ def handle_artist_download():
         # Import and call the updated download_artist_albums() function.
         from routes.utils.artist import download_artist_albums
         
-        # Delegate to the download_artist_albums function which will handle config itself
-        album_prg_files = download_artist_albums(
+        # Delegate to the download_artist_albums function which will handle album filtering
+        task_ids = download_artist_albums(
             url=url,
             album_type=album_type,
             request_args=request.args.to_dict()
@@ -50,8 +50,8 @@ def handle_artist_download():
         return Response(
             json.dumps({
                 "status": "complete",
-                "album_prg_files": album_prg_files,
-                "message": "Artist download completed – album tasks have been queued."
+                "task_ids": task_ids,
+                "message": f"Artist discography queued – {len(task_ids)} album tasks have been queued."
             }),
             status=202,
             mimetype='application/json'

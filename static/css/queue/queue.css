@@ -43,10 +43,86 @@
     margin: 0;
 }
 
+/* Queue subtitle with statistics */
+.queue-subtitle {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+    font-size: 0.8rem;
+    color: #b3b3b3;
+}
+
+.queue-stat {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.queue-stat-active {
+    color: #4a90e2;
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+.queue-stat-completed {
+    color: #1DB954;
+    background-color: rgba(29, 185, 84, 0.1);
+}
+
+.queue-stat-error {
+    color: #ff5555;
+    background-color: rgba(255, 85, 85, 0.1);
+}
+
 .header-actions {
     display: flex;
     gap: 10px;
     align-items: center;
+}
+
+/* Refresh queue button */
+#refreshQueueBtn {
+    background: #2a2a2a;
+    border: none;
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#refreshQueueBtn:hover {
+    background: #333;
+    transform: translateY(-1px);
+}
+
+#refreshQueueBtn:active {
+    transform: scale(0.95);
+}
+
+#refreshQueueBtn.refreshing {
+    animation: spin 1s linear infinite;
+}
+
+/* Artist queue message */
+.queue-artist-message {
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    color: #fff;
+    text-align: center;
+    border-left: 4px solid #4a90e2;
+    animation: pulse 1.5s infinite;
+    font-weight: 500;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.8; }
+    50% { opacity: 1; }
+    100% { opacity: 0.8; }
 }
 
 /* Cancel all button styling */
@@ -153,7 +229,7 @@
 
 .queue-item:hover {
     background-color: #333;
-    transform: translateY(-2px);
+    transform: translateY(-5px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
@@ -286,6 +362,13 @@
     vertical-align: middle;
 }
 
+.loading-spinner.small {
+    width: 10px;
+    height: 10px;
+    border-width: 1px;
+    margin-right: 4px;
+}
+
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
@@ -395,60 +478,50 @@
 /* Container for error action buttons */
 .error-buttons {
     display: flex;
-    gap: 10px;
+    justify-content: flex-end;
+    gap: 8px;
     margin-top: 8px;
 }
 
 /* Base styles for error buttons */
 .error-buttons button {
-    background: #2a2a2a;
     border: none;
-    padding: 8px 12px;
     border-radius: 4px;
-    color: #fff;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 0.3s ease, transform 0.2s ease;
-    font-size: 14px;
+    transition: all 0.2s ease;
 }
 
 /* Hover state for all error buttons */
 .error-buttons button:hover {
-    background: #333;
-    transform: translateY(-1px);
+    transform: translateY(-2px);
 }
 
 .error-buttons button:active {
-    transform: scale(0.98);
+    transform: translateY(0);
 }
 
 /* Specific styles for the Close (X) error button */
 .close-error-btn {
-    background: #ff5555 !important;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50% !important;
-    font-size: 18px !important;
-    padding: 0 !important;
+    background-color: #333;
+    color: #fff;
 }
 
 .close-error-btn:hover {
-    background: #ff7777 !important;
+    background-color: #444;
 }
 
 /* Specific styles for the Retry button */
 .retry-btn {
-    background: #1DB954 !important;
-    padding: 8px 16px !important;
-    border-radius: 20px !important;
-    font-weight: 500 !important;
-    flex: 1;
+    background-color: #ff5555;
+    color: #fff;
+    padding: 6px 15px !important;
 }
 
 .retry-btn:hover {
-    background: #17a448 !important;
+    background-color: #ff6b6b;
 }
 
 /* Empty queue state */
@@ -485,6 +558,35 @@
     font-size: 14px;
     border-left: 3px solid #ff5555;
     animation: fadeIn 0.3s ease;
+}
+
+/* Error state styling */
+.queue-item.error {
+    border-left: 4px solid #ff5555;
+    background-color: rgba(255, 85, 85, 0.05);
+    transition: none !important; /* Remove all transitions */
+    transform: none !important; /* Prevent any transform */
+    position: relative !important; /* Keep normal positioning */
+    left: 0 !important; /* Prevent any left movement */
+    right: 0 !important; /* Prevent any right movement */
+    top: 0 !important; /* Prevent any top movement */
+}
+
+.queue-item.error:hover {
+    background-color: rgba(255, 85, 85, 0.1);
+    transform: none !important; /* Force disable any transform */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) !important; /* Keep original shadow */
+    position: relative !important; /* Force normal positioning */
+    left: 0 !important; /* Prevent any left movement */
+    right: 0 !important; /* Prevent any right movement */
+    top: 0 !important; /* Prevent any top movement */
+}
+
+.error-message {
+    color: #ff5555;
+    margin-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.4;
 }
 
 /* ------------------------------- */
