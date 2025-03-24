@@ -85,9 +85,6 @@ def store_task_status(task_id, status_data):
         # Convert to JSON and store in Redis
         redis_client.rpush(f"task:{task_id}:status", json.dumps(status_data))
         
-        # Trim the list to keep only the most recent 100 updates to avoid excessive memory usage
-        redis_client.ltrim(f"task:{task_id}:status", -100, -1)
-        
         # Set expiry for the list to avoid filling up Redis with old data
         redis_client.expire(f"task:{task_id}:status", 60 * 60 * 24 * 7)  # 7 days
         redis_client.expire(f"task:{task_id}:status:next_id", 60 * 60 * 24 * 7)  # 7 days

@@ -29,11 +29,11 @@ CONFIG_PATH = './config/main.json'
 try:
     with open(CONFIG_PATH, 'r') as f:
         config_data = json.load(f)
-    MAX_CONCURRENT_DL = config_data.get("maxConcurrentDownloads", 10)
+    MAX_CONCURRENT_DL = config_data.get("maxConcurrentDownloads", 3)
 except Exception as e:
     print(f"Error loading configuration: {e}")
     # Fallback default
-    MAX_CONCURRENT_DL = 10
+    MAX_CONCURRENT_DL = 3
 
 def get_config_params():
     """
