@@ -51,7 +51,7 @@ def handle_artist_download():
             json.dumps({
                 "status": "complete",
                 "task_ids": task_ids,
-                "message": f"Artist download completed – {len(task_ids)} album tasks have been queued."
+                "message": f"Artist discography queued – {len(task_ids)} album tasks have been queued."
             }),
             status=202,
             mimetype='application/json'

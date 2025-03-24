@@ -352,48 +352,14 @@ async function startDownload(url, type, item, albumType) {
   }
   
   try {
-    // For artist downloads, use the album_type query parameter
-    if (type === 'artist') {
-      const params = new URLSearchParams({
-        url: url,
-        album_type: albumType || 'album,single,compilation'
-      });
-      
-      // Add any additional parameters from item
-      if (item) {
-        Object.entries(item).forEach(([key, value]) => {
-          if (key !== 'name' && key !== 'artist') { // These are already in the URL
-            params.append(key, value);
-          }
-        });
-      }
-      
-      const response = await fetch(`/api/artist/download?${params.toString()}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Unknown error');
-      }
-      
-      const data = await response.json();
-      if (data.status === 'error') {
-        throw new Error(data.message || 'Unknown error');
-      }
-      
-      if (data.status === 'warning') {
-        console.warn(data.message);
-      }
-      
-      // Make the queue visible after queueing
-      downloadQueue.toggleVisibility(true);
-      
-      // Return the task_ids for tracking
-      return data.task_ids || [];
-    }
-    // Use the centralized downloadQueue.download method for non-artist downloads
-    await downloadQueue.download(url, type, item, albumType);
+    // Use the centralized downloadQueue.download method for all downloads including artist downloads
+    const result = await downloadQueue.download(url, type, item, albumType);
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
+    
+    // Return the result for tracking
+    return result;
   } catch (error) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;

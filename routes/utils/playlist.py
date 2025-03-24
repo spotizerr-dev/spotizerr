@@ -19,7 +19,8 @@ def download_playlist(
     initial_retry_delay=5,
     retry_delay_increase=5,
     max_retries=3,
-    progress_callback=None
+    progress_callback=None,
+    spotify_quality=None
 ):
     try:
         # DEBUG: Print parameters
@@ -96,7 +97,7 @@ def download_playlist(
                         initial_retry_delay=initial_retry_delay,
                         retry_delay_increase=retry_delay_increase,
                         max_retries=max_retries,
-                        spotify_quality=fall_quality
+                        spotify_quality=spotify_quality or fall_quality
                     )
                     print(f"DEBUG: Playlist download completed successfully using Deezer credentials")
                 except Exception as e:
@@ -126,7 +127,7 @@ def download_playlist(
                         spo.download_playlist(
                             link_playlist=url,
                             output_dir="./downloads",
-                            quality_download=fall_quality,
+                            quality_download=spotify_quality or fall_quality,
                             recursive_quality=True,
                             recursive_download=False,
                             not_interface=False,
@@ -167,7 +168,7 @@ def download_playlist(
                 spo.download_playlist(
                     link_playlist=url,
                     output_dir="./downloads",
-                    quality_download=quality,
+                    quality_download=spotify_quality or quality,
                     recursive_quality=True,
                     recursive_download=False,
                     not_interface=False,

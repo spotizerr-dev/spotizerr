@@ -1029,6 +1029,11 @@ def download_playlist(self, **task_data):
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
         
+        # Get retry parameters
+        initial_retry_delay = task_data.get("initial_retry_delay", config_params.get("retryDelaySeconds", 5))
+        retry_delay_increase = task_data.get("retry_delay_increase", config_params.get("retry_delay_increase", 5))
+        max_retries = task_data.get("max_retries", config_params.get("maxRetries", 3))
+        
         # Execute the download
         download_playlist_func(
             service=service,

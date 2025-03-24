@@ -108,6 +108,22 @@ def get_prg_file(task_id):
                     elif track_info:
                         response["progress_message"] = f"Downloading: {track_info}"
                 
+                # For real-time status messages
+                elif status_type == "real_time":
+                    # Add real-time specific fields
+                    response["current_song"] = last_status.get("song", "")
+                    response["percent"] = last_status.get("percent", 0)
+                    response["percentage"] = last_status.get("percentage", 0)
+                    response["time_elapsed"] = last_status.get("time_elapsed", 0)
+                    
+                    # Format a nice progress message for display
+                    song = last_status.get("song", "")
+                    percent = last_status.get("percent", 0)
+                    if song:
+                        response["progress_message"] = f"Downloading {song} ({percent}%)"
+                    else:
+                        response["progress_message"] = f"Downloading ({percent}%)"
+                
                 # For initializing status
                 elif status_type == "initializing":
                     album = last_status.get("album", "")

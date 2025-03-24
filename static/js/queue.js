@@ -220,8 +220,8 @@ class DownloadQueue {
     // Re-render and update which entries are processed.
     this.updateQueueOrder();
     
-    // Only start monitoring if explicitly requested
-    if (startMonitoring && this.isEntryVisible(queueId)) {
+    // Start monitoring if explicitly requested, regardless of visibility
+    if (startMonitoring) {
       this.startDownloadStatusMonitoring(queueId);
     }
     
@@ -229,7 +229,7 @@ class DownloadQueue {
     return queueId; // Return the queueId so callers can reference it
   }
 
-  /* Start processing the entry only if it is visible. */
+  /* Start processing the entry. Removed visibility check to ensure all entries are monitored. */
   async startDownloadStatusMonitoring(queueId) {
     const entry = this.queueEntries[queueId];
     if (!entry || entry.hasEnded) return;
@@ -244,6 +244,8 @@ class DownloadQueue {
         logElement.textContent = "Initializing download...";
       }
     }
+    
+    console.log(`Starting monitoring for ${entry.type} with PRG file: ${entry.prgFile}`);
     
     // For backward compatibility, first try to get initial status from the REST API
     try {
@@ -715,115 +717,78 @@ class DownloadQueue {
 
   /* Status Message Handling */
   getStatusMessage(data) {
-    function formatList(items) {
-      if (!items || items.length === 0) return '';
-      if (items.length === 1) return items[0];
-      if (items.length === 2) return `${items[0]} and ${items[1]}`;
-      return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
-    }
-    function pluralize(word) {
-      return word.endsWith('s') ? word : word + 's';
-    }
-    
-    // Extract the track name - check 'music' field first (from backend), then 'song', then 'name'
+    // Extract common fields
     const trackName = data.music || data.song || data.name || 'Unknown';
+    const artist = data.artist || '';
+    const percentage = data.percentage || data.percent || 0;
+    const currentTrack = data.parsed_current_track || data.current_track || '';
+    const totalTracks = data.parsed_total_tracks || data.total_tracks || '';
+    const playlistOwner = data.owner || '';
+    
+    // Format percentage for display
+    const formattedPercentage = (percentage * 100).toFixed(1);
     
     switch (data.status) {
       case 'queued':
-        if (data.type === 'album' || data.type === 'playlist') {
-          return `Queued ${data.type} "${data.name}"${data.position ? ` (position ${data.position})` : ''}`;
+        if (data.type === 'album') {
+          return `Queued album "${data.name}"${artist ? ` by ${artist}` : ''}`;
+        } else if (data.type === 'playlist') {
+          return `Queued playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''}`;
         } else if (data.type === 'track') {
-          return `Queued track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}`;
+          return `Queued track "${trackName}"${artist ? ` by ${artist}` : ''}`;
         }
         return `Queued ${data.type} "${data.name}"`;
       
-      case 'started':
-        return `Download started`;
-      
-      case 'processing':
-        return `Processing download...`;
-        
-      case 'cancel':
-        return 'Download cancelled';
-        
-      case 'interrupted':
-        return 'Download was interrupted';
-      
-      case 'downloading':
-        if (data.type === 'track') {
-          return `Downloading track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}...`;
-        }
-        return `Downloading ${data.type}...`;
-      
       case 'initializing':
         if (data.type === 'playlist') {
-          return `Initializing playlist download "${data.name}" with ${data.total_tracks} tracks...`;
+          return `Initializing playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''} with ${totalTracks} tracks...`;
         } else if (data.type === 'album') {
-          return `Initializing album download "${data.album}" by ${data.artist}...`;
-        } else if (data.type === 'artist') {
-          let subsets = [];
-          if (data.subsets && Array.isArray(data.subsets) && data.subsets.length > 0) {
-            subsets = data.subsets;
-          } else if (data.album_type) {
-            subsets = data.album_type
-              .split(',')
-              .map(item => item.trim())
-              .map(item => pluralize(item));
-          }
-          if (subsets.length > 0) {
-            const subsetsMessage = formatList(subsets);
-            return `Initializing download for ${data.artist}'s ${subsetsMessage}`;
-          }
-          return `Initializing download for ${data.artist} with ${data.total_albums} album(s) [${data.album_type}]...`;
+          return `Initializing album "${data.album || data.name}"${artist ? ` by ${artist}` : ''}...`;
+        } else if (data.type === 'track') {
+          return `Initializing track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
         }
         return `Initializing ${data.type} download...`;
       
-      case 'progress':
-        if (data.track && data.current_track) {
-          const parts = data.current_track.split('/');
-          const current = parts[0];
-          const total = parts[1] || '?';
-          if (data.type === 'playlist') {
-            return `Downloading playlist: Track ${current} of ${total} - ${data.track}`;
-          } else if (data.type === 'album') {
-            if (data.album && data.artist) {
-              return `Downloading album "${data.album}" by ${data.artist}: track ${current} of ${total} - ${data.track}`;
-            } else {
-              return `Downloading track ${current} of ${total}: ${data.track} from ${data.album}`;
-            }
-          }
-        }
-        return `Progress: ${data.status}...`;
-      
-      case 'done':
+      case 'processing':
         if (data.type === 'track') {
-          return `Finished track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}`;
-        } else if (data.type === 'playlist') {
-          return `Finished playlist "${data.name}" with ${data.total_tracks} tracks`;
-        } else if (data.type === 'album') {
-          return `Finished album "${data.album}" by ${data.artist}`;
-        } else if (data.type === 'artist') {
-          return `Finished artist "${data.artist}" (${data.album_type})`;
+          return `Processing track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
+        } else if (data.type === 'album' && currentTrack && totalTracks) {
+          return `Processing track ${currentTrack}/${totalTracks}: ${trackName}...`;
+        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
+          return `Processing track ${currentTrack}/${totalTracks}: ${trackName}...`;
         }
-        return `Finished ${data.type}`;
+        return `Processing ${data.type} download...`;
+      
+      case 'real_time':
+        if (data.type === 'track') {
+          return `Track "${trackName}"${artist ? ` by ${artist}` : ''} is ${formattedPercentage}% downloaded...`;
+        } else if (data.type === 'album' && currentTrack && totalTracks) {
+          return `Track "${trackName}" (${currentTrack}/${totalTracks}) is ${formattedPercentage}% downloaded...`;
+        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
+          return `Track "${trackName}" (${currentTrack}/${totalTracks}) is ${formattedPercentage}% downloaded...`;
+        }
+        return `Downloading ${data.type}...`;
+      
+      case 'progress':
+        if (data.type === 'track') {
+          return `Downloading track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
+        } else if (data.type === 'album' && currentTrack && totalTracks) {
+          return `Downloading track "${trackName}" (${currentTrack}/${totalTracks})...`;
+        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
+          return `Downloading track "${trackName}" (${currentTrack}/${totalTracks})...`;
+        }
+        return `Downloading  ${data.type}...`;
       
       case 'complete':
+      case 'done':
         if (data.type === 'track') {
-          return `Finished track "${trackName}"${data.artist ? ` by ${data.artist}` : ''}`;
-        } else if (data.type === 'playlist') {
-          return `Finished playlist "${data.name}" with ${data.total_tracks || ''} tracks`;
+          return `Finished track "${trackName}"${artist ? ` by ${artist}` : ''}`;
         } else if (data.type === 'album') {
-          return `Finished album "${data.album || data.name}" by ${data.artist}`;
-        } else if (data.type === 'artist') {
-          return `Finished artist "${data.artist}" (${data.album_type || ''})`;
+          return `Finished album "${data.album || data.name}"${artist ? ` by ${artist}` : ''}`;
+        } else if (data.type === 'playlist') {
+          return `Finished playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''}`;
         }
-        return `Download completed successfully`;
-      
-      case 'retrying':
-        if (data.retry_count !== undefined) {
-          return `Retrying download (attempt ${data.retry_count}/${this.MAX_RETRIES})`;
-        }
-        return `Retrying download...`;
+        return `Finished ${data.type} download`;
       
       case 'error':
         let errorMsg = `Error: ${data.message || 'Unknown error'}`;
@@ -836,16 +801,14 @@ class DownloadQueue {
         }
         return errorMsg;
       
-      case 'skipped':
-        return `Track "${trackName}" skipped, it already exists!`;
+      case 'cancelled':
+        return 'Download cancelled';
       
-      case 'real_time': {
-        const totalMs = data.time_elapsed;
-        const minutes = Math.floor(totalMs / 60000);
-        const seconds = Math.floor((totalMs % 60000) / 1000);
-        const paddedSeconds = seconds < 10 ? '0' + seconds : seconds;
-        return `Real-time downloading track "${trackName}"${data.artist ? ` by ${data.artist}` : ''} (${(data.percentage * 100).toFixed(1)}%). Time elapsed: ${minutes}:${paddedSeconds}`;
-      }
+      case 'retrying':
+        if (data.retry_count !== undefined) {
+          return `Retrying download (attempt ${data.retry_count}/${this.MAX_RETRIES})`;
+        }
+        return `Retrying download...`;
       
       default:
         return data.status;
@@ -957,15 +920,8 @@ class DownloadQueue {
       const retryData = await retryResponse.json();
       
       if (retryData.prg_file) {
-        // If the old PRG file exists, we should delete it
+        // Store the old PRG file for cleanup
         const oldPrgFile = entry.prgFile;
-        if (oldPrgFile) {
-          try {
-            await fetch(`/api/prgs/delete/${oldPrgFile}`, { method: 'DELETE' });
-          } catch (deleteError) {
-            console.error('Error deleting old PRG file:', deleteError);
-          }
-        }
         
         // Update the entry with the new PRG file
         const logEl = entry.element.querySelector('.log');
@@ -986,6 +942,18 @@ class DownloadQueue {
         
         // Set up a new SSE connection for the retried download
         this.setupPollingInterval(queueId);
+        
+        // Delete the old PRG file after a short delay to ensure the new one is properly set up
+        if (oldPrgFile) {
+          setTimeout(async () => {
+            try {
+              await fetch(`/api/prgs/delete/${oldPrgFile}`, { method: 'DELETE' });
+              console.log(`Cleaned up old PRG file: ${oldPrgFile}`);
+            } catch (deleteError) {
+              console.error('Error deleting old PRG file:', deleteError);
+            }
+          }, 2000); // Wait 2 seconds before deleting the old file
+        }
       } else {
         logElement.textContent = 'Retry failed: invalid response from server';
       }
@@ -1053,104 +1021,67 @@ class DownloadQueue {
       if (type === 'artist') {
         // Check for new API response format
         if (data.task_ids && Array.isArray(data.task_ids)) {
-          // For artist discographies, we get individual task IDs for each album
           console.log(`Queued artist discography with ${data.task_ids.length} albums`);
           
           // Make queue visible to show progress
           this.toggleVisibility(true);
           
-          // Show a temporary message about the artist download
-          const artistMessage = document.createElement('div');
-          artistMessage.className = 'queue-artist-message';
-          artistMessage.textContent = `Queued ${data.task_ids.length} albums for ${item.name || 'artist'}. Loading...`;
-          document.getElementById('queueItems').prepend(artistMessage);
-          
-          // Wait a moment to ensure backend has processed the tasks
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          // Remove the temporary message
-          artistMessage.remove();
-          
-          // Fetch the latest tasks to show all newly created album downloads
-          await this.loadExistingPrgFiles();
-          
-          // Start monitoring all new tasks immediately
-          for (const queueId in this.queueEntries) {
-            const entry = this.queueEntries[queueId];
-            // Only start monitoring if the entry is not in a terminal state
-            if (!entry.hasEnded && !this.sseConnections[queueId]) {
-              this.setupPollingInterval(queueId);
-            }
+          // Create entries directly from task IDs and start monitoring them
+          const queueIds = [];
+          for (const taskId of data.task_ids) {
+            console.log(`Adding album task with ID: ${taskId}`);
+            // Create an album item with better display information
+            const albumItem = {
+              name: `${item.name || 'Artist'} - Album (loading...)`, 
+              artist: item.name || 'Unknown artist',
+              type: 'album'
+            };
+            // Use improved addDownload with forced monitoring
+            const queueId = this.addDownload(albumItem, 'album', taskId, apiUrl, true);
+            queueIds.push(queueId);
           }
           
-          return data.task_ids;
+          return queueIds;
         } 
         // Check for older API response format
         else if (data.album_prg_files && Array.isArray(data.album_prg_files)) {
           console.log(`Queued artist discography with ${data.album_prg_files.length} albums (old format)`);
           
-          // Show a temporary message about the artist download
-          const artistMessage = document.createElement('div');
-          artistMessage.className = 'queue-artist-message';
-          artistMessage.textContent = `Queued ${data.album_prg_files.length} albums for ${item.name || 'artist'}. Loading...`;
-          document.getElementById('queueItems').prepend(artistMessage);
-          
-          // Add each album to the download queue separately
-          const queueIds = [];
-          data.album_prg_files.forEach(prgFile => {
-            const queueId = this.addDownload(item, 'album', prgFile, apiUrl, false);
-            queueIds.push({queueId, prgFile});
-          });
-          
           // Make queue visible to show progress
           this.toggleVisibility(true);
           
-          // Wait a short time before setting up SSE connections
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          // Add each album to the download queue separately with forced monitoring
+          const queueIds = [];
+          data.album_prg_files.forEach(prgFile => {
+            console.log(`Adding album with PRG file: ${prgFile}`);
+            // Create an album item with better display information
+            const albumItem = {
+              name: `${item.name || 'Artist'} - Album (loading...)`, 
+              artist: item.name || 'Unknown artist',
+              type: 'album'
+            };
+            // Use improved addDownload with forced monitoring
+            const queueId = this.addDownload(albumItem, 'album', prgFile, apiUrl, true);
+            queueIds.push(queueId);
+          });
           
-          // Remove the temporary message
-          artistMessage.remove();
-          
-          // Fetch the latest tasks to show all newly created album downloads
-          await this.loadExistingPrgFiles();
-          
-          // Set up SSE connections for each entry
-          for (const queueId in this.queueEntries) {
-            const entry = this.queueEntries[queueId];
-            if (entry && !entry.hasEnded) {
-              this.setupPollingInterval(queueId);
-            }
-          }
-          
-          return queueIds.map(({queueId}) => queueId);
+          return queueIds;
         }
         // Handle any other response format for artist downloads
         else {
           console.log(`Queued artist discography with unknown format:`, data);
           
-          // Show a temporary message
-          const artistMessage = document.createElement('div');
-          artistMessage.className = 'queue-artist-message';
-          artistMessage.textContent = `Queued albums for ${item.name || 'artist'}. Loading...`;
-          document.getElementById('queueItems').prepend(artistMessage);
-          
           // Make queue visible
           this.toggleVisibility(true);
           
-          // Wait a moment for tasks to be created on the backend
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          // Remove the temporary message
-          artistMessage.remove();
-          
-          // Fetch the latest tasks to show all newly created album downloads
+          // Just load existing PRG files as a fallback
           await this.loadExistingPrgFiles();
           
-          // Start monitoring all entries
+          // Force start monitoring for all loaded entries
           for (const queueId in this.queueEntries) {
             const entry = this.queueEntries[queueId];
-            if (entry && !entry.hasEnded) {
-              this.setupPollingInterval(queueId);
+            if (!entry.hasEnded) {
+              this.startDownloadStatusMonitoring(queueId);
             }
           }
           
@@ -1160,15 +1091,13 @@ class DownloadQueue {
       
       // Handle single-file downloads (tracks, albums, playlists)
       if (data.prg_file) {
-        const queueId = this.addDownload(item, type, data.prg_file, apiUrl, false);
+        console.log(`Adding ${type} with PRG file: ${data.prg_file}`);
+        // Use direct monitoring for all downloads for consistency
+        const queueId = this.addDownload(item, type, data.prg_file, apiUrl, true);
         
-        // Wait a short time before setting up SSE connection
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Set up SSE connection
-        const entry = this.queueEntries[queueId];
-        if (entry && !entry.hasEnded) {
-          this.setupPollingInterval(queueId);
+        // Make queue visible to show progress if not already visible
+        if (!this.config.downloadQueueVisible) {
+          this.toggleVisibility(true);
         }
         
         return queueId;
@@ -1508,13 +1437,40 @@ class DownloadQueue {
       message = `Status: ${status}`;
     }
 
-    // Extract trackName from different possible fields
-    const trackName = statusData.music || statusData.song || statusData.name || 'Unknown';
-    if (trackName && trackName !== 'Unknown') {
-      // Update the title in the queue item if we have a track name
-      const titleEl = entry.element.querySelector('.title');
-      if (titleEl && trackName !== titleEl.textContent) {
-        titleEl.textContent = trackName;
+    // Update the title with better information if available
+    // This is crucial for artist discography downloads which initially use generic titles
+    const titleEl = entry.element.querySelector('.title');
+    if (titleEl) {
+      // Check various data sources for a better title
+      let betterTitle = null;
+      
+      // First check if data has original_request with name
+      if (data.original_request && data.original_request.name) {
+        betterTitle = data.original_request.name;
+      }
+      // Then check if statusData has album or name
+      else if (statusData.album) {
+        betterTitle = statusData.album;
+      }
+      else if (statusData.name) {
+        betterTitle = statusData.name;
+      }
+      // Then check display_title from various sources
+      else if (data.display_title) {
+        betterTitle = data.display_title;
+      }
+      else if (statusData.display_title) {
+        betterTitle = statusData.display_title;
+      }
+      
+      // If we found a better title and it's different from what we already have
+      if (betterTitle && betterTitle !== titleEl.textContent && 
+          // Don't replace if current title is more specific than "Artist - Album" 
+          (titleEl.textContent.includes(' - Album') || titleEl.textContent === 'Unknown Album')) {
+        console.log(`Updating title from "${titleEl.textContent}" to "${betterTitle}"`);
+        titleEl.textContent = betterTitle;
+        // Also update the item's name for future reference
+        entry.item.name = betterTitle;
       }
     }
     
@@ -1669,23 +1625,6 @@ class DownloadQueue {
           progressBar.classList.remove('bg-success');
         }
       }
-    }
-    
-    // Store the last status update
-    entry.lastStatus = {
-      ...statusData,
-      message: message,
-      status: status
-    };
-    entry.lastUpdated = Date.now();
-    
-    // Store in cache
-    this.queueCache[entry.prgFile] = entry.lastStatus;
-    localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-    
-    // Handle terminal states (except errors which we handle separately above)
-    if (['complete', 'cancelled', 'done'].includes(status)) {
-      this.handleDownloadCompletion(entry, queueId, progress);
     }
   }
 
