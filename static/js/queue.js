@@ -864,6 +864,8 @@ class DownloadQueue {
     const entry = this.queueEntries[queueId];
     if (!entry) return;
     
+    // Mark the entry as retrying to prevent automatic cleanup
+    entry.isRetrying = true;
     logElement.textContent = 'Retrying download...';
     
     // Find a retry URL from various possible sources
@@ -890,6 +892,7 @@ class DownloadQueue {
     // If we don't have any retry URL, show error
     if (!retryUrl) {
       logElement.textContent = 'Retry not available: missing URL information.';
+      entry.isRetrying = false; // Reset retrying flag
       return;
     }
     
@@ -956,10 +959,12 @@ class DownloadQueue {
         }
       } else {
         logElement.textContent = 'Retry failed: invalid response from server';
+        entry.isRetrying = false; // Reset retrying flag
       }
     } catch (error) {
       console.error('Retry error:', error);
       logElement.textContent = 'Retry failed: ' + error.message;
+      entry.isRetrying = false; // Reset retrying flag
     }
   }
 
@@ -1376,10 +1381,23 @@ class DownloadQueue {
         console.log(`Terminal state detected: ${data.last_line.status} for ${queueId}`);
         entry.hasEnded = true;
         
-        setTimeout(() => {
-          this.clearPollingInterval(queueId);
-          this.cleanupEntry(queueId);
-        }, 5000);
+        // Only set up cleanup if this is not an error that we're in the process of retrying
+        // If status is 'error' but the status message contains 'Retrying', don't clean up
+        const isRetrying = entry.isRetrying || 
+                          (data.last_line.status === 'error' && 
+                           entry.element.querySelector('.log')?.textContent?.includes('Retry'));
+        
+        if (!isRetrying) {
+          setTimeout(() => {
+            // Double-check the entry still exists and has not been retried before cleaning up
+            if (this.queueEntries[queueId] && 
+                !this.queueEntries[queueId].isRetrying &&
+                this.queueEntries[queueId].hasEnded) {
+              this.clearPollingInterval(queueId);
+              this.cleanupEntry(queueId);
+            }
+          }, 5000);
+        }
       }
       
     } catch (error) {
@@ -1566,12 +1584,8 @@ class DownloadQueue {
             this.retryDownload(queueId, logElement);
           });
           
-          // Set up automatic cleanup after 10 seconds
-          setTimeout(() => {
-            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded) {
-              this.cleanupEntry(queueId);
-            }
-          }, 10000);
+          // Don't set up automatic cleanup - let retryDownload function handle this
+          // The automatic cleanup was causing items to disappear when retrying
         } else {
           // Cannot retry - just show error with close button
           logElement.innerHTML = `
@@ -1585,9 +1599,9 @@ class DownloadQueue {
             this.cleanupEntry(queueId);
           });
           
-          // Set up automatic cleanup after 10 seconds
+          // Set up automatic cleanup after 10 seconds only if not retrying
           setTimeout(() => {
-            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded) {
+            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded && !this.queueEntries[queueId].isRetrying) {
               this.cleanupEntry(queueId);
             }
           }, 10000);
