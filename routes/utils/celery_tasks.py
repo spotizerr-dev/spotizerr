@@ -1050,7 +1050,6 @@ def download_playlist(self, **task_data):
             retry_delay_increase=retry_delay_increase,
             max_retries=max_retries,
             progress_callback=self.progress_callback,
-            spotify_quality=fall_quality
         )
         
         return {"status": "success", "message": "Playlist download completed"}
