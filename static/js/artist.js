@@ -331,7 +331,8 @@ function attachDownloadListeners() {
       e.stopPropagation();
       const url = e.currentTarget.dataset.url || '';
       const name = e.currentTarget.dataset.name || 'Unknown';
-      const type = e.currentTarget.dataset.type || 'album';
+      // Always use 'album' type for individual album downloads regardless of category
+      const type = 'album';
       
       e.currentTarget.remove();
       // Use the centralized downloadQueue.download method
