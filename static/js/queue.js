@@ -131,13 +131,14 @@ class DownloadQueue {
             fetch(`/api/${entry.type}/download/cancel?prg_file=${entry.prgFile}`)
               .then(response => response.json())
               .then(data => {
-                if (data.status === "cancel") {
+                // API returns status 'cancelled' when cancellation succeeds
+                if (data.status === "cancelled" || data.status === "cancel") {
                   entry.hasEnded = true;
                   if (entry.intervalId) {
                     clearInterval(entry.intervalId);
                     entry.intervalId = null;
                   }
-                  // Clean up immediately
+                  // Remove the entry as soon as the API confirms cancellation
                   this.cleanupEntry(queueId);
                 }
               })
@@ -624,7 +625,8 @@ createQueueItem(item, type, prgFile, queueId) {
       // First cancel the download
       const response = await fetch(`/api/${type}/download/cancel?prg_file=${prg}`);
       const data = await response.json();
-      if (data.status === "cancel") {
+      // API returns status 'cancelled' when cancellation succeeds
+      if (data.status === "cancelled" || data.status === "cancel") {
         if (entry) {
           entry.hasEnded = true;
           
@@ -640,14 +642,6 @@ createQueueItem(item, type, prgFile, queueId) {
           entry.status = "cancelled";
           this.queueCache[prg] = { status: "cancelled" };
           localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-          
-          // Immediately delete from server
-          try {
-            await fetch(`/api/prgs/delete/${prg}`, { method: 'DELETE' });
-            console.log(`Deleted cancelled task from server: ${prg}`);
-          } catch (deleteError) {
-            console.error('Error deleting cancelled task:', deleteError);
-          }
           
           // Immediately remove the item from the UI
           this.cleanupEntry(queueid);
@@ -1639,9 +1633,9 @@ createQueueItem(item, type, prgFile, queueId) {
               } else if (entry.parentInfo && !['done', 'complete', 'error', 'skipped'].includes(prgData.last_line.status)) {
                 // Show parent info for non-terminal states
                 if (entry.parentInfo.type === 'album') {
-                  logElement.textContent = `From album: ${entry.parentInfo.title}`;
+                  logElement.textContent = `From album: "${entry.parentInfo.title}"`;
                 } else if (entry.parentInfo.type === 'playlist') {
-                  logElement.textContent = `From playlist: ${entry.parentInfo.name} by ${entry.parentInfo.owner}`;
+                  logElement.textContent = `From playlist: "${entry.parentInfo.name}" by ${entry.parentInfo.owner}`;
                 }
               }
             }
@@ -2281,19 +2275,17 @@ createQueueItem(item, type, prgFile, queueId) {
       // Calculate and update the overall progress bar
       if (totalTracks > 0) {
         let overallProgress = 0;
-        
-        if (statusData.status === 'real-time' && trackProgress !== undefined) {
-          // Use the formula: ((current_track-1)/(total_tracks))+(1/total_tracks*progress)
+        // Always compute overall based on trackProgress if available, using album/playlist real-time formula
+        if (trackProgress !== undefined) {
           const completedTracksProgress = (currentTrack - 1) / totalTracks;
           const currentTrackContribution = (1 / totalTracks) * (trackProgress / 100);
           overallProgress = (completedTracksProgress + currentTrackContribution) * 100;
-          console.log(`Real-time overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks}, Progress: ${trackProgress}%)`);
+          console.log(`Overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks}, Progress: ${trackProgress}%)`);
         } else {
-          // Standard progress calculation based on current track position
           overallProgress = (currentTrack / totalTracks) * 100;
-          console.log(`Standard overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks})`);
+          console.log(`Overall progress (non-real-time): ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks})`);
         }
-        
+         
         // Update the progress bar
         if (overallProgressBar) {
           const safeProgress = Math.max(0, Math.min(100, overallProgress));
@@ -2394,21 +2386,17 @@ createQueueItem(item, type, prgFile, queueId) {
     // Calculate overall progress
     let overallProgress = 0;
     if (totalTracks > 0) {
-      // If we have an explicit overall_progress, use it
+      // Use explicit overall_progress if provided
       if (statusData.overall_progress !== undefined) {
         overallProgress = parseFloat(statusData.overall_progress);
-      } else if (statusData.status === 'real-time' && trackProgress !== undefined) {
-        // Calculate based on formula: ((current_track-1)/(total_tracks))+(1/total_tracks*progress)
-        // This gives a precise calculation for real-time downloads
+      } else if (trackProgress !== undefined) {
+        // For both real-time and standard multi-track downloads, use same formula
         const completedTracksProgress = (currentTrack - 1) / totalTracks;
         const currentTrackContribution = (1 / totalTracks) * (trackProgress / 100);
         overallProgress = (completedTracksProgress + currentTrackContribution) * 100;
-        console.log(`Real-time progress: Track ${currentTrack}/${totalTracks}, Track progress: ${trackProgress}%, Overall: ${overallProgress.toFixed(2)}%`);
+        console.log(`Progress: Track ${currentTrack}/${totalTracks}, Track progress: ${trackProgress}%, Overall: ${overallProgress.toFixed(2)}%`);
       } else {
-        // For non-real-time downloads, show percentage of tracks downloaded
-        // Using current_track relative to total_tracks
-        overallProgress = (currentTrack / totalTracks) * 100;
-        console.log(`Standard progress: Track ${currentTrack}/${totalTracks}, Overall: ${overallProgress.toFixed(2)}%`);
+        overallProgress = 0;
       }
       
       // Update overall progress bar

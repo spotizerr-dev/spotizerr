@@ -17,6 +17,7 @@ import atexit
 import sys
 import redis
 import socket
+from urllib.parse import urlparse
 
 # Import Celery configuration and manager
 from routes.utils.celery_tasks import celery_app
@@ -85,11 +86,16 @@ def check_redis_connection():
     redis_port = 6379     # default
     
     # Parse from REDIS_URL if possible
-    if REDIS_URL and "://" in REDIS_URL:
-        parts = REDIS_URL.split("://")[1].split(":")
-        if len(parts) >= 2:
-            redis_host = parts[0]
-            redis_port = int(parts[1].split("/")[0])
+    if REDIS_URL:
+        # parse hostname and port (handles optional auth)
+        try:
+            parsed = urlparse(REDIS_URL)
+            if parsed.hostname:
+                redis_host = parsed.hostname
+            if parsed.port:
+                redis_port = parsed.port
+        except Exception:
+            pass
     
     # Log Redis connection details
     logging.info(f"Checking Redis connection to {redis_host}:{redis_port}")

@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = os.getenv('REDIS_PORT', '6379')
 REDIS_DB = os.getenv('REDIS_DB', '0')
-REDIS_URL = os.getenv('REDIS_URL', f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
+# Optional Redis password
+REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', '')
+# Build default URL with password if provided
+_password_part = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
+default_redis_url = f"redis://{_password_part}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}"
+REDIS_URL = os.getenv('REDIS_URL', default_redis_url)
 REDIS_BACKEND = os.getenv('REDIS_BACKEND', REDIS_URL)
 
 # Log Redis connection details

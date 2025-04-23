@@ -12,7 +12,7 @@ from celery.exceptions import Retry
 logger = logging.getLogger(__name__)
 
 # Setup Redis and Celery
-from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, get_config_params
+from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, REDIS_PASSWORD, get_config_params
 
 # Initialize Celery app
 celery_app = Celery('download_tasks',

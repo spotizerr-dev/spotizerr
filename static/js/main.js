@@ -42,6 +42,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Restore last search type if no URL override
+    const savedType = localStorage.getItem('lastSearchType');
+    if (savedType && ['track','album','playlist','artist'].includes(savedType)) {
+      searchType.value = savedType;
+    }
+    // Save last selection on change
+    if (searchType) {
+      searchType.addEventListener('change', () => {
+        localStorage.setItem('lastSearchType', searchType.value);
+      });
+    }
+
     // Check for URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const query = urlParams.get('q');
@@ -341,7 +353,8 @@ document.addEventListener('DOMContentLoaded', function() {
      * Extracts details from a Spotify URL
      */
     function getSpotifyResourceDetails(url) {
-        const regex = /spotify\.com\/(track|album|playlist|artist)\/([a-zA-Z0-9]+)/;
+        // Allow optional path segments (e.g. intl-fr) before resource type
+        const regex = /spotify\.com\/(?:[^\/]+\/)??(track|album|playlist|artist)\/([a-zA-Z0-9]+)/i;
         const match = url.match(regex);
         
         if (match) {
