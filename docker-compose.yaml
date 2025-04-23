@@ -9,19 +9,20 @@ services:
       - ./logs:/app/logs  # <-- Volume for persistent logs
     ports:
       - 7171:7171
-    image: cooldockerizer93/spotizerr
+    image: cooldockerizer93/spotizerr:dev
     container_name: spotizerr-app
     restart: unless-stopped
     environment:
-      - PUID=1000  # Replace with your desired user ID  | Remove both if you want to run as root (not recommended, might result in unreadable files)
-      - PGID=1000  # Replace with your desired group ID | The user must have write permissions in the volume mapped to /app/downloads
-      - UMASK=0022 # Optional: Sets the default file permissions for newly created files within the container.
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - REDIS_URL=redis://redis:6379/0
-      - REDIS_BACKEND=redis://redis:6379/0
-      - EXPLICIT_FILTER=false # Set to true to filter out explicit content
+      - PUID=${PUID}  # Replace with your desired user ID  | Remove both if you want to run as root (not recommended, might result in unreadable files)
+      - PGID=${PGID}  # Replace with your desired group ID | The user must have write permissions in the volume mapped to /app/downloads
+      - UMASK=${UMASK} # Optional: Sets the default file permissions for newly created files within the container.
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}  # Optional, Redis AUTH password. Leave empty if not using authentication
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}
+      - REDIS_BACKEND=redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}
+      - EXPLICIT_FILTER=${EXPLICIT_FILTER} # Set to true to filter out explicit content
     depends_on:
       - redis
 
@@ -29,9 +30,11 @@ services:
     image: redis:alpine
     container_name: spotizerr-redis
     restart: unless-stopped
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
     
 volumes:
   redis-data:

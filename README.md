@@ -49,9 +49,13 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 mkdir spotizerr && cd spotizerr
 ```
 
-2. Copy `docker-compose.yml` from this repo
-
-3. Launch container:
+2. Copy the `.env` file from this repo and update all variables (e.g. Redis credentials, PUID/PGID, UMASK).
+3. Copy `docker-compose.yml` from this repo.
+4. Create required directories:
+```bash
+mkdir -p creds config downloads logs cache
+```
+5. Launch containers:
 ```bash
 docker compose up -d
 ```
@@ -233,6 +237,21 @@ Copy that value and paste it into the correspondant setting in Spotizerr
 - **Customizable formatting**:
   - Track number padding (01. Track or 1. Track)
   - Adjust retry parameters (max attempts, delay, delay increase)
+
+### Environment Variables
+
+Define your variables in the `.env` file in the project root:
+```dotenv
+REDIS_HOST=redis             # Redis host name
+REDIS_PORT=6379              # Redis port number
+REDIS_DB=0                   # Redis DB index
+REDIS_PASSWORD=CHANGE_ME     # Redis AUTH password
+EXPLICIT_FILTER=false        # Filter explicit content
+PUID=1000                    # Container user ID
+PGID=1000                    # Container group ID
+UMASK=0022                   # Default file permission mask
+SPOTIPY_CACHE_PATH=/app/cache/.cache  # Spotify token cache path
+```
 
 ## Troubleshooting
 

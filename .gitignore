@@ -33,3 +33,4 @@ queue_state.json
 search_demo.py
 celery_worker.log
 logs/spotizerr.log
+/.venv

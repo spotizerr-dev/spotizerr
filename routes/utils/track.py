@@ -6,7 +6,6 @@ from deezspot.deezloader import DeeLogin
 from pathlib import Path
 
 def download_track(
-    service,
     url,
     main,
     fallback=None,
@@ -22,8 +21,24 @@ def download_track(
     progress_callback=None
 ):
     try:
-        # DEBUG: Print parameters
-        print(f"DEBUG: track.py received - service={service}, main={main}, fallback={fallback}")
+        # Detect URL source (Spotify or Deezer) from URL
+        is_spotify_url = 'open.spotify.com' in url.lower()
+        is_deezer_url = 'deezer.com' in url.lower()
+        
+        # Determine service exclusively from URL
+        if is_spotify_url:
+            service = 'spotify'
+        elif is_deezer_url:
+            service = 'deezer'
+        else:
+            # If URL can't be detected, raise an error
+            error_msg = "Invalid URL: Must be from open.spotify.com or deezer.com"
+            print(f"ERROR: {error_msg}")
+            raise ValueError(error_msg)
+            
+        print(f"DEBUG: track.py - URL detection: is_spotify_url={is_spotify_url}, is_deezer_url={is_deezer_url}")
+        print(f"DEBUG: track.py - Service determined from URL: {service}")
+        print(f"DEBUG: track.py - Credentials: main={main}, fallback={fallback}")
         
         # Load Spotify client credentials if available
         spotify_client_id = None
@@ -49,6 +64,8 @@ def download_track(
             except Exception as e:
                 print(f"Error loading Spotify search credentials: {e}")
                 
+        # For Spotify URLs: check if fallback is enabled, if so use the fallback logic,
+        # otherwise download directly from Spotify
         if service == 'spotify':
             if fallback:
                 if quality is None:
@@ -166,6 +183,7 @@ def download_track(
                     retry_delay_increase=retry_delay_increase,
                     max_retries=max_retries
                 )
+        # For Deezer URLs: download directly from Deezer
         elif service == 'deezer':
             if quality is None:
                 quality = 'FLAC'

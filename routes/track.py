@@ -3,6 +3,7 @@ import os
 import json
 import traceback
 from routes.utils.celery_queue_manager import download_queue_manager
+from urllib.parse import urlparse  # for URL validation
 
 track_bp = Blueprint('track', __name__)
 
@@ -16,19 +17,30 @@ def handle_download():
     # Validate required parameters
     if not url:
         return Response(
-            json.dumps({"error": "Missing required parameter: url"}),
+            json.dumps({"error": "Missing required parameter: url", "original_url": url}),
+            status=400,
+            mimetype='application/json'
+        )
+    # Validate URL domain
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    if not (host.endswith('deezer.com') or host.endswith('open.spotify.com') or host.endswith('spotify.com')):
+        return Response(
+            json.dumps({"error": f"Invalid Link {url} :(", "original_url": url}),
             status=400,
             mimetype='application/json'
         )
     
     # Add the task to the queue with only essential parameters
     # The queue manager will now handle all config parameters
+    orig_params = request.args.to_dict()
+    orig_params["original_url"] = request.url
     task_id = download_queue_manager.add_task({
         "download_type": "track",
         "url": url,
         "name": name,
         "artist": artist,
-        "orig_request": request.args.to_dict()
+        "orig_request": orig_params
     })
     
     return Response(

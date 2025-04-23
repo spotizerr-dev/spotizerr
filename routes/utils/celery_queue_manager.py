@@ -120,9 +120,6 @@ class CeleryDownloadQueueManager:
             # Extract original request or use empty dict
             original_request = task.get("orig_request", task.get("original_request", {}))
             
-            # Determine service (spotify or deezer) from config or request
-            service = original_request.get("service", config_params.get("service", "spotify"))
-            
             # Debug retry_url if present
             if "retry_url" in task:
                 logger.debug(f"Task has retry_url: {task['retry_url']}")
@@ -133,21 +130,20 @@ class CeleryDownloadQueueManager:
                 "type": task.get("type", download_type),
                 "name": task.get("name", ""),
                 "artist": task.get("artist", ""),
-                "service": service,
                 "url": task.get("url", ""),
                 
                 # Preserve retry_url if present
                 "retry_url": task.get("retry_url", ""),
                 
-                # Use config values but allow override from request
-                "main": original_request.get("main", 
-                    config_params['spotify'] if service == 'spotify' else config_params['deezer']),
+                # Use main account from config
+                "main": original_request.get("main", config_params['deezer']),
                 
+                # Set fallback if enabled in config
                 "fallback": original_request.get("fallback", 
-                    config_params['spotify'] if config_params['fallback'] and service == 'spotify' else None),
+                    config_params['spotify'] if config_params['fallback'] else None),
                 
-                "quality": original_request.get("quality", 
-                    config_params['spotifyQuality'] if service == 'spotify' else config_params['deezerQuality']),
+                # Use default quality settings
+                "quality": original_request.get("quality", config_params['deezerQuality']),
                 
                 "fall_quality": original_request.get("fall_quality", config_params['spotifyQuality']),
                 
