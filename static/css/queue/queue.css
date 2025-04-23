@@ -310,6 +310,96 @@
     border-radius: 2px;
 }
 
+/* Overall progress container for albums and playlists */
+.overall-progress-container {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative; /* Positioning context for z-index */
+    z-index: 2; /* Ensure overall progress appears above track progress */
+}
+
+.overall-progress-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    font-size: 11px;
+    color: #b3b3b3;
+}
+
+.overall-progress-label {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.overall-progress-count {
+    font-weight: 600;
+    color: #1DB954;
+}
+
+.overall-progress-bar-container {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.overall-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4a90e2, #7a67ee); /* Changed to blue-purple gradient */
+    width: 0;
+    border-radius: 3px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.overall-progress-bar.complete {
+    background: #4a90e2; /* Changed to solid blue for completed overall progress */
+}
+
+/* Track progress bar container */
+.track-progress-bar-container {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    position: relative;
+    z-index: 1; /* Ensure it's below the overall progress */
+}
+
+/* Track progress bar */
+.track-progress-bar {
+    height: 100%;
+    background: #1DB954; /* Keep green for track-level progress */
+    width: 0;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 3px rgba(29, 185, 84, 0.5); /* Add subtle glow to differentiate */
+}
+
+/* Complete state for track progress */
+/* Real-time progress style */
+.track-progress-bar.real-time {
+    background: #1DB954; /* Vivid green for real-time progress */
+    background: #1DB954;
+}
+
+/* Pulsing animation for indeterminate progress */
+.track-progress-bar.progress-pulse {
+    background: linear-gradient(90deg, #1DB954 0%, #2cd267 50%, #1DB954 100%); /* Keep in green family */
+    background-size: 200% 100%;
+    animation: progress-pulse-slide 1.5s ease infinite;
+}
+
+@keyframes progress-pulse-slide {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
 /* Progress percentage text */
 .progress-percent {
     text-align: right;

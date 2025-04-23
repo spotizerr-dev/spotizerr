@@ -27,8 +27,8 @@ class DownloadQueue {
     // Queue entry objects
     this.queueEntries = {};
     
-    // EventSource connections for SSE tracking
-    this.sseConnections = {};
+    // Polling intervals for progress tracking
+    this.pollingIntervals = {};
     
     // DOM elements cache
     this.elements = {};
@@ -117,27 +117,34 @@ class DownloadQueue {
       cancelAllBtn.addEventListener('click', () => {
         for (const queueId in this.queueEntries) {
           const entry = this.queueEntries[queueId];
-          if (!entry.hasEnded) {
+          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+          if (entry && !entry.hasEnded && entry.prgFile) {
+            // Mark as cancelling visually
+            if (entry.element) {
+              entry.element.classList.add('cancelling');
+            }
+            if (logElement) {
+              logElement.textContent = "Cancelling...";
+            }
+            
+            // Cancel each active download
             fetch(`/api/${entry.type}/download/cancel?prg_file=${entry.prgFile}`)
               .then(response => response.json())
               .then(data => {
-                const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-                if (logElement) logElement.textContent = "Download cancelled";
-                entry.hasEnded = true;
-                
-                // Close SSE connection
-                this.clearPollingInterval(queueId);
-                
-                if (entry.intervalId) {
-                  clearInterval(entry.intervalId);
-                  entry.intervalId = null;
+                if (data.status === "cancel") {
+                  entry.hasEnded = true;
+                  if (entry.intervalId) {
+                    clearInterval(entry.intervalId);
+                    entry.intervalId = null;
+                  }
+                  // Clean up immediately
+                  this.cleanupEntry(queueId);
                 }
-                // Cleanup the entry after a short delay.
-                setTimeout(() => this.cleanupEntry(queueId), 5000);
               })
               .catch(error => console.error('Cancel error:', error));
           }
         }
+        this.clearAllPollingIntervals();
       });
     }
     
@@ -234,8 +241,11 @@ class DownloadQueue {
     const entry = this.queueEntries[queueId];
     if (!entry || entry.hasEnded) return;
     
-    // Don't restart monitoring if SSE connection already exists
-    if (this.sseConnections[queueId]) return;
+    // Don't restart monitoring if polling interval already exists
+    if (this.pollingIntervals[queueId]) return;
+    
+    // Ensure entry has data containers for parent info
+    entry.parentInfo = entry.parentInfo || {};
 
     // Show a preparing message for new entries
     if (entry.isNew) {
@@ -290,11 +300,50 @@ class DownloadQueue {
           // Apply appropriate CSS classes based on status
           this.applyStatusClasses(entry, data.last_line);
           
-          // Save updated status to cache
-          this.queueCache[entry.prgFile] = data.last_line;
+          // Save updated status to cache, ensuring we preserve parent data
+          this.queueCache[entry.prgFile] = {
+            ...data.last_line,
+            // Ensure parent data is preserved
+            parent: data.last_line.parent || entry.lastStatus?.parent
+          };
+          
+          // If this is a track with a parent, update the display elements to match the parent
+          if (data.last_line.type === 'track' && data.last_line.parent) {
+            const parent = data.last_line.parent;
+            entry.parentInfo = parent;
+            
+            // Update type and UI to reflect the parent type
+            if (parent.type === 'album' || parent.type === 'playlist') {
+              // Only change type if it's not already set to the parent type
+              if (entry.type !== parent.type) {
+                entry.type = parent.type;
+                
+                // Update the type indicator
+                const typeEl = entry.element.querySelector('.type');
+                if (typeEl) {
+                  const displayType = parent.type.charAt(0).toUpperCase() + parent.type.slice(1);
+                  typeEl.textContent = displayType;
+                  typeEl.className = `type ${parent.type}`;
+                }
+                
+                // Update the title and subtitle based on parent type
+                const titleEl = entry.element.querySelector('.title');
+                const artistEl = entry.element.querySelector('.artist');
+                
+                if (parent.type === 'album') {
+                  if (titleEl) titleEl.textContent = parent.title || 'Unknown album';
+                  if (artistEl) artistEl.textContent = parent.artist || 'Unknown artist';
+                } else if (parent.type === 'playlist') {
+                  if (titleEl) titleEl.textContent = parent.name || 'Unknown playlist';
+                  if (artistEl) artistEl.textContent = parent.owner || 'Unknown creator';
+                }
+              }
+            }
+          }
+          
           localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
           
-          // If the entry is already in a terminal state, don't set up SSE
+          // If the entry is already in a terminal state, don't set up polling
           if (['error', 'complete', 'cancel', 'cancelled', 'done'].includes(data.last_line.status)) {
             entry.hasEnded = true;
             this.handleDownloadCompletion(entry, queueId, data.last_line);
@@ -306,7 +355,7 @@ class DownloadQueue {
       console.error('Initial status check failed:', error);
     }
     
-    // Set up SSE connection for real-time updates
+    // Set up polling interval for real-time updates
     this.setupPollingInterval(queueId);
   }
 
@@ -321,14 +370,65 @@ class DownloadQueue {
   createQueueEntry(item, type, prgFile, queueId, requestUrl) {
     console.log(`Creating queue entry with initial type: ${type}`);
     
-    // Build the basic entry.
+    // Get cached data if it exists
+    const cachedData = this.queueCache[prgFile];
+    
+    // If we have cached data, use it to determine the true type and item properties
+    if (cachedData) {
+      // If this is a track with a parent, update type and item to match the parent
+      if (cachedData.type === 'track' && cachedData.parent) {
+        if (cachedData.parent.type === 'album') {
+          type = 'album';
+          item = {
+            name: cachedData.parent.title,
+            artist: cachedData.parent.artist,
+            total_tracks: cachedData.parent.total_tracks,
+            url: cachedData.parent.url
+          };
+        } else if (cachedData.parent.type === 'playlist') {
+          type = 'playlist';
+          item = {
+            name: cachedData.parent.name,
+            owner: cachedData.parent.owner,
+            total_tracks: cachedData.parent.total_tracks,
+            url: cachedData.parent.url
+          };
+        }
+      }
+      // If we're reconstructing an album or playlist directly
+      else if (cachedData.type === 'album') {
+        item = {
+          name: cachedData.title || cachedData.album || 'Unknown album',
+          artist: cachedData.artist || 'Unknown artist',
+          total_tracks: cachedData.total_tracks || 0
+        };
+      } else if (cachedData.type === 'playlist') {
+        item = {
+          name: cachedData.name || 'Unknown playlist',
+          owner: cachedData.owner || 'Unknown creator',
+          total_tracks: cachedData.total_tracks || 0
+        };
+      }
+    }
+    
+    // Build the basic entry with possibly updated type and item
     const entry = {
       item,
-      type,
+      type, 
       prgFile,
       requestUrl, // for potential retry
       element: this.createQueueItem(item, type, prgFile, queueId),
-      lastStatus: null,
+      lastStatus: {
+        // Initialize with basic item metadata for immediate display
+        type,
+        status: 'initializing',
+        name: item.name || 'Unknown',
+        artist: item.artist || item.artists?.[0]?.name || '',
+        album: item.album?.name || '',
+        title: item.name || '',
+        owner: item.owner || item.owner?.display_name || '',
+        total_tracks: item.total_tracks || 0
+      },
       lastUpdated: Date.now(),
       hasEnded: false,
       intervalId: null,
@@ -337,13 +437,19 @@ class DownloadQueue {
       autoRetryInterval: null,
       isNew: true, // Add flag to track if this is a new entry
       status: 'initializing',
-      lastMessage: `Initializing ${type} download...`
+      lastMessage: `Initializing ${type} download...`,
+      parentInfo: null // Will store parent data for tracks that are part of albums/playlists
     };
     
     // If cached info exists for this PRG file, use it.
-    if (this.queueCache[prgFile]) {
-      entry.lastStatus = this.queueCache[prgFile];
+    if (cachedData) {
+      entry.lastStatus = cachedData;
       const logEl = entry.element.querySelector('.log');
+      
+      // Store parent information if available
+      if (cachedData.parent) {
+        entry.parentInfo = cachedData.parent;
+      }
       
       // Special handling for error states to restore UI with buttons
       if (entry.lastStatus.status === 'error') {
@@ -411,37 +517,78 @@ class DownloadQueue {
   }
 
   /**
-   * Returns an HTML element for the queue entry.
-   */
-  createQueueItem(item, type, prgFile, queueId) {
-    const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
-    
-    // Use display values if available, or fall back to standard fields
-    // Support both 'name' and 'music' fields which may be used by the backend
-    const displayTitle = item.name || item.music || item.song || 'Unknown';
-    const displayType = type.charAt(0).toUpperCase() + type.slice(1);
-    
-    const div = document.createElement('article');
-    div.className = 'queue-item queue-item-new'; // Add the animation class
-    div.setAttribute('aria-live', 'polite');
-    div.setAttribute('aria-atomic', 'true');
-    div.innerHTML = `
-      <div class="title">${displayTitle}</div>
-      <div class="type ${type}">${displayType}</div>
-      <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
+ * Returns an HTML element for the queue entry with modern UI styling.
+ */
+createQueueItem(item, type, prgFile, queueId) {
+  // Track whether this is a multi-track item (album or playlist)
+  const isMultiTrack = type === 'album' || type === 'playlist';
+  const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
+  
+  // Use display values if available, or fall back to standard fields
+  const displayTitle = item.name || item.music || item.song || 'Unknown';
+  const displayArtist = item.artist || '';
+  const displayType = type.charAt(0).toUpperCase() + type.slice(1);
+  
+  const div = document.createElement('article');
+  div.className = 'queue-item queue-item-new'; // Add the animation class
+  div.setAttribute('aria-live', 'polite');
+  div.setAttribute('aria-atomic', 'true');
+  div.setAttribute('data-type', type);
+  
+  // Create modern HTML structure with better visual hierarchy
+  let innerHtml = `
+    <div class="queue-item-header">
+      <div class="queue-item-info">
+        <div class="title">${displayTitle}</div>
+        ${displayArtist ? `<div class="artist">${displayArtist}</div>` : ''}
+        <div class="type ${type}">${displayType}</div>
+      </div>
       <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
         <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Cancel Download">
       </button>
-    `;
-    div.querySelector('.cancel-btn').addEventListener('click', (e) => this.handleCancelDownload(e));
+    </div>
     
-    // Remove the animation class after animation completes
-    setTimeout(() => {
-      div.classList.remove('queue-item-new');
-    }, 300); // Match the animation duration
-    
-    return div;
+    <div class="queue-item-status">
+      <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
+      
+      <div class="progress-container">
+        <!-- Track-level progress bar for single track or current track in multi-track items -->
+        <div class="track-progress-bar-container" id="track-progress-container-${queueId}-${prgFile}">
+          <div class="track-progress-bar" id="track-progress-bar-${queueId}-${prgFile}" 
+               role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;"></div>
+        </div>
+        
+        <!-- Time elapsed for real-time downloads -->
+        <div class="time-elapsed" id="time-elapsed-${queueId}-${prgFile}"></div>
+      </div>
+    </div>`;
+  
+  // For albums and playlists, add an overall progress container
+  if (isMultiTrack) {
+    innerHtml += `
+    <div class="overall-progress-container">
+      <div class="overall-progress-header">
+        <span class="overall-progress-label">Overall Progress</span>
+        <span class="overall-progress-count" id="progress-count-${queueId}-${prgFile}">0/0</span>
+      </div>
+      <div class="overall-progress-bar-container">
+        <div class="overall-progress-bar" id="overall-bar-${queueId}-${prgFile}" 
+             role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;"></div>
+      </div>
+    </div>`;
   }
+  
+  div.innerHTML = innerHtml;
+  
+  div.querySelector('.cancel-btn').addEventListener('click', (e) => this.handleCancelDownload(e));
+  
+  // Remove the animation class after animation completes
+  setTimeout(() => {
+    div.classList.remove('queue-item-new');
+  }, 300); // Match the animation duration
+  
+  return div;
+}
 
   // Add a helper method to apply the right CSS classes based on status
   applyStatusClasses(entry, status) {
@@ -489,13 +636,23 @@ class DownloadQueue {
     btn.style.display = 'none';
     const { prg, type, queueid } = btn.dataset;
     try {
+      // Get the queue item element
+      const entry = this.queueEntries[queueid];
+      if (entry && entry.element) {
+        // Add a visual indication that it's being cancelled
+        entry.element.classList.add('cancelling');
+      }
+      
+      // Show cancellation in progress
+      const logElement = document.getElementById(`log-${queueid}-${prg}`);
+      if (logElement) {
+        logElement.textContent = "Cancelling...";
+      }
+      
       // First cancel the download
       const response = await fetch(`/api/${type}/download/cancel?prg_file=${prg}`);
       const data = await response.json();
       if (data.status === "cancel") {
-        const logElement = document.getElementById(`log-${queueid}-${prg}`);
-        logElement.textContent = "Download cancelled";
-        const entry = this.queueEntries[queueid];
         if (entry) {
           entry.hasEnded = true;
           
@@ -512,7 +669,7 @@ class DownloadQueue {
           this.queueCache[prg] = { status: "cancelled" };
           localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
           
-          // Immediately delete from server instead of just waiting for UI cleanup
+          // Immediately delete from server
           try {
             await fetch(`/api/prgs/delete/${prg}`, {
               method: 'DELETE'
@@ -521,10 +678,10 @@ class DownloadQueue {
           } catch (deleteError) {
             console.error('Error deleting cancelled task:', deleteError);
           }
+          
+          // Immediately remove the item from the UI
+          this.cleanupEntry(queueid);
         }
-        
-        // Still do UI cleanup after a short delay
-        setTimeout(() => this.cleanupEntry(queueid), 5000);
       }
     } catch (error) {
       console.error('Cancel error:', error);
@@ -670,7 +827,7 @@ class DownloadQueue {
   async cleanupEntry(queueId) {
     const entry = this.queueEntries[queueId];
     if (entry) {
-      // Close any SSE connection
+      // Close any polling interval
       this.clearPollingInterval(queueId);
       
       // Clean up any intervals
@@ -717,82 +874,217 @@ class DownloadQueue {
 
   /* Status Message Handling */
   getStatusMessage(data) {
+    // Determine the true display type - if this is a track with a parent, we may want to
+    // show it as part of the parent's download process
+    let displayType = data.type || 'unknown';
+    let isChildTrack = false;
+    
+    // If this is a track that's part of an album/playlist, note that
+    if (data.type === 'track' && data.parent) {
+      isChildTrack = true;
+      // We'll still use track-specific info but note it's part of a parent
+    }
+    
+    // Find the queue item this status belongs to
+    let queueItem = null;
+    const prgFile = data.prg_file || Object.keys(this.queueCache).find(key => 
+      this.queueCache[key].status === data.status && this.queueCache[key].type === data.type
+    );
+    
+    if (prgFile) {
+      const queueId = Object.keys(this.queueEntries).find(id => 
+        this.queueEntries[id].prgFile === prgFile
+      );
+      if (queueId) {
+        queueItem = this.queueEntries[queueId];
+      }
+    }
+    
     // Extract common fields
-    const trackName = data.music || data.song || data.name || 'Unknown';
-    const artist = data.artist || '';
-    const percentage = data.percentage || data.percent || 0;
-    const currentTrack = data.parsed_current_track || data.current_track || '';
-    const totalTracks = data.parsed_total_tracks || data.total_tracks || '';
-    const playlistOwner = data.owner || '';
+    const trackName = data.song || data.music || data.name || data.title || 
+                      (queueItem?.item?.name) || 'Unknown';
+    const artist = data.artist || data.artist_name || 
+                   (queueItem?.item?.artist) || '';
+    const albumTitle = data.title || data.album || data.parent?.title || data.name || 
+                      (queueItem?.item?.name) || '';
+    const playlistName = data.name || data.parent?.name || 
+                        (queueItem?.item?.name) || '';
+    const playlistOwner = data.owner || data.parent?.owner || 
+                         (queueItem?.item?.owner) || '';
+    const currentTrack = data.current_track || data.parsed_current_track || '';
+    const totalTracks = data.total_tracks || data.parsed_total_tracks || data.parent?.total_tracks || 
+                       (queueItem?.item?.total_tracks) || '';
     
-    // Format percentage for display
-    const formattedPercentage = (percentage * 100).toFixed(1);
+    // Format percentage for display when available
+    let formattedPercentage = '0';
+    if (data.progress !== undefined) {
+      formattedPercentage = parseFloat(data.progress).toFixed(1);
+    } else if (data.percentage) {
+      formattedPercentage = (parseFloat(data.percentage) * 100).toFixed(1);
+    } else if (data.percent) {
+      formattedPercentage = (parseFloat(data.percent) * 100).toFixed(1);
+    }
     
+    // Helper for constructing info about the parent item
+    const getParentInfo = () => {
+      if (!data.parent) return '';
+      
+      if (data.parent.type === 'album') {
+        return ` from album "${data.parent.title}"`;
+      } else if (data.parent.type === 'playlist') {
+        return ` from playlist "${data.parent.name}" by ${data.parent.owner}`;
+      }
+      return '';
+    };
+    
+    // Status-based message generation
     switch (data.status) {
       case 'queued':
-        if (data.type === 'album') {
-          return `Queued album "${data.name}"${artist ? ` by ${artist}` : ''}`;
+        if (data.type === 'track') {
+          return `Queued track "${trackName}"${artist ? ` by ${artist}` : ''}${getParentInfo()}`;
+        } else if (data.type === 'album') {
+          return `Queued album "${albumTitle}"${artist ? ` by ${artist}` : ''} (${totalTracks || '?'} tracks)`;
         } else if (data.type === 'playlist') {
-          return `Queued playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''}`;
-        } else if (data.type === 'track') {
-          return `Queued track "${trackName}"${artist ? ` by ${artist}` : ''}`;
+          return `Queued playlist "${playlistName}"${playlistOwner ? ` by ${playlistOwner}` : ''} (${totalTracks || '?'} tracks)`;
         }
-        return `Queued ${data.type} "${data.name}"`;
+        return `Queued ${data.type}`;
       
       case 'initializing':
-        if (data.type === 'playlist') {
-          return `Initializing playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''} with ${totalTracks} tracks...`;
-        } else if (data.type === 'album') {
-          return `Initializing album "${data.album || data.name}"${artist ? ` by ${artist}` : ''}...`;
-        } else if (data.type === 'track') {
-          return `Initializing track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
-        }
-        return `Initializing ${data.type} download...`;
+        return `Preparing to download...`;
       
       case 'processing':
-        if (data.type === 'track') {
-          return `Processing track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
-        } else if (data.type === 'album' && currentTrack && totalTracks) {
-          return `Processing track ${currentTrack}/${totalTracks}: ${trackName}...`;
-        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
-          return `Processing track ${currentTrack}/${totalTracks}: ${trackName}...`;
+        // Special case: If this is a track that's part of an album/playlist
+        if (data.type === 'track' && data.parent) {
+          if (data.parent.type === 'album') {
+            return `Processing track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} (from album "${data.parent.title}")`;
+          } else if (data.parent.type === 'playlist') {
+            return `Processing track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} (from playlist "${data.parent.name}")`;
+          }
         }
-        return `Processing ${data.type} download...`;
-      
-      case 'real_time':
+        
+        // Regular standalone track
         if (data.type === 'track') {
-          return `Track "${trackName}"${artist ? ` by ${artist}` : ''} is ${formattedPercentage}% downloaded...`;
-        } else if (data.type === 'album' && currentTrack && totalTracks) {
-          return `Track "${trackName}" (${currentTrack}/${totalTracks}) is ${formattedPercentage}% downloaded...`;
-        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
-          return `Track "${trackName}" (${currentTrack}/${totalTracks}) is ${formattedPercentage}% downloaded...`;
+          return `Processing track "${trackName}"${artist ? ` by ${artist}` : ''}${getParentInfo()}`;
+        } 
+        // Album download
+        else if (data.type === 'album') {
+          // For albums, show current track info if available
+          if (trackName && artist && currentTrack && totalTracks) {
+            return `Processing track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist}`;
+          } else if (currentTrack && totalTracks) {
+            // If we have track numbers but not names
+            return `Processing track ${currentTrack} of ${totalTracks} from album "${albumTitle}"`;
+          } else if (totalTracks) {
+            return `Processing album "${albumTitle}" (${totalTracks} tracks)`;
+          }
+          return `Processing album "${albumTitle}"...`;
+        } 
+        // Playlist download
+        else if (data.type === 'playlist') {
+          // For playlists, show current track info if available
+          if (trackName && artist && currentTrack && totalTracks) {
+            return `Processing track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist}`;
+          } else if (currentTrack && totalTracks) {
+            // If we have track numbers but not names
+            return `Processing track ${currentTrack} of ${totalTracks} from playlist "${playlistName}"`;
+          } else if (totalTracks) {
+            return `Processing playlist "${playlistName}" (${totalTracks} tracks)`;
+          }
+          return `Processing playlist "${playlistName}"...`;
+        }
+        return `Processing ${data.type}...`;
+        
+      case 'progress':
+        // Special case: If this is a track that's part of an album/playlist
+        if (data.type === 'track' && data.parent) {
+          if (data.parent.type === 'album') {
+            return `Downloading track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} (from album "${data.parent.title}")`;
+          } else if (data.parent.type === 'playlist') {
+            return `Downloading track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} (from playlist "${data.parent.name}")`;
+          }
+        }
+        
+        // Regular standalone track
+        if (data.type === 'track') {
+          return `Downloading track "${trackName}"${artist ? ` by ${artist}` : ''}${getParentInfo()}`;
+        } 
+        // Album download
+        else if (data.type === 'album') {
+          // For albums, show current track info if available
+          if (trackName && artist && currentTrack && totalTracks) {
+            return `Downloading track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist}`;
+          } else if (currentTrack && totalTracks) {
+            // If we have track numbers but not names
+            return `Downloading track ${currentTrack} of ${totalTracks} from album "${albumTitle}"`;
+          } else if (totalTracks) {
+            return `Downloading album "${albumTitle}" (${totalTracks} tracks)`;
+          }
+          return `Downloading album "${albumTitle}"...`;
+        } 
+        // Playlist download
+        else if (data.type === 'playlist') {
+          // For playlists, show current track info if available
+          if (trackName && artist && currentTrack && totalTracks) {
+            return `Downloading track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist}`;
+          } else if (currentTrack && totalTracks) {
+            // If we have track numbers but not names
+            return `Downloading track ${currentTrack} of ${totalTracks} from playlist "${playlistName}"`;
+          } else if (totalTracks) {
+            return `Downloading playlist "${playlistName}" (${totalTracks} tracks)`;
+          }
+          return `Downloading playlist "${playlistName}"...`;
         }
         return `Downloading ${data.type}...`;
       
-      case 'progress':
-        if (data.type === 'track') {
-          return `Downloading track "${trackName}"${artist ? ` by ${artist}` : ''}...`;
-        } else if (data.type === 'album' && currentTrack && totalTracks) {
-          return `Downloading track "${trackName}" (${currentTrack}/${totalTracks})...`;
-        } else if (data.type === 'playlist' && currentTrack && totalTracks) {
-          return `Downloading track "${trackName}" (${currentTrack}/${totalTracks})...`;
+      case 'real-time':
+      case 'real_time':
+        // Special case: If this is a track that's part of an album/playlist
+        if (data.type === 'track' && data.parent) {
+          if (data.parent.type === 'album') {
+            return `Downloading track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} - ${formattedPercentage}% (from album "${data.parent.title}")`;
+          } else if (data.parent.type === 'playlist') {
+            return `Downloading track ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} - ${formattedPercentage}% (from playlist "${data.parent.name}")`;
+          }
         }
-        return `Downloading  ${data.type}...`;
+        
+        // Regular standalone track
+        if (data.type === 'track') {
+          return `Downloading "${trackName}" - ${formattedPercentage}%${getParentInfo()}`;
+        } 
+        // Album with track info
+        else if (data.type === 'album' && trackName && artist) {
+          return `Downloading ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} - ${formattedPercentage}%`;
+        } 
+        // Playlist with track info
+        else if (data.type === 'playlist' && trackName && artist) {
+          return `Downloading ${currentTrack}/${totalTracks}: "${trackName}" by ${artist} - ${formattedPercentage}%`;
+        } 
+        // Generic with percentage
+        else {
+          const itemName = data.type === 'album' ? albumTitle : 
+                         (data.type === 'playlist' ? playlistName : data.type);
+          return `Downloading ${data.type} "${itemName}" - ${formattedPercentage}%`;
+        }
       
-      case 'complete':
       case 'done':
+      case 'complete':
         if (data.type === 'track') {
-          return `Finished track "${trackName}"${artist ? ` by ${artist}` : ''}`;
+          return `Downloaded "${trackName}"${artist ? ` by ${artist}` : ''} successfully${getParentInfo()}`;
         } else if (data.type === 'album') {
-          return `Finished album "${data.album || data.name}"${artist ? ` by ${artist}` : ''}`;
+          return `Downloaded album "${albumTitle}"${artist ? ` by ${artist}` : ''} successfully (${totalTracks} tracks)`;
         } else if (data.type === 'playlist') {
-          return `Finished playlist "${data.name}"${playlistOwner ? ` from ${playlistOwner}` : ''}`;
+          return `Downloaded playlist "${playlistName}"${playlistOwner ? ` by ${playlistOwner}` : ''} successfully (${totalTracks} tracks)`;
         }
-        return `Finished ${data.type} download`;
+        return `Downloaded ${data.type} successfully`;
+      
+      case 'skipped':
+        return `${trackName}${artist ? ` by ${artist}` : ''} was skipped: ${data.reason || 'Unknown reason'}`;
       
       case 'error':
-        let errorMsg = `Error: ${data.message || 'Unknown error'}`;
-        if (data.can_retry !== undefined) {
+        let errorMsg = `Error: ${data.error || data.message || 'Unknown error'}`;
+        if (data.retry_count !== undefined) {
+          errorMsg += ` (Attempt ${data.retry_count}/${this.MAX_RETRIES})`;
+        } else if (data.can_retry !== undefined) {
           if (data.can_retry) {
             errorMsg += ` (Can be retried)`;
           } else {
@@ -801,17 +1093,25 @@ class DownloadQueue {
         }
         return errorMsg;
       
-      case 'cancelled':
-        return 'Download cancelled';
-      
       case 'retrying':
-        if (data.retry_count !== undefined) {
-          return `Retrying download (attempt ${data.retry_count}/${this.MAX_RETRIES})`;
+        let retryMsg = 'Retrying';
+        if (data.retry_count) {
+          retryMsg += ` (${data.retry_count}/${this.MAX_RETRIES})`;
         }
-        return `Retrying download...`;
+        if (data.seconds_left) {
+          retryMsg += ` in ${data.seconds_left}s`;
+        }
+        if (data.error) {
+          retryMsg += `: ${data.error}`;
+        }
+        return retryMsg;
+      
+      case 'cancelled':
+      case 'cancel':
+        return 'Cancelling...';
       
       default:
-        return data.status;
+        return data.status || 'Unknown status';
     }
   }
 
@@ -897,7 +1197,7 @@ class DownloadQueue {
     }
     
     try {
-      // Close any existing SSE connection
+      // Close any existing polling interval
       this.clearPollingInterval(queueId);
       
       console.log(`Retrying download for ${entry.type} with URL: ${retryUrl}`);
@@ -943,7 +1243,7 @@ class DownloadQueue {
           entry.intervalId = null;
         }
         
-        // Set up a new SSE connection for the retried download
+        // Set up a new polling interval for the retried download
         this.setupPollingInterval(queueId);
         
         // Delete the old PRG file after a short delay to ensure the new one is properly set up
@@ -975,7 +1275,7 @@ class DownloadQueue {
     for (const queueId in this.queueEntries) {
       const entry = this.queueEntries[queueId];
       // Only start monitoring if the entry is not in a terminal state and is visible
-      if (!entry.hasEnded && this.isEntryVisible(queueId) && !this.sseConnections[queueId]) {
+      if (!entry.hasEnded && this.isEntryVisible(queueId) && !this.pollingIntervals[queueId]) {
         this.setupPollingInterval(queueId);
       }
     }
@@ -993,18 +1293,10 @@ class DownloadQueue {
     
     await this.loadConfig();
     
-    // Build the API URL with only necessary parameters
+    // Build the API URL with only the URL parameter as it's all that's needed
     let apiUrl = `/api/${type}/download?url=${encodeURIComponent(url)}`;
     
-    // Add name and artist if available for better progress display
-    if (item.name) {
-      apiUrl += `&name=${encodeURIComponent(item.name)}`;
-    }
-    if (item.artist) {
-      apiUrl += `&artist=${encodeURIComponent(item.artist)}`;
-    }
-    
-    // For artist downloads, include album_type
+    // For artist downloads, include album_type as it may still be needed
     if (type === 'artist' && albumType) {
       apiUrl += `&album_type=${encodeURIComponent(albumType)}`;
     }
@@ -1097,6 +1389,19 @@ class DownloadQueue {
       // Handle single-file downloads (tracks, albums, playlists)
       if (data.prg_file) {
         console.log(`Adding ${type} with PRG file: ${data.prg_file}`);
+        
+        // Store the initial metadata in the cache so it's available
+        // even before the first status update
+        this.queueCache[data.prg_file] = {
+          type,
+          status: 'initializing',
+          name: item.name || 'Unknown',
+          title: item.name || 'Unknown',
+          artist: item.artist || (item.artists && item.artists.length > 0 ? item.artists[0].name : ''),
+          owner: item.owner || (item.owner ? item.owner.display_name : ''),
+          total_tracks: item.total_tracks || 0
+        };
+        
         // Use direct monitoring for all downloads for consistency
         const queueId = this.addDownload(item, type, data.prg_file, apiUrl, true);
         
@@ -1181,15 +1486,60 @@ class DownloadQueue {
           
           // Use the enhanced original request info from the first line
           const originalRequest = prgData.original_request || {};
+          let lastLineData = prgData.last_line || {};
           
-          // Use the explicit display fields if available, or fall back to other fields
-          const dummyItem = {
-            name: prgData.display_title || originalRequest.display_title || originalRequest.name || prgFile,
-            artist: prgData.display_artist || originalRequest.display_artist || originalRequest.artist || '',
-            type: prgData.display_type || originalRequest.display_type || originalRequest.type || 'unknown',
-            url: originalRequest.url || '',
-            endpoint: originalRequest.endpoint || '',
-            download_type: originalRequest.download_type || ''
+          // First check if this is a track with a parent (part of an album/playlist)
+          let itemType = lastLineData.type || prgData.display_type || originalRequest.display_type || originalRequest.type || 'unknown';
+          let dummyItem = {};
+          
+          // If this is a track with a parent, treat it as the parent type for UI purposes
+          if (lastLineData.type === 'track' && lastLineData.parent) {
+            const parent = lastLineData.parent;
+            
+            if (parent.type === 'album') {
+              itemType = 'album';
+              dummyItem = {
+                name: parent.title || 'Unknown Album',
+                artist: parent.artist || 'Unknown Artist',
+                type: 'album',
+                total_tracks: parent.total_tracks || 0,
+                url: parent.url || '',
+                // Keep track of the current track info for progress display
+                current_track: lastLineData.current_track,
+                total_tracks: parent.total_tracks || lastLineData.total_tracks,
+                // Store parent info directly in the item
+                parent: parent
+              };
+            } else if (parent.type === 'playlist') {
+              itemType = 'playlist';
+              dummyItem = {
+                name: parent.name || 'Unknown Playlist',
+                owner: parent.owner || 'Unknown Creator',
+                type: 'playlist',
+                total_tracks: parent.total_tracks || 0,
+                url: parent.url || '',
+                // Keep track of the current track info for progress display
+                current_track: lastLineData.current_track,
+                total_tracks: parent.total_tracks || lastLineData.total_tracks,
+                // Store parent info directly in the item
+                parent: parent
+              };
+            }
+          } else {
+            // Use the explicit display fields if available, or fall back to other fields
+            dummyItem = {
+              name: prgData.display_title || originalRequest.display_title || lastLineData.name || lastLineData.song || lastLineData.title || originalRequest.name || prgFile,
+              artist: prgData.display_artist || originalRequest.display_artist || lastLineData.artist || originalRequest.artist || '',
+              type: itemType,
+              url: originalRequest.url || lastLineData.url || '',
+              endpoint: originalRequest.endpoint || '',
+              download_type: originalRequest.download_type || '',
+              // Include any available track info
+              song: lastLineData.song,
+              title: lastLineData.title,
+              total_tracks: lastLineData.total_tracks,
+              current_track: lastLineData.current_track
+            };
           };
           
           // Check if this is a retry file and get the retry count
@@ -1227,18 +1577,39 @@ class DownloadQueue {
           
           // Add to download queue
           const queueId = this.generateQueueId();
-          const entry = this.createQueueEntry(dummyItem, dummyItem.type, prgFile, queueId, requestUrl);
+          const entry = this.createQueueEntry(dummyItem, itemType, prgFile, queueId, requestUrl);
           entry.retryCount = retryCount;
           
           // Set the entry's last status from the PRG file
           if (prgData.last_line) {
             entry.lastStatus = prgData.last_line;
             
+            // If this is a track that's part of an album/playlist
+            if (prgData.last_line.parent) {
+              entry.parentInfo = prgData.last_line.parent;
+            }
+            
             // Make sure to save the status to the cache for persistence
             this.queueCache[prgFile] = prgData.last_line;
             
             // Apply proper status classes
             this.applyStatusClasses(entry, prgData.last_line);
+            
+            // Update log display with current info
+            const logElement = entry.element.querySelector('.log');
+            if (logElement) {
+              if (prgData.last_line.song && prgData.last_line.artist && 
+                  ['progress', 'real-time', 'real_time', 'processing', 'downloading'].includes(prgData.last_line.status)) {
+                logElement.textContent = `Currently downloading: ${prgData.last_line.song} by ${prgData.last_line.artist}`;
+              } else if (entry.parentInfo && !['done', 'complete', 'error', 'skipped'].includes(prgData.last_line.status)) {
+                // Show parent info for non-terminal states
+                if (entry.parentInfo.type === 'album') {
+                  logElement.textContent = `From album: ${entry.parentInfo.title}`;
+                } else if (entry.parentInfo.type === 'playlist') {
+                  logElement.textContent = `From playlist: ${entry.parentInfo.name} by ${entry.parentInfo.owner}`;
+                }
+              }
+            }
           }
           
           this.queueEntries[queueId] = entry;
@@ -1305,7 +1676,7 @@ class DownloadQueue {
     return !!this.config.explicitFilter;
   }
 
-  /* Sets up a Server-Sent Events connection for real-time status updates */
+  /* Sets up a polling interval for real-time status updates */
   setupPollingInterval(queueId) {
     console.log(`Setting up polling for ${queueId}`);
     const entry = this.queueEntries[queueId];
@@ -1321,13 +1692,13 @@ class DownloadQueue {
       // Immediately fetch initial data
       this.fetchDownloadStatus(queueId);
       
-      // Create a polling interval of 1 second
+      // Create a polling interval of 500ms for more responsive UI updates
       const intervalId = setInterval(() => {
         this.fetchDownloadStatus(queueId);
-      }, 1000);
+      }, 500);
       
       // Store the interval ID for later cleanup
-      this.sseConnections[queueId] = intervalId;
+      this.pollingIntervals[queueId] = intervalId;
     } catch (error) {
       console.error(`Error creating polling for ${queueId}:`, error);
       const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
@@ -1353,6 +1724,27 @@ class DownloadQueue {
       
       const data = await response.json();
       
+      // If the last_line doesn't have name/artist/title info, add it from our stored item data
+      if (data.last_line && entry.item) {
+        if (!data.last_line.name && entry.item.name) {
+          data.last_line.name = entry.item.name;
+        }
+        if (!data.last_line.title && entry.item.name) {
+          data.last_line.title = entry.item.name;
+        }
+        if (!data.last_line.artist && entry.item.artist) {
+          data.last_line.artist = entry.item.artist;
+        } else if (!data.last_line.artist && entry.item.artists && entry.item.artists.length > 0) {
+          data.last_line.artist = entry.item.artists[0].name;
+        }
+        if (!data.last_line.owner && entry.item.owner) {
+          data.last_line.owner = entry.item.owner;
+        }
+        if (!data.last_line.total_tracks && entry.item.total_tracks) {
+          data.last_line.total_tracks = entry.item.total_tracks;
+        }
+      }
+      
       // Initialize the download type if needed
       if (data.type && !entry.type) {
         console.log(`Setting entry type to: ${data.type}`);
@@ -1367,8 +1759,20 @@ class DownloadQueue {
         }
       }
       
-      // Filter the last_line if it doesn't match the entry's type
-      if (data.last_line && data.last_line.type && entry.type && data.last_line.type !== entry.type) {
+      // Special handling for track updates that are part of an album/playlist
+      // Don't filter these out as they contain important track progress info
+      if (data.last_line && data.last_line.type === 'track' && data.last_line.parent) {
+        // This is a track update that's part of an album/playlist - keep it
+        if ((entry.type === 'album' && data.last_line.parent.type === 'album') ||
+            (entry.type === 'playlist' && data.last_line.parent.type === 'playlist')) {
+          console.log(`Processing track update for ${entry.type} download: ${data.last_line.song}`);
+          // Continue processing - don't return
+        }
+      }
+      // Only filter out updates that don't match entry type AND don't have a relevant parent
+      else if (data.last_line && data.last_line.type && entry.type && 
+               data.last_line.type !== entry.type && 
+               (!data.last_line.parent || data.last_line.parent.type !== entry.type)) {
         console.log(`Skipping status update with type '${data.last_line.type}' for entry with type '${entry.type}'`);
         return;
       }
@@ -1380,6 +1784,14 @@ class DownloadQueue {
       if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status)) {
         console.log(`Terminal state detected: ${data.last_line.status} for ${queueId}`);
         entry.hasEnded = true;
+        
+        // For cancelled downloads, clean up immediately
+        if (data.last_line.status === 'cancelled' || data.last_line.status === 'cancel') {
+          console.log('Cleaning up cancelled download immediately');
+          this.clearPollingInterval(queueId);
+          this.cleanupEntry(queueId);
+          return; // No need to process further
+        }
         
         // Only set up cleanup if this is not an error that we're in the process of retrying
         // If status is 'error' but the status message contains 'Retrying', don't clean up
@@ -1412,19 +1824,18 @@ class DownloadQueue {
   }
   
   clearPollingInterval(queueId) {
-    if (this.sseConnections[queueId]) {
+    if (this.pollingIntervals[queueId]) {
       console.log(`Stopping polling for ${queueId}`);
       try {
-        // Clear the interval instead of closing the SSE connection
-        clearInterval(this.sseConnections[queueId]);
+        clearInterval(this.pollingIntervals[queueId]);
       } catch (error) {
         console.error(`Error stopping polling for ${queueId}:`, error);
       }
-      delete this.sseConnections[queueId];
+      delete this.pollingIntervals[queueId];
     }
   }
 
-  /* Handle SSE update events */
+  /* Handle status updates from the progress API */
   handleStatusUpdate(queueId, data) {
     const entry = this.queueEntries[queueId];
     if (!entry) {
@@ -1432,74 +1843,73 @@ class DownloadQueue {
       return;
     }
     
-    // Get status from the appropriate location in the data structure
-    // For the new polling API, data is structured differently than the SSE events
-    let status, message, progress;
-    
     // Extract the actual status data from the API response
     const statusData = data.last_line || {};
     
-    // Skip updates where the type doesn't match the entry's type
-    if (statusData.type && entry.type && statusData.type !== entry.type) {
+    // Special handling for track status updates that are part of an album/playlist
+    // We want to keep these for showing the track-by-track progress
+    if (statusData.type === 'track' && statusData.parent) {
+      // If this is a track that's part of our album/playlist, keep it
+      if ((entry.type === 'album' && statusData.parent.type === 'album') ||
+          (entry.type === 'playlist' && statusData.parent.type === 'playlist')) {
+        console.log(`Processing track status update for ${entry.type}: ${statusData.song}`);
+      }
+    }
+    // Only skip updates where type doesn't match AND there's no relevant parent relationship
+    else if (statusData.type && entry.type && statusData.type !== entry.type && 
+             (!statusData.parent || statusData.parent.type !== entry.type)) {
+      console.log(`Skipping mismatched type: update=${statusData.type}, entry=${entry.type}`);
       return;
     }
     
-    status = statusData.status || data.event || 'unknown';
+    // Get primary status
+    const status = statusData.status || data.event || 'unknown';
     
-    // For new polling API structure
-    if (data.progress_message) {
-      message = data.progress_message;
-    } else if (statusData.message) {
-      message = statusData.message;
-    } else {
-      message = `Status: ${status}`;
+    // Store the status data for potential retries
+    entry.lastStatus = statusData;
+    entry.lastUpdated = Date.now();
+    
+    // Update type if needed - could be more specific now (e.g., from 'album' to 'compilation')
+    if (statusData.type && statusData.type !== entry.type) {
+      entry.type = statusData.type;
+      const typeEl = entry.element.querySelector('.type');
+      if (typeEl) {
+        const displayType = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
+        typeEl.textContent = displayType;
+        typeEl.className = `type ${entry.type}`;
+      }
     }
 
-    // Update the title with better information if available
-    // This is crucial for artist discography downloads which initially use generic titles
-    const titleEl = entry.element.querySelector('.title');
-    if (titleEl) {
-      // Check various data sources for a better title
-      let betterTitle = null;
-      
-      // First check if data has original_request with name
-      if (data.original_request && data.original_request.name) {
-        betterTitle = data.original_request.name;
-      }
-      // Then check if statusData has album or name
-      else if (statusData.album) {
-        betterTitle = statusData.album;
-      }
-      else if (statusData.name) {
-        betterTitle = statusData.name;
-      }
-      // Then check display_title from various sources
-      else if (data.display_title) {
-        betterTitle = data.display_title;
-      }
-      else if (statusData.display_title) {
-        betterTitle = statusData.display_title;
-      }
-      
-      // If we found a better title and it's different from what we already have
-      if (betterTitle && betterTitle !== titleEl.textContent && 
-          // Don't replace if current title is more specific than "Artist - Album" 
-          (titleEl.textContent.includes(' - Album') || titleEl.textContent === 'Unknown Album')) {
-        console.log(`Updating title from "${titleEl.textContent}" to "${betterTitle}"`);
-        titleEl.textContent = betterTitle;
-        // Also update the item's name for future reference
-        entry.item.name = betterTitle;
-      }
+    // Update the title and artist with better information if available
+    this.updateItemMetadata(entry, statusData, data);
+    
+    // Generate appropriate user-friendly message
+    const message = this.getStatusMessage(statusData);
+    
+    // Update log message - but only if we're not handling a track update for an album/playlist
+    // That case is handled separately in updateItemMetadata to ensure we show the right track info
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+    if (logElement && !(statusData.type === 'track' && statusData.parent && 
+        (entry.type === 'album' || entry.type === 'playlist'))) {
+      logElement.textContent = message;
     }
     
-    // Track progress data
-    if (data.progress_percent) {
-      progress = data.progress_percent;
-    } else if (statusData.overall_progress) {
-      progress = statusData.overall_progress;
-    } else if (statusData.progress) {
-      progress = statusData.progress;
+    // Handle real-time progress data for single track downloads
+    if (status === 'real-time') {
+      this.updateRealTimeProgress(entry, statusData);
     }
+    
+    // Handle overall progress for albums and playlists
+    const isMultiTrack = entry.type === 'album' || entry.type === 'playlist';
+    if (isMultiTrack) {
+      this.updateMultiTrackProgress(entry, statusData);
+    } else {
+      // For single tracks, update the track progress
+      this.updateSingleTrackProgress(entry, statusData);
+    }
+    
+    // Apply appropriate status classes
+    this.applyStatusClasses(entry, status);
     
     // Special handling for error status
     if (status === 'error') {
@@ -1541,7 +1951,6 @@ class DownloadQueue {
       console.log(`Error for ${entry.type} download. Retry URL: ${retryUrl}`);
       
       // Get or create the log element
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (logElement) {
         // Always show retry if we have a URL, even if we've reached retry limit
         const canRetry = !!retryUrl;
@@ -1607,44 +2016,481 @@ class DownloadQueue {
           }, 10000);
         }
       }
+    }
+    
+    // Handle terminal states for non-error cases
+    if (['complete', 'cancel', 'cancelled', 'done', 'skipped'].includes(status)) {
+      entry.hasEnded = true;
+      this.handleDownloadCompletion(entry, queueId, statusData);
+    }
+    
+    // Cache the status for potential page reloads
+    this.queueCache[entry.prgFile] = statusData;
+    localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
+  }
+
+  // Update item metadata (title, artist, etc.)
+  updateItemMetadata(entry, statusData, data) {
+    const titleEl = entry.element.querySelector('.title');
+    const artistEl = entry.element.querySelector('.artist');
+    
+    if (titleEl) {
+      // Check various data sources for a better title
+      let betterTitle = null;
       
-      // Update CSS classes for error state
-      entry.element.classList.remove('queued', 'initializing', 'downloading', 'processing', 'progress');
-      entry.element.classList.add('error');
-      
-      // Close SSE connection
-      this.clearPollingInterval(queueId);
-    } else {
-      // For non-error states, update the log element with the latest message
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-      if (logElement && message) {
-        logElement.textContent = message;
-      } else if (logElement) {
-        // Generate a message if none provided
-        logElement.textContent = this.getStatusMessage(statusData);
+      // First check the statusData
+      if (statusData.song) {
+        betterTitle = statusData.song;
+      } else if (statusData.album) {
+        betterTitle = statusData.album;
+      } else if (statusData.name) {
+        betterTitle = statusData.name;
+      }
+      // Then check if data has original_request with name
+      else if (data.original_request && data.original_request.name) {
+        betterTitle = data.original_request.name;
+      }
+      // Then check display_title from various sources
+      else if (statusData.display_title) {
+        betterTitle = statusData.display_title;
+      } else if (data.display_title) {
+        betterTitle = data.display_title;
       }
       
-      // Set the proper status classes on the list item
-      this.applyStatusClasses(entry, status);
-      
-      // Handle progress indicators
-      const progressBar = entry.element.querySelector('.progress-bar');
-      if (progressBar && typeof progress === 'number') {
-        progressBar.style.width = `${progress}%`;
-        progressBar.setAttribute('aria-valuenow', progress);
-        
-        if (progress >= 100) {
-          progressBar.classList.add('bg-success');
-        } else {
-          progressBar.classList.remove('bg-success');
-        }
+      // Update title if we found a better one
+      if (betterTitle && betterTitle !== titleEl.textContent) {
+        titleEl.textContent = betterTitle;
+        // Also update the item's name for future reference
+        entry.item.name = betterTitle;
+      }
+    }
+    
+    // Update artist if available
+    if (artistEl) {
+      let artist = statusData.artist || data.display_artist || '';
+      if (artist && (!artistEl.textContent || artistEl.textContent !== artist)) {
+        artistEl.textContent = artist;
+        // Update item data
+        entry.item.artist = artist;
       }
     }
   }
-
-  /* Close all active SSE connections */
+  
+  // Update real-time progress for track downloads
+  updateRealTimeProgress(entry, statusData) {
+    // Get track progress bar
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile);
+    const timeElapsedEl = entry.element.querySelector('#time-elapsed-' + entry.uniqueId + '-' + entry.prgFile);
+    
+    if (trackProgressBar && statusData.progress !== undefined) {
+      // Update track progress bar
+      const progress = parseFloat(statusData.progress);
+      trackProgressBar.style.width = `${progress}%`;
+      trackProgressBar.setAttribute('aria-valuenow', progress);
+      
+      // Add success class when complete
+      if (progress >= 100) {
+        trackProgressBar.classList.add('complete');
+      } else {
+        trackProgressBar.classList.remove('complete');
+      }
+    }
+    
+    // Display time elapsed if available
+    if (timeElapsedEl && statusData.time_elapsed !== undefined) {
+      const seconds = Math.floor(statusData.time_elapsed / 1000);
+      const formattedTime = seconds < 60 
+        ? `${seconds}s` 
+        : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      timeElapsedEl.textContent = formattedTime;
+    }
+  }
+  
+  // Update progress for single track downloads
+  updateSingleTrackProgress(entry, statusData) {
+    // Get track progress bar and other UI elements
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile);
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+    const titleElement = entry.element.querySelector('.title');
+    const artistElement = entry.element.querySelector('.artist');
+    
+    // If this track has a parent, this is actually part of an album/playlist
+    // We should update the entry type and handle it as a multi-track download
+    if (statusData.parent && (statusData.parent.type === 'album' || statusData.parent.type === 'playlist')) {
+      // Store parent info
+      entry.parentInfo = statusData.parent;
+      
+      // Update entry type to match parent type
+      entry.type = statusData.parent.type;
+      
+      // Update UI to reflect the parent type
+      const typeEl = entry.element.querySelector('.type');
+      if (typeEl) {
+        const displayType = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
+        typeEl.textContent = displayType;
+        typeEl.className = `type ${entry.type}`;
+      }
+      
+      // Update title and subtitle based on parent type
+      if (statusData.parent.type === 'album') {
+        if (titleElement) titleElement.textContent = statusData.parent.title || 'Unknown album';
+        if (artistElement) artistElement.textContent = statusData.parent.artist || 'Unknown artist';
+      } else if (statusData.parent.type === 'playlist') {
+        if (titleElement) titleElement.textContent = statusData.parent.name || 'Unknown playlist';
+        if (artistElement) artistElement.textContent = statusData.parent.owner || 'Unknown creator';
+      }
+      
+      // Now delegate to the multi-track progress updater
+      this.updateMultiTrackProgress(entry, statusData);
+      return;
+    }
+    
+    // For standalone tracks (without parent), update title and subtitle
+    if (!statusData.parent && statusData.song && titleElement) {
+      titleElement.textContent = statusData.song;
+    }
+    
+    if (!statusData.parent && statusData.artist && artistElement) {
+      artistElement.textContent = statusData.artist;
+    }
+    
+    // For individual track downloads, show the parent context if available
+    if (!['done', 'complete', 'error', 'skipped'].includes(statusData.status)) {
+      // First check if we have parent data in the current status update
+      if (statusData.parent && logElement) {
+        // Store parent info in the entry for persistence across refreshes
+        entry.parentInfo = statusData.parent;
+        
+        let infoText = '';
+        if (statusData.parent.type === 'album') {
+          infoText = `From album: ${statusData.parent.title}`;
+        } else if (statusData.parent.type === 'playlist') {
+          infoText = `From playlist: ${statusData.parent.name} by ${statusData.parent.owner}`;
+        }
+        
+        if (infoText) {
+          logElement.textContent = infoText;
+        }
+      } 
+      // If no parent in current update, use stored parent info if available
+      else if (entry.parentInfo && logElement) {
+        let infoText = '';
+        if (entry.parentInfo.type === 'album') {
+          infoText = `From album: ${entry.parentInfo.title}`;
+        } else if (entry.parentInfo.type === 'playlist') {
+          infoText = `From playlist: ${entry.parentInfo.name} by ${entry.parentInfo.owner}`;
+        }
+        
+        if (infoText) {
+          logElement.textContent = infoText;
+        }
+      }
+    }
+    
+    // Calculate progress based on available data
+    let progress = 0;
+    
+    // Real-time progress for direct track download
+    if (statusData.status === 'real-time' && statusData.progress !== undefined) {
+      progress = parseFloat(statusData.progress);
+    } else if (statusData.percent !== undefined) {
+      progress = parseFloat(statusData.percent) * 100;
+    } else if (statusData.percentage !== undefined) {
+      progress = parseFloat(statusData.percentage) * 100;
+    } else if (statusData.status === 'done' || statusData.status === 'complete') {
+      progress = 100;
+    } else if (statusData.current_track && statusData.total_tracks) {
+      // If we don't have real-time progress but do have track position
+      progress = (parseInt(statusData.current_track, 10) / parseInt(statusData.total_tracks, 10)) * 100;
+    }
+    
+    // Update track progress bar if available
+    if (trackProgressBar) {
+      // Ensure numeric progress and prevent NaN
+      const safeProgress = isNaN(progress) ? 0 : Math.max(0, Math.min(100, progress));
+      
+      trackProgressBar.style.width = `${safeProgress}%`;
+      trackProgressBar.setAttribute('aria-valuenow', safeProgress);
+      
+      // Make sure progress bar is visible
+      const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile);
+      if (trackProgressContainer) {
+        trackProgressContainer.style.display = 'block';
+      }
+      
+      // Add success class when complete
+      if (safeProgress >= 100) {
+        trackProgressBar.classList.add('complete');
+      } else {
+        trackProgressBar.classList.remove('complete');
+      }
+    }
+  }
+  
+  // Update progress for multi-track downloads (albums and playlists)
+  updateMultiTrackProgress(entry, statusData) {
+    // Get progress elements
+    const progressCounter = document.getElementById(`progress-count-${entry.uniqueId}-${entry.prgFile}`);
+    const overallProgressBar = document.getElementById(`overall-bar-${entry.uniqueId}-${entry.prgFile}`);
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile);
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+    const titleElement = entry.element.querySelector('.title');
+    const artistElement = entry.element.querySelector('.artist');
+    
+    // Initialize track progress variables
+    let currentTrack = 0;
+    let totalTracks = 0;
+    let trackProgress = 0;
+    
+    // Handle track-level updates for album/playlist downloads
+    if (statusData.type === 'track' && statusData.parent && 
+        (entry.type === 'album' || entry.type === 'playlist')) {
+      console.log('Processing track update for multi-track download:', statusData);
+      
+      // Update parent title/artist for album
+      if (entry.type === 'album' && statusData.parent.type === 'album') {
+        if (titleElement && statusData.parent.title) {
+          titleElement.textContent = statusData.parent.title;
+        }
+        if (artistElement && statusData.parent.artist) {
+          artistElement.textContent = statusData.parent.artist;
+        }
+      } 
+      // Update parent title/owner for playlist
+      else if (entry.type === 'playlist' && statusData.parent.type === 'playlist') {
+        if (titleElement && statusData.parent.name) {
+          titleElement.textContent = statusData.parent.name;
+        }
+        if (artistElement && statusData.parent.owner) {
+          artistElement.textContent = statusData.parent.owner;
+        }
+      }
+      
+      // Get current track and total tracks from the status data
+      if (statusData.current_track !== undefined) {
+        currentTrack = parseInt(statusData.current_track, 10);
+        
+        // Get total tracks - try from statusData first, then from parent
+        if (statusData.total_tracks !== undefined) {
+          totalTracks = parseInt(statusData.total_tracks, 10);
+        } else if (statusData.parent && statusData.parent.total_tracks !== undefined) {
+          totalTracks = parseInt(statusData.parent.total_tracks, 10);
+        }
+        
+        console.log(`Track info: ${currentTrack}/${totalTracks}`);
+      }
+      
+      // Get track progress for real-time updates
+      if (statusData.status === 'real-time' && statusData.progress !== undefined) {
+        trackProgress = parseFloat(statusData.progress);
+      }
+      
+      // Update the track progress counter display
+      if (progressCounter && totalTracks > 0) {
+        progressCounter.textContent = `${currentTrack}/${totalTracks}`;
+      }
+      
+      // Update the status message to show current track
+      if (logElement && statusData.song && statusData.artist) {
+        let progressInfo = '';
+        if (statusData.status === 'real-time' && trackProgress > 0) {
+          progressInfo = ` - ${trackProgress.toFixed(1)}%`;
+        }
+        logElement.textContent = `Currently downloading: ${statusData.song} by ${statusData.artist} (${currentTrack}/${totalTracks}${progressInfo})`;
+      }
+      
+      // Calculate and update the overall progress bar
+      if (totalTracks > 0) {
+        let overallProgress = 0;
+        
+        if (statusData.status === 'real-time' && trackProgress !== undefined) {
+          // Use the formula: ((current_track-1)/(total_tracks))+(1/total_tracks*progress)
+          const completedTracksProgress = (currentTrack - 1) / totalTracks;
+          const currentTrackContribution = (1 / totalTracks) * (trackProgress / 100);
+          overallProgress = (completedTracksProgress + currentTrackContribution) * 100;
+          console.log(`Real-time overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks}, Progress: ${trackProgress}%)`);
+        } else {
+          // Standard progress calculation based on current track position
+          overallProgress = (currentTrack / totalTracks) * 100;
+          console.log(`Standard overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks})`);
+        }
+        
+        // Update the progress bar
+        if (overallProgressBar) {
+          const safeProgress = Math.max(0, Math.min(100, overallProgress));
+          overallProgressBar.style.width = `${safeProgress}%`;
+          overallProgressBar.setAttribute('aria-valuenow', safeProgress);
+          
+          if (safeProgress >= 100) {
+            overallProgressBar.classList.add('complete');
+          } else {
+            overallProgressBar.classList.remove('complete');
+          }
+        }
+        
+        // Update the track-level progress bar
+        if (trackProgressBar) {
+          // Make sure progress bar container is visible
+          const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile);
+          if (trackProgressContainer) {
+            trackProgressContainer.style.display = 'block';
+          }
+          
+          if (statusData.status === 'real-time') {
+            // Real-time progress for the current track
+            const safeTrackProgress = Math.max(0, Math.min(100, trackProgress));
+            trackProgressBar.style.width = `${safeTrackProgress}%`;
+            trackProgressBar.setAttribute('aria-valuenow', safeTrackProgress);
+            trackProgressBar.classList.add('real-time');
+            
+            if (safeTrackProgress >= 100) {
+              trackProgressBar.classList.add('complete');
+            } else {
+              trackProgressBar.classList.remove('complete');
+            }
+          } else {
+            // Indeterminate progress animation for non-real-time updates
+            trackProgressBar.classList.add('progress-pulse');
+            trackProgressBar.style.width = '100%';
+            trackProgressBar.setAttribute('aria-valuenow', 50);
+          }
+        }
+        
+        // Store progress for potential later use
+        entry.progress = overallProgress;
+      }
+      
+      return; // Skip the standard handling below
+    }
+    
+    // Standard handling for album/playlist direct updates (not track-level):
+    // Update title and subtitle based on item type
+    if (entry.type === 'album') {
+      if (statusData.title && titleElement) {
+        titleElement.textContent = statusData.title;
+      }
+      if (statusData.artist && artistElement) {
+        artistElement.textContent = statusData.artist;
+      }
+    } else if (entry.type === 'playlist') {
+      if (statusData.name && titleElement) {
+        titleElement.textContent = statusData.name;
+      }
+      if (statusData.owner && artistElement) {
+        artistElement.textContent = statusData.owner;
+      }
+    }
+    
+    // Extract track counting data from status data
+    if (statusData.current_track && statusData.total_tracks) {
+      currentTrack = parseInt(statusData.current_track, 10);
+      totalTracks = parseInt(statusData.total_tracks, 10);
+    } else if (statusData.parsed_current_track && statusData.parsed_total_tracks) {
+      currentTrack = parseInt(statusData.parsed_current_track, 10);
+      totalTracks = parseInt(statusData.parsed_total_tracks, 10);
+    } else if (statusData.current_track && /^\d+\/\d+$/.test(statusData.current_track)) {
+      // Parse formats like "1/12"
+      const parts = statusData.current_track.split('/');
+      currentTrack = parseInt(parts[0], 10);
+      totalTracks = parseInt(parts[1], 10);
+    }
+    
+    // Get track progress for real-time downloads
+    if (statusData.status === 'real-time' && statusData.progress !== undefined) {
+      // For real-time downloads, progress comes as a percentage value (0-100)
+      trackProgress = parseFloat(statusData.progress);
+    } else if (statusData.percent !== undefined) {
+      // Handle percent values (0-1)
+      trackProgress = parseFloat(statusData.percent) * 100;
+    } else if (statusData.percentage !== undefined) {
+      // Handle percentage values (0-1)
+      trackProgress = parseFloat(statusData.percentage) * 100;
+    }
+    
+    // Update progress counter if available
+    if (progressCounter && totalTracks > 0) {
+      progressCounter.textContent = `${currentTrack}/${totalTracks}`;
+    }
+    
+    // Calculate overall progress
+    let overallProgress = 0;
+    if (totalTracks > 0) {
+      // If we have an explicit overall_progress, use it
+      if (statusData.overall_progress !== undefined) {
+        overallProgress = parseFloat(statusData.overall_progress);
+      } else if (statusData.status === 'real-time' && trackProgress !== undefined) {
+        // Calculate based on formula: ((current_track-1)/(total_tracks))+(1/total_tracks*progress)
+        // This gives a precise calculation for real-time downloads
+        const completedTracksProgress = (currentTrack - 1) / totalTracks;
+        const currentTrackContribution = (1 / totalTracks) * (trackProgress / 100);
+        overallProgress = (completedTracksProgress + currentTrackContribution) * 100;
+        console.log(`Real-time progress: Track ${currentTrack}/${totalTracks}, Track progress: ${trackProgress}%, Overall: ${overallProgress.toFixed(2)}%`);
+      } else {
+        // For non-real-time downloads, show percentage of tracks downloaded
+        // Using current_track relative to total_tracks
+        overallProgress = (currentTrack / totalTracks) * 100;
+        console.log(`Standard progress: Track ${currentTrack}/${totalTracks}, Overall: ${overallProgress.toFixed(2)}%`);
+      }
+      
+      // Update overall progress bar
+      if (overallProgressBar) {
+        // Ensure progress is between 0-100
+        const safeProgress = Math.max(0, Math.min(100, overallProgress));
+        overallProgressBar.style.width = `${safeProgress}%`;
+        overallProgressBar.setAttribute('aria-valuenow', safeProgress);
+        
+        // Add success class when complete
+        if (safeProgress >= 100) {
+          overallProgressBar.classList.add('complete');
+        } else {
+          overallProgressBar.classList.remove('complete');
+        }
+      }
+      
+      // Update track progress bar for current track in multi-track items
+      if (trackProgressBar) {
+        // Make sure progress bar container is visible
+        const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile);
+        if (trackProgressContainer) {
+          trackProgressContainer.style.display = 'block';
+        }
+        
+        if (statusData.status === 'real-time' || statusData.status === 'real_time') {
+          // For real-time updates, use the track progress for the small green progress bar
+          // This shows download progress for the current track only
+          const safeProgress = isNaN(trackProgress) ? 0 : Math.max(0, Math.min(100, trackProgress));
+          trackProgressBar.style.width = `${safeProgress}%`;
+          trackProgressBar.setAttribute('aria-valuenow', safeProgress);
+          trackProgressBar.classList.add('real-time');
+          
+          if (safeProgress >= 100) {
+            trackProgressBar.classList.add('complete');
+          } else {
+            trackProgressBar.classList.remove('complete');
+          }
+        } else if (['progress', 'processing'].includes(statusData.status)) {
+          // For non-real-time progress updates, show an indeterminate-style progress
+          // by using a pulsing animation via CSS
+          trackProgressBar.classList.add('progress-pulse');
+          trackProgressBar.style.width = '100%';
+          trackProgressBar.setAttribute('aria-valuenow', 50); // indicate in-progress
+        } else {
+          // For other status updates, use current track position
+          trackProgressBar.classList.remove('progress-pulse');
+          const trackPositionPercent = currentTrack > 0 ? 100 : 0;
+          trackProgressBar.style.width = `${trackPositionPercent}%`;
+          trackProgressBar.setAttribute('aria-valuenow', trackPositionPercent);
+        }
+      }
+      
+      // Store the progress in the entry for potential later use
+      entry.progress = overallProgress;
+    }
+  }
+  
+  /* Close all active polling intervals */
   clearAllPollingIntervals() {
-    for (const queueId in this.sseConnections) {
+    for (const queueId in this.pollingIntervals) {
       this.clearPollingInterval(queueId);
     }
   }

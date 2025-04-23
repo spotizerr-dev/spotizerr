@@ -52,122 +52,13 @@ def get_prg_file(task_id):
             status_count = len(all_statuses)
             logger.debug(f"API: Task {task_id} has {status_count} status updates")
             
-            # Prepare the response with basic info
+            # Prepare the simplified response with just the requested info
             response = {
-                "type": task_info.get("type", ""),
-                "name": task_info.get("name", ""),
-                "artist": task_info.get("artist", ""),
                 "last_line": last_status,
-                "original_request": original_request,
-                "display_title": original_request.get("display_title", task_info.get("name", "")),
-                "display_type": original_request.get("display_type", task_info.get("type", "")),
-                "display_artist": original_request.get("display_artist", task_info.get("artist", "")),
-                "status_count": status_count,
+                "timestamp": time.time(),
                 "task_id": task_id,
-                "timestamp": time.time()
+                "status_count": status_count
             }
-            
-            # Handle different status types 
-            if last_status:
-                status_type = last_status.get("status", "unknown")
-                
-                # Set event type based on status (like in the previous SSE implementation)
-                event_type = "update"
-                if status_type in [ProgressState.COMPLETE, ProgressState.DONE]:
-                    event_type = "complete"
-                elif status_type == ProgressState.TRACK_COMPLETE:
-                    event_type = "track_complete"
-                elif status_type == ProgressState.ERROR:
-                    event_type = "error"
-                elif status_type in [ProgressState.TRACK_PROGRESS, ProgressState.REAL_TIME]:
-                    event_type = "progress"
-                    
-                response["event"] = event_type
-                
-                # For terminal statuses (complete, error, cancelled)
-                if status_type in [ProgressState.COMPLETE, ProgressState.ERROR, ProgressState.CANCELLED]:
-                    response["progress_message"] = last_status.get("message", f"Download {status_type}")
-                
-                # For progress status with track information
-                elif status_type == "progress" and last_status.get("track"):
-                    # Add explicit track progress fields to the top level for easy access
-                    response["current_track"] = last_status.get("track", "")
-                    response["track_number"] = last_status.get("parsed_current_track", 0)
-                    response["total_tracks"] = last_status.get("parsed_total_tracks", 0)
-                    response["progress_percent"] = last_status.get("overall_progress", 0)
-                    response["album"] = last_status.get("album", "")
-                    
-                    # Format a nice progress message for display
-                    track_info = last_status.get("track", "")
-                    current = last_status.get("parsed_current_track", 0)
-                    total = last_status.get("parsed_total_tracks", 0)
-                    progress = last_status.get("overall_progress", 0)
-                    
-                    if current and total:
-                        response["progress_message"] = f"Downloading track {current}/{total} ({progress}%): {track_info}"
-                    elif track_info:
-                        response["progress_message"] = f"Downloading: {track_info}"
-                
-                # For real-time status messages
-                elif status_type == "real_time":
-                    # Add real-time specific fields
-                    response["current_song"] = last_status.get("song", "")
-                    response["percent"] = last_status.get("percent", 0)
-                    response["percentage"] = last_status.get("percentage", 0)
-                    response["time_elapsed"] = last_status.get("time_elapsed", 0)
-                    
-                    # Format a nice progress message for display
-                    song = last_status.get("song", "")
-                    percent = last_status.get("percent", 0)
-                    if song:
-                        response["progress_message"] = f"Downloading {song} ({percent}%)"
-                    else:
-                        response["progress_message"] = f"Downloading ({percent}%)"
-                
-                # For initializing status
-                elif status_type == "initializing":
-                    album = last_status.get("album", "")
-                    if album:
-                        response["progress_message"] = f"Initializing download for {album}"
-                    else:
-                        response["progress_message"] = "Initializing download..."
-                
-                # For processing status (default)
-                elif status_type == "processing":
-                    # Search for the most recent track progress in all statuses
-                    has_progress = False
-                    for status in reversed(all_statuses):
-                        if status.get("status") == "progress" and status.get("track"):
-                            # Use this track progress information
-                            track_info = status.get("track", "")
-                            current_raw = status.get("current_track", "")
-                            response["current_track"] = track_info
-                            
-                            # Try to parse track numbers if available
-                            if isinstance(current_raw, str) and "/" in current_raw:
-                                try:
-                                    parts = current_raw.split("/")
-                                    current = int(parts[0])
-                                    total = int(parts[1])
-                                    response["track_number"] = current
-                                    response["total_tracks"] = total
-                                    response["progress_percent"] = min(int((current / total) * 100), 100)
-                                    response["progress_message"] = f"Processing track {current}/{total}: {track_info}"
-                                except (ValueError, IndexError):
-                                    response["progress_message"] = f"Processing: {track_info}"
-                            else:
-                                response["progress_message"] = f"Processing: {track_info}"
-                                
-                            has_progress = True
-                            break
-                    
-                    if not has_progress:
-                        # Just use the processing message
-                        response["progress_message"] = last_status.get("message", "Processing download...")
-                
-                # For other status types
-                else:
-                    response["progress_message"] = last_status.get("message", f"Status: {status_type}")
             
             return jsonify(response)
         
@@ -182,19 +73,13 @@ def get_prg_file(task_id):
             content = f.read()
             lines = content.splitlines()
 
-        # If the file is empty, return default values.
+        # If the file is empty, return default values with simplified format.
         if not lines:
             return jsonify({
-                "type": "",
-                "name": "",
-                "artist": "",
                 "last_line": None,
-                "original_request": None,
-                "display_title": "",
-                "display_type": "",
-                "display_artist": "",
+                "timestamp": time.time(),
                 "task_id": task_id,
-                "event": "unknown"
+                "status_count": 0
             })
 
         # Attempt to extract the original request from the first line.
@@ -248,18 +133,15 @@ def get_prg_file(task_id):
         except Exception:
             last_line_parsed = last_line_raw  # Fallback to raw string if JSON parsing fails.
 
+        # Calculate status_count for old PRG files (number of lines in the file)
+        status_count = len(lines)
+
+        # Return simplified response format
         return jsonify({
-            "type": resource_type,
-            "name": resource_name,
-            "artist": resource_artist,
             "last_line": last_line_parsed,
-            "original_request": original_request,
-            "display_title": display_title,
-            "display_type": display_type,
-            "display_artist": display_artist,
+            "timestamp": time.time(),
             "task_id": task_id,
-            "event": "unknown",  # Old files don't have event types
-            "timestamp": time.time()
+            "status_count": status_count
         })
     except FileNotFoundError:
         abort(404, "Task or file not found")
