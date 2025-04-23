@@ -551,6 +551,9 @@ createQueueItem(item, type, prgFile, queueId) {
     <div class="queue-item-status">
       <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
       
+      <!-- Error details container (hidden by default) -->
+      <div class="error-details" id="error-details-${queueId}-${prgFile}" style="display: none;"></div>
+      
       <div class="progress-container">
         <!-- Track-level progress bar for single track or current track in multi-track items -->
         <div class="track-progress-bar-container" id="track-progress-container-${queueId}-${prgFile}">
@@ -620,13 +623,80 @@ createQueueItem(item, type, prgFile, queueId) {
         break;
       case 'error':
         entry.element.classList.add('error');
+        // Show detailed error information in the error-details container if available
+        if (entry.lastStatus && entry.element) {
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+          if (errorDetailsContainer) {
+            // Format the error details
+            let errorDetailsHTML = '';
+            
+            // Add error message
+            errorDetailsHTML += `<div class="error-message">${entry.lastStatus.error || entry.lastStatus.message || 'Unknown error'}</div>`;
+            
+            // Add parent information if available
+            if (entry.lastStatus.parent) {
+              const parent = entry.lastStatus.parent;
+              let parentInfo = '';
+              
+              if (parent.type === 'album') {
+                parentInfo = `<div class="parent-info">From album: "${parent.title}" by ${parent.artist || 'Unknown artist'}</div>`;
+              } else if (parent.type === 'playlist') {
+                parentInfo = `<div class="parent-info">From playlist: "${parent.name}" by ${parent.owner || 'Unknown creator'}</div>`;
+              }
+              
+              if (parentInfo) {
+                errorDetailsHTML += parentInfo;
+              }
+            }
+            
+            // Add source URL if available
+            if (entry.lastStatus.url) {
+              errorDetailsHTML += `<div class="error-url">Source: <a href="${entry.lastStatus.url}" target="_blank" rel="noopener noreferrer">${entry.lastStatus.url}</a></div>`;
+            }
+            
+            // Add retry button if this error can be retried
+            if (entry.lastStatus.can_retry !== false && (!entry.retryCount || entry.retryCount < this.MAX_RETRIES)) {
+              errorDetailsHTML += `<button class="retry-btn" data-queueid="${entry.uniqueId}">Retry Download</button>`;
+            }
+            
+            // Display the error details
+            errorDetailsContainer.innerHTML = errorDetailsHTML;
+            errorDetailsContainer.style.display = 'block';
+            
+            // Add event listener to retry button if present
+            const retryBtn = errorDetailsContainer.querySelector('.retry-btn');
+            if (retryBtn) {
+              retryBtn.addEventListener('click', (e) => {
+                const queueId = e.target.getAttribute('data-queueid');
+                if (queueId) {
+                  const logElement = entry.element.querySelector('.log');
+                  this.retryDownload(queueId, logElement);
+                }
+              });
+            }
+          }
+        }
         break;
       case 'complete':
       case 'done': 
         entry.element.classList.add('complete');
+        // Hide error details if present
+        if (entry.element) {
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+          if (errorDetailsContainer) {
+            errorDetailsContainer.style.display = 'none';
+          }
+        }
         break;
       case 'cancelled':
         entry.element.classList.add('cancelled');
+        // Hide error details if present
+        if (entry.element) {
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+          if (errorDetailsContainer) {
+            errorDetailsContainer.style.display = 'none';
+          }
+        }
         break;
     }
   }
@@ -1081,7 +1151,15 @@ createQueueItem(item, type, prgFile, queueId) {
         return `${trackName}${artist ? ` by ${artist}` : ''} was skipped: ${data.reason || 'Unknown reason'}`;
       
       case 'error':
+        // Enhanced error message handling using the new format
         let errorMsg = `Error: ${data.error || data.message || 'Unknown error'}`;
+        
+        // Add position information for tracks in collections
+        if (data.current_track && data.total_tracks) {
+          errorMsg = `Error on track ${data.current_track}/${data.total_tracks}: ${data.error || data.message || 'Unknown error'}`;
+        }
+        
+        // Add retry information if available
         if (data.retry_count !== undefined) {
           errorMsg += ` (Attempt ${data.retry_count}/${this.MAX_RETRIES})`;
         } else if (data.can_retry !== undefined) {
@@ -1091,6 +1169,21 @@ createQueueItem(item, type, prgFile, queueId) {
             errorMsg += ` (Max retries reached)`;
           }
         }
+        
+        // Add parent information if this is a track with a parent
+        if (data.type === 'track' && data.parent) {
+          if (data.parent.type === 'album') {
+            errorMsg += `\nFrom album: "${data.parent.title}" by ${data.parent.artist || 'Unknown artist'}`;
+          } else if (data.parent.type === 'playlist') {
+            errorMsg += `\nFrom playlist: "${data.parent.name}" by ${data.parent.owner || 'Unknown creator'}`;
+          }
+        }
+        
+        // Add URL for troubleshooting if available
+        if (data.url) {
+          errorMsg += `\nSource: ${data.url}`;
+        }
+        
         return errorMsg;
       
       case 'retrying':
@@ -1168,8 +1261,30 @@ createQueueItem(item, type, prgFile, queueId) {
     entry.isRetrying = true;
     logElement.textContent = 'Retrying download...';
     
+    // Determine if we should use parent information for retry
+    let useParent = false;
+    let parentType = null;
+    let parentUrl = null;
+    
+    // Check if we have parent information in the lastStatus
+    if (entry.lastStatus && entry.lastStatus.parent) {
+      const parent = entry.lastStatus.parent;
+      if (parent.type && parent.url) {
+        useParent = true;
+        parentType = parent.type;
+        parentUrl = parent.url;
+        console.log(`Using parent info for retry: ${parentType} with URL: ${parentUrl}`);
+      }
+    }
+    
     // Find a retry URL from various possible sources
     const getRetryUrl = () => {
+      // If using parent, return parent URL
+      if (useParent && parentUrl) {
+        return parentUrl;
+      }
+      
+      // Otherwise use the standard fallback options
       if (entry.requestUrl) return entry.requestUrl;
       
       // If we have lastStatus with original_request, check there
@@ -1200,10 +1315,12 @@ createQueueItem(item, type, prgFile, queueId) {
       // Close any existing polling interval
       this.clearPollingInterval(queueId);
       
-      console.log(`Retrying download for ${entry.type} with URL: ${retryUrl}`);
+      // Determine which type to use for the API endpoint
+      const apiType = useParent ? parentType : entry.type;
+      console.log(`Retrying download using type: ${apiType} with URL: ${retryUrl}`);
       
-      // Build the API URL based on the entry's type
-      const apiUrl = `/api/${entry.type}/download?url=${encodeURIComponent(retryUrl)}`;
+      // Build the API URL based on the determined type
+      const apiUrl = `/api/${apiType}/download?url=${encodeURIComponent(retryUrl)}`;
       
       // Add name and artist if available for better progress display
       let fullRetryUrl = apiUrl;

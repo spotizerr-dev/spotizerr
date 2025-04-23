@@ -87,6 +87,16 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
     
     logger.info(f"Fetching artist info for ID: {artist_id}")
     
+    # Detect URL source (only Spotify is supported for artists)
+    is_spotify_url = 'open.spotify.com' in url.lower()
+    is_deezer_url = 'deezer.com' in url.lower()
+    
+    # Artist functionality only works with Spotify URLs currently
+    if not is_spotify_url:
+        error_msg = "Invalid URL: Artist functionality only supports open.spotify.com URLs"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+        
     # Get artist info with albums
     artist_data = get_spotify_info(artist_id, "artist")
     
@@ -152,8 +162,7 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
             "name": album_name,
             "artist": album_artist,
             "type": "album",
-            "service": "spotify",
-            # Add reference to parent artist request if needed
+            # URL source will be automatically detected in the download functions
             "parent_artist_url": url,
             "parent_request_type": "artist"
         }
@@ -162,7 +171,6 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
         task_data = {
             "download_type": "album",
             "type": "album",  # Type for the download task
-            "service": "spotify",  # Default to Spotify since we're using Spotify API
             "url": album_url,  # Important: use the album URL, not artist URL
             "retry_url": album_url,  # Use album URL for retry logic, not artist URL
             "name": album_name,
