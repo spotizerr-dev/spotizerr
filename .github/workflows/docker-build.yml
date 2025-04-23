@@ -1,14 +1,8 @@
 name: Build and Push Docker Image
 
 on:
-  push:
-    # Trigger on all branches and tags; you can later refine this logic if needed
-    branches: [ '**' ]
-    tags: [ '**' ]
-  pull_request:
-    branches: [ '**' ]
   release:
-    types: [ published, released ]
+    types: [ published ]
   workflow_dispatch:
 
 jobs:
