@@ -23,12 +23,15 @@ def handle_download():
 
     # Add the task to the queue with only essential parameters
     # The queue manager will now handle all config parameters
+    # Include full original request URL in metadata
+    orig_params = request.args.to_dict()
+    orig_params["original_url"] = request.url
     task_id = download_queue_manager.add_task({
         "download_type": "album",
         "url": url,
         "name": name,
         "artist": artist,
-        "orig_request": request.args.to_dict()
+        "orig_request": orig_params
     })
     
     return Response(
