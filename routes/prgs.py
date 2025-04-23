@@ -54,6 +54,7 @@ def get_prg_file(task_id):
             
             # Prepare the simplified response with just the requested info
             response = {
+                "original_url": original_request.get("original_url", ""),
                 "last_line": last_status,
                 "timestamp": time.time(),
                 "task_id": task_id,
@@ -121,10 +122,6 @@ def get_prg_file(task_id):
                 resource_type = ""
                 resource_name = ""
                 resource_artist = ""
-        else:
-            resource_type = ""
-            resource_name = ""
-            resource_artist = ""
 
         # Get the last line from the file.
         last_line_raw = lines[-1]
@@ -138,6 +135,7 @@ def get_prg_file(task_id):
 
         # Return simplified response format
         return jsonify({
+            "original_url": original_request.get("original_url", "") if original_request else "",
             "last_line": last_line_parsed,
             "timestamp": time.time(),
             "task_id": task_id,

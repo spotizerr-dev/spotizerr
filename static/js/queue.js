@@ -284,6 +284,11 @@ class DownloadQueue {
           entry.requestUrl = `/api/${entry.type}/download?${params.toString()}`;
         }
         
+        // Override requestUrl with server original_url if provided
+        if (data.original_url) {
+          entry.requestUrl = data.original_url;
+        }
+        
         // Process the initial status
         if (data.last_line) {
           entry.lastStatus = data.last_line;
@@ -451,63 +456,8 @@ class DownloadQueue {
         entry.parentInfo = cachedData.parent;
       }
       
-      // Special handling for error states to restore UI with buttons
-      if (entry.lastStatus.status === 'error') {
-        // Hide the cancel button if in error state
-        const cancelBtn = entry.element.querySelector('.cancel-btn');
-        if (cancelBtn) {
-          cancelBtn.style.display = 'none';
-        }
-        
-        // Determine if we can retry
-        const canRetry = entry.retryCount < this.MAX_RETRIES && entry.requestUrl;
-        
-        if (canRetry) {
-          // Create error UI with retry button
-          logEl.innerHTML = `
-            <div class="error-message">${this.getStatusMessage(entry.lastStatus)}</div>
-            <div class="error-buttons">
-              <button class="close-error-btn" title="Close">&times;</button>
-              <button class="retry-btn" title="Retry">Retry</button>
-            </div>
-          `;
-          
-          // Add event listeners
-          logEl.querySelector('.close-error-btn').addEventListener('click', () => {
-            if (entry.autoRetryInterval) {
-              clearInterval(entry.autoRetryInterval);
-              entry.autoRetryInterval = null;
-            }
-            this.cleanupEntry(queueId);
-          });
-          
-          logEl.querySelector('.retry-btn').addEventListener('click', async () => {
-            if (entry.autoRetryInterval) {
-              clearInterval(entry.autoRetryInterval);
-              entry.autoRetryInterval = null;
-            }
-            this.retryDownload(queueId, logEl);
-          });
-        } else {
-          // Cannot retry - just show error with close button
-          logEl.innerHTML = `
-            <div class="error-message">${this.getStatusMessage(entry.lastStatus)}</div>
-            <div class="error-buttons">
-              <button class="close-error-btn" title="Close">&times;</button>
-            </div>
-          `;
-          
-          logEl.querySelector('.close-error-btn').addEventListener('click', () => {
-            this.cleanupEntry(queueId);
-          });
-        }
-      } else {
-        // For non-error states, just set the message text
-        logEl.textContent = this.getStatusMessage(entry.lastStatus);
-      }
-      
-      // Apply appropriate CSS classes based on cached status
-      this.applyStatusClasses(entry, this.queueCache[prgFile]);
+      // Render status message for cached data
+      logEl.textContent = this.getStatusMessage(entry.lastStatus);
     }
     
     // Store it in our queue object
@@ -623,58 +573,10 @@ createQueueItem(item, type, prgFile, queueId) {
         break;
       case 'error':
         entry.element.classList.add('error');
-        // Show detailed error information in the error-details container if available
-        if (entry.lastStatus && entry.element) {
-          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
-          if (errorDetailsContainer) {
-            // Format the error details
-            let errorDetailsHTML = '';
-            
-            // Add error message
-            errorDetailsHTML += `<div class="error-message">${entry.lastStatus.error || entry.lastStatus.message || 'Unknown error'}</div>`;
-            
-            // Add parent information if available
-            if (entry.lastStatus.parent) {
-              const parent = entry.lastStatus.parent;
-              let parentInfo = '';
-              
-              if (parent.type === 'album') {
-                parentInfo = `<div class="parent-info">From album: "${parent.title}" by ${parent.artist || 'Unknown artist'}</div>`;
-              } else if (parent.type === 'playlist') {
-                parentInfo = `<div class="parent-info">From playlist: "${parent.name}" by ${parent.owner || 'Unknown creator'}</div>`;
-              }
-              
-              if (parentInfo) {
-                errorDetailsHTML += parentInfo;
-              }
-            }
-            
-            // Add source URL if available
-            if (entry.lastStatus.url) {
-              errorDetailsHTML += `<div class="error-url">Source: <a href="${entry.lastStatus.url}" target="_blank" rel="noopener noreferrer">${entry.lastStatus.url}</a></div>`;
-            }
-            
-            // Add retry button if this error can be retried
-            if (entry.lastStatus.can_retry !== false && (!entry.retryCount || entry.retryCount < this.MAX_RETRIES)) {
-              errorDetailsHTML += `<button class="retry-btn" data-queueid="${entry.uniqueId}">Retry Download</button>`;
-            }
-            
-            // Display the error details
-            errorDetailsContainer.innerHTML = errorDetailsHTML;
-            errorDetailsContainer.style.display = 'block';
-            
-            // Add event listener to retry button if present
-            const retryBtn = errorDetailsContainer.querySelector('.retry-btn');
-            if (retryBtn) {
-              retryBtn.addEventListener('click', (e) => {
-                const queueId = e.target.getAttribute('data-queueid');
-                if (queueId) {
-                  const logElement = entry.element.querySelector('.log');
-                  this.retryDownload(queueId, logElement);
-                }
-              });
-            }
-          }
+        // Hide error-details to prevent duplicate error display
+        const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+        if (errorDetailsContainer) {
+          errorDetailsContainer.style.display = 'none';
         }
         break;
       case 'complete':
@@ -741,9 +643,7 @@ createQueueItem(item, type, prgFile, queueId) {
           
           // Immediately delete from server
           try {
-            await fetch(`/api/prgs/delete/${prg}`, {
-              method: 'DELETE'
-            });
+            await fetch(`/api/prgs/delete/${prg}`, { method: 'DELETE' });
             console.log(`Deleted cancelled task from server: ${prg}`);
           } catch (deleteError) {
             console.error('Error deleting cancelled task:', deleteError);
@@ -1152,11 +1052,11 @@ createQueueItem(item, type, prgFile, queueId) {
       
       case 'error':
         // Enhanced error message handling using the new format
-        let errorMsg = `Error: ${data.error || data.message || 'Unknown error'}`;
+        let errorMsg = `Error: ${data.error}`;
         
         // Add position information for tracks in collections
         if (data.current_track && data.total_tracks) {
-          errorMsg = `Error on track ${data.current_track}/${data.total_tracks}: ${data.error || data.message || 'Unknown error'}`;
+          errorMsg = `Error on track ${data.current_track}/${data.total_tracks}: ${data.error}`;
         }
         
         // Add retry information if available
@@ -1257,6 +1157,11 @@ createQueueItem(item, type, prgFile, queueId) {
     const entry = this.queueEntries[queueId];
     if (!entry) return;
     
+    // Hide any existing error-details and restore log for retry
+    const errContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+    if (errContainer) { errContainer.style.display = 'none'; }
+    logElement.style.display = '';
+    
     // Mark the entry as retrying to prevent automatic cleanup
     entry.isRetrying = true;
     logElement.textContent = 'Retrying download...';
@@ -1279,6 +1184,10 @@ createQueueItem(item, type, prgFile, queueId) {
     
     // Find a retry URL from various possible sources
     const getRetryUrl = () => {
+      // Prefer full original URL from progress API
+      if (entry.lastStatus && entry.lastStatus.original_url) {
+        return entry.lastStatus.original_url;
+      }
       // If using parent, return parent URL
       if (useParent && parentUrl) {
         return parentUrl;
@@ -1298,6 +1207,11 @@ createQueueItem(item, type, prgFile, queueId) {
       // Check if there's a URL directly in the lastStatus
       if (entry.lastStatus && entry.lastStatus.url) 
         return entry.lastStatus.url;
+      
+      // Fallback to stored requestUrl
+      if (entry.requestUrl) {
+        return entry.requestUrl;
+      }
       
       return null;
     };
@@ -1319,18 +1233,22 @@ createQueueItem(item, type, prgFile, queueId) {
       const apiType = useParent ? parentType : entry.type;
       console.log(`Retrying download using type: ${apiType} with URL: ${retryUrl}`);
       
-      // Build the API URL based on the determined type
-      const apiUrl = `/api/${apiType}/download?url=${encodeURIComponent(retryUrl)}`;
-      
-      // Add name and artist if available for better progress display
-      let fullRetryUrl = apiUrl;
-      if (entry.item && entry.item.name) {
-        fullRetryUrl += `&name=${encodeURIComponent(entry.item.name)}`;
+      // Determine request URL: if retryUrl is already a full API URL, use it directly
+      let fullRetryUrl;
+      if (retryUrl.startsWith('http')) {
+        fullRetryUrl = retryUrl;
+      } else {
+        const apiUrl = `/api/${apiType}/download?url=${encodeURIComponent(retryUrl)}`;
+        fullRetryUrl = apiUrl;
+        // Append metadata if retryUrl is raw resource URL
+        if (entry.item && entry.item.name) {
+          fullRetryUrl += `&name=${encodeURIComponent(entry.item.name)}`;
+        }
+        if (entry.item && entry.item.artist) {
+          fullRetryUrl += `&artist=${encodeURIComponent(entry.item.artist)}`;
+        }
       }
-      if (entry.item && entry.item.artist) {
-        fullRetryUrl += `&artist=${encodeURIComponent(entry.item.artist)}`;
-      }
-      
+
       // Use the stored original request URL to create a new download
       const retryResponse = await fetch(fullRetryUrl);
       if (!retryResponse.ok) {
@@ -1571,10 +1489,10 @@ createQueueItem(item, type, prgFile, queueId) {
           
           // Skip prg files that are marked as cancelled, completed, or interrupted
           if (prgData.last_line && 
-              (prgData.last_line.status === 'cancel' || 
-               prgData.last_line.status === 'cancelled' ||
-               prgData.last_line.status === 'interrupted' ||
-               prgData.last_line.status === 'complete')) {
+              (prgData.last_line.status === "cancel" || 
+               prgData.last_line.status === "cancelled" ||
+               prgData.last_line.status === "interrupted" ||
+               prgData.last_line.status === "complete")) {
             // Delete old completed or cancelled PRG files
             try {
               await fetch(`/api/prgs/delete/${prgFile}`, { method: 'DELETE' });
@@ -1879,7 +1797,7 @@ createQueueItem(item, type, prgFile, queueId) {
       // Special handling for track updates that are part of an album/playlist
       // Don't filter these out as they contain important track progress info
       if (data.last_line && data.last_line.type === 'track' && data.last_line.parent) {
-        // This is a track update that's part of an album/playlist - keep it
+        // This is a track update that's part of our album/playlist - keep it
         if ((entry.type === 'album' && data.last_line.parent.type === 'album') ||
             (entry.type === 'playlist' && data.last_line.parent.type === 'playlist')) {
           console.log(`Processing track update for ${entry.type} download: ${data.last_line.song}`);
@@ -2006,7 +1924,7 @@ createQueueItem(item, type, prgFile, queueId) {
     // Update log message - but only if we're not handling a track update for an album/playlist
     // That case is handled separately in updateItemMetadata to ensure we show the right track info
     const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    if (logElement && !(statusData.type === 'track' && statusData.parent && 
+    if (logElement && status !== 'error' && !(statusData.type === 'track' && statusData.parent && 
         (entry.type === 'album' || entry.type === 'playlist'))) {
       logElement.textContent = message;
     }
@@ -2028,110 +1946,53 @@ createQueueItem(item, type, prgFile, queueId) {
     // Apply appropriate status classes
     this.applyStatusClasses(entry, status);
     
-    // Special handling for error status
+    // Special handling for error status based on new API response format
     if (status === 'error') {
       entry.hasEnded = true;
-      
-      // Hide the cancel button
+      // Hide cancel button
       const cancelBtn = entry.element.querySelector('.cancel-btn');
-      if (cancelBtn) {
-        cancelBtn.style.display = 'none';
-      }
-      
-      // Find a valid URL to use for retry from multiple possible sources
-      const getRetryUrl = () => {
-        // Check direct properties first
-        if (entry.requestUrl) return entry.requestUrl;
-        if (data.retry_url) return data.retry_url;
-        if (statusData.retry_url) return statusData.retry_url;
-        
-        // Check in original_request object
-        if (data.original_request) {
-          if (data.original_request.retry_url) return data.original_request.retry_url;
-          if (data.original_request.url) return data.original_request.url;
-        }
-        
-        // Last resort - check if there's a URL directly in the data
-        if (data.url) return data.url;
-        
-        return null;
-      };
-      
-      // Determine if we can retry by finding a valid URL
-      const retryUrl = getRetryUrl();
-      
-      // Save the retry URL if found
+      if (cancelBtn) cancelBtn.style.display = 'none';
+
+      // Extract error details
+      const errMsg = statusData.error;
+      const canRetry = Boolean(statusData.can_retry) && statusData.retry_count < statusData.max_retries;
+      // Determine retry URL
+      const retryUrl = data.original_url || data.original_request?.url || entry.requestUrl || null;
       if (retryUrl) {
         entry.requestUrl = retryUrl;
       }
-      
-      console.log(`Error for ${entry.type} download. Retry URL: ${retryUrl}`);
-      
-      // Get or create the log element
+
+      console.log(`Error for ${entry.type} download. Can retry: ${canRetry}. Retry URL: ${retryUrl}`);
+
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
       if (logElement) {
-        // Always show retry if we have a URL, even if we've reached retry limit
-        const canRetry = !!retryUrl;
-        
-        if (canRetry) {
-          // Create error UI with retry button
-          logElement.innerHTML = `
-            <div class="error-message">${message || this.getStatusMessage(statusData)}</div>
-            <div class="error-buttons">
-              <button class="close-error-btn" title="Close">&times;</button>
-              <button class="retry-btn" title="Retry download">Retry</button>
-            </div>
-          `;
-          
-          // Add event listeners
-          logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-            if (entry.autoRetryInterval) {
-              clearInterval(entry.autoRetryInterval);
-              entry.autoRetryInterval = null;
-            }
+        // Build error UI with manual retry always available
+        logElement.innerHTML = `
+          <div class="error-message">${errMsg}</div>
+          <div class="error-buttons">
+            <button class="close-error-btn" title="Close">&times;</button>
+            <button class="retry-btn" title="Retry download">Retry</button>
+          </div>
+        `;
+        // Close handler
+        logElement.querySelector('.close-error-btn').addEventListener('click', () => {
+          this.cleanupEntry(queueId);
+        });
+        // Always attach manual retry handler
+        const retryBtn = logElement.querySelector('.retry-btn');
+        retryBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          retryBtn.disabled = true;
+          retryBtn.innerHTML = '<span class="loading-spinner small"></span> Retrying...';
+          this.retryDownload(queueId, logElement);
+        });
+        // Auto cleanup after 15s
+        setTimeout(() => {
+          if (this.queueEntries[queueId]?.hasEnded) {
             this.cleanupEntry(queueId);
-          });
-          
-          logElement.querySelector('.retry-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Replace retry button with loading indicator
-            const retryBtn = logElement.querySelector('.retry-btn');
-            if (retryBtn) {
-              retryBtn.disabled = true;
-              retryBtn.innerHTML = '<span class="loading-spinner small"></span> Retrying...';
-            }
-            
-            if (entry.autoRetryInterval) {
-              clearInterval(entry.autoRetryInterval);
-              entry.autoRetryInterval = null;
-            }
-            
-            this.retryDownload(queueId, logElement);
-          });
-          
-          // Don't set up automatic cleanup - let retryDownload function handle this
-          // The automatic cleanup was causing items to disappear when retrying
-        } else {
-          // Cannot retry - just show error with close button
-          logElement.innerHTML = `
-            <div class="error-message">${message || this.getStatusMessage(statusData)}</div>
-            <div class="error-buttons">
-              <button class="close-error-btn" title="Close">&times;</button>
-            </div>
-          `;
-          
-          logElement.querySelector('.close-error-btn').addEventListener('click', () => {
-            this.cleanupEntry(queueId);
-          });
-          
-          // Set up automatic cleanup after 10 seconds only if not retrying
-          setTimeout(() => {
-            if (this.queueEntries[queueId] && this.queueEntries[queueId].hasEnded && !this.queueEntries[queueId].isRetrying) {
-              this.cleanupEntry(queueId);
-            }
-          }, 10000);
-        }
+          }
+        }, 15000);
       }
     }
     
@@ -2245,6 +2106,7 @@ createQueueItem(item, type, prgFile, queueId) {
       if (typeEl) {
         const displayType = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
         typeEl.textContent = displayType;
+        // Update type class without triggering animation
         typeEl.className = `type ${entry.type}`;
       }
       
@@ -2280,9 +2142,9 @@ createQueueItem(item, type, prgFile, queueId) {
         
         let infoText = '';
         if (statusData.parent.type === 'album') {
-          infoText = `From album: ${statusData.parent.title}`;
+          infoText = `From album: "${statusData.parent.title}"`;
         } else if (statusData.parent.type === 'playlist') {
-          infoText = `From playlist: ${statusData.parent.name} by ${statusData.parent.owner}`;
+          infoText = `From playlist: "${statusData.parent.name}" by ${statusData.parent.owner}`;
         }
         
         if (infoText) {
@@ -2293,9 +2155,9 @@ createQueueItem(item, type, prgFile, queueId) {
       else if (entry.parentInfo && logElement) {
         let infoText = '';
         if (entry.parentInfo.type === 'album') {
-          infoText = `From album: ${entry.parentInfo.title}`;
+          infoText = `From album: "${entry.parentInfo.title}"`;
         } else if (entry.parentInfo.type === 'playlist') {
-          infoText = `From playlist: ${entry.parentInfo.name} by ${entry.parentInfo.owner}`;
+          infoText = `From playlist: "${entry.parentInfo.name}" by ${entry.parentInfo.owner}`;
         }
         
         if (infoText) {
