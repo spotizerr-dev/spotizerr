@@ -19,7 +19,7 @@ def search(
     client_secret = None
     
     if main:
-        search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+        search_creds_path = Path(f'./creds/spotify/{main}/credentials.json')
         logger.debug(f"Looking for credentials at: {search_creds_path}")
         
         if search_creds_path.exists():
