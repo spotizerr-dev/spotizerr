@@ -250,7 +250,6 @@ EXPLICIT_FILTER=false        # Filter explicit content
 PUID=1000                    # Container user ID
 PGID=1000                    # Container group ID
 UMASK=0022                   # Default file permission mask
-SPOTIPY_CACHE_PATH=/app/cache/.cache  # Spotify token cache path
 ```
 
 ## Troubleshooting
