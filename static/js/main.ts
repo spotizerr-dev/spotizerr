@@ -1,11 +1,11 @@
-// main.js
+// main.ts
 import { downloadQueue } from './queue.js';
 
 document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
-    const searchInput = document.getElementById('searchInput');
-    const searchButton = document.getElementById('searchButton');
-    const searchType = document.getElementById('searchType');
+    const searchInput = document.getElementById('searchInput') as HTMLInputElement | null;
+    const searchButton = document.getElementById('searchButton') as HTMLButtonElement | null;
+    const searchType = document.getElementById('searchType') as HTMLSelectElement | null;
     const resultsContainer = document.getElementById('resultsContainer');
     const queueIcon = document.getElementById('queueIcon');
     const emptyState = document.getElementById('emptyState');
@@ -24,18 +24,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (searchInput) {
-        searchInput.addEventListener('keypress', function(e) {
+        searchInput.addEventListener('keypress', function(e: KeyboardEvent) {
             if (e.key === 'Enter') {
                 performSearch();
             }
         });
 
         // Auto-detect and handle pasted Spotify URLs
-        searchInput.addEventListener('input', function(e) {
-            const inputVal = e.target.value.trim();
+        searchInput.addEventListener('input', function(e: Event) {
+            const target = e.target as HTMLInputElement;
+            const inputVal = target.value.trim();
             if (isSpotifyUrl(inputVal)) {
                 const details = getSpotifyResourceDetails(inputVal);
-                if (details) {
+                if (details && searchType) {
                     searchType.value = details.type;
                 }
             }
@@ -44,7 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Restore last search type if no URL override
     const savedType = localStorage.getItem('lastSearchType');
-    if (savedType && ['track','album','playlist','artist'].includes(savedType)) {
+    if (searchType && savedType && ['track','album','playlist','artist'].includes(savedType)) {
       searchType.value = savedType;
     }
     // Save last selection on change
@@ -59,9 +60,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const query = urlParams.get('q');
     const type = urlParams.get('type');
 
-    if (query) {
+    if (query && searchInput) {
         searchInput.value = query;
-        if (type && ['track', 'album', 'playlist', 'artist'].includes(type)) {
+        if (type && searchType && ['track', 'album', 'playlist', 'artist'].includes(type)) {
             searchType.value = type;
         }
         performSearch();
@@ -74,12 +75,12 @@ document.addEventListener('DOMContentLoaded', function() {
      * Performs the search based on input values
      */
     async function performSearch() {
-        const query = searchInput.value.trim();
-        if (!query) return;
+        const currentQuery = searchInput?.value.trim();
+        if (!currentQuery) return;
 
         // Handle direct Spotify URLs
-        if (isSpotifyUrl(query)) {
-            const details = getSpotifyResourceDetails(query);
+        if (isSpotifyUrl(currentQuery)) {
+            const details = getSpotifyResourceDetails(currentQuery);
             if (details && details.id) {
                 // Redirect to the appropriate page
                 window.location.href = `/${details.type}/${details.id}`;
@@ -88,16 +89,17 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Update URL without reloading page
-        const newUrl = `${window.location.pathname}?q=${encodeURIComponent(query)}&type=${searchType.value}`;
+        const currentSearchType = searchType?.value || 'track';
+        const newUrl = `${window.location.pathname}?q=${encodeURIComponent(currentQuery)}&type=${currentSearchType}`;
         window.history.pushState({ path: newUrl }, '', newUrl);
 
         // Show loading state
         showEmptyState(false);
         showLoading(true);
-        resultsContainer.innerHTML = '';
+        if(resultsContainer) resultsContainer.innerHTML = '';
 
         try {
-            const url = `/api/search?q=${encodeURIComponent(query)}&search_type=${searchType.value}&limit=40`;
+            const url = `/api/search?q=${encodeURIComponent(currentQuery)}&search_type=${currentSearchType}&limit=40`;
             const response = await fetch(url);
             
             if (!response.ok) {
@@ -111,47 +113,47 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Render results
             if (data && data.items && data.items.length > 0) {
-                resultsContainer.innerHTML = '';
+                if(resultsContainer) resultsContainer.innerHTML = '';
                 
                 // Filter out items with null/undefined essential display parameters
-                const validItems = filterValidItems(data.items, searchType.value);
+                const validItems = filterValidItems(data.items, currentSearchType);
                 
                 if (validItems.length === 0) {
                     // No valid items found after filtering
-                    resultsContainer.innerHTML = `
+                    if(resultsContainer) resultsContainer.innerHTML = `
                         <div class="empty-search-results">
-                            <p>No valid results found for "${query}"</p>
+                            <p>No valid results found for "${currentQuery}"</p>
                         </div>
                     `;
                     return;
                 }
                 
                 validItems.forEach((item, index) => {
-                    const cardElement = createResultCard(item, searchType.value, index);
+                    const cardElement = createResultCard(item, currentSearchType, index);
                     
                     // Store the item data directly on the button element
-                    const downloadBtn = cardElement.querySelector('.download-btn');
+                    const downloadBtn = cardElement.querySelector('.download-btn') as HTMLButtonElement | null;
                     if (downloadBtn) {
-                        downloadBtn.dataset.itemIndex = index;
+                        downloadBtn.dataset.itemIndex = index.toString();
                     }
                     
-                    resultsContainer.appendChild(cardElement);
+                    if(resultsContainer) resultsContainer.appendChild(cardElement);
                 });
                 
                 // Attach download handlers to the newly created cards
                 attachDownloadListeners(validItems);
             } else {
                 // No results found
-                resultsContainer.innerHTML = `
+                if(resultsContainer) resultsContainer.innerHTML = `
                     <div class="empty-search-results">
-                        <p>No results found for "${query}"</p>
+                        <p>No results found for "${currentQuery}"</p>
                     </div>
                 `;
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error:', error);
             showLoading(false);
-            resultsContainer.innerHTML = `
+            if(resultsContainer) resultsContainer.innerHTML = `
                 <div class="error">
                     <p>Error searching: ${error.message}</p>
                 </div>
@@ -162,7 +164,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Filters out items with null/undefined essential display parameters based on search type
      */
-    function filterValidItems(items, type) {
+    function filterValidItems(items: any[], type: string) {
         if (!items) return [];
         
         return items.filter(item => {
@@ -231,19 +233,22 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Attaches download handlers to result cards
      */
-    function attachDownloadListeners(items) {
-        document.querySelectorAll('.download-btn').forEach((btn) => {
-            btn.addEventListener('click', (e) => {
+    function attachDownloadListeners(items: any[]) {
+        document.querySelectorAll('.download-btn').forEach((btnElm) => {
+            const btn = btnElm as HTMLButtonElement;
+            btn.addEventListener('click', (e: Event) => {
                 e.stopPropagation();
                 
                 // Get the item index from the button's dataset
-                const itemIndex = parseInt(btn.dataset.itemIndex, 10);
+                const itemIndexStr = btn.dataset.itemIndex;
+                if (!itemIndexStr) return;
+                const itemIndex = parseInt(itemIndexStr, 10);
                 
                 // Get the corresponding item
                 const item = items[itemIndex];
                 if (!item) return;
                 
-                const type = searchType.value;
+                const currentSearchType = searchType?.value || 'track';
                 let url;
                 
                 // Determine the URL based on item type
@@ -266,17 +271,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.disabled = true;
                 
                 // For artist downloads, show a different message since it will queue multiple albums
-                if (type === 'artist') {
+                if (currentSearchType === 'artist') {
                     btn.innerHTML = 'Queueing albums...';
                 } else {
                     btn.innerHTML = 'Queueing...';
                 }
                 
                 // Start the download
-                startDownload(url, type, metadata, item.album ? item.album.album_type : null)
+                startDownload(url, currentSearchType, metadata, item.album ? item.album.album_type : null)
                     .then(() => {
                         // For artists, show how many albums were queued
-                        if (type === 'artist') {
+                        if (currentSearchType === 'artist') {
                             btn.innerHTML = 'Albums queued!';
                             // Open the queue automatically for artist downloads
                             downloadQueue.toggleVisibility(true);
@@ -284,7 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             btn.innerHTML = 'Queued!';
                         }
                     })
-                    .catch((error) => {
+                    .catch((error: any) => {
                         btn.disabled = false;
                         btn.innerHTML = 'Download';
                         showError('Failed to queue download: ' + error.message);
@@ -296,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Starts the download process via API
      */
-    async function startDownload(url, type, item, albumType) {
+    async function startDownload(url: string, type: string, item: any, albumType: string | null) {
         if (!url || !type) {
             showError('Missing URL or type for download');
             return;
@@ -308,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Make the queue visible after queueing
             downloadQueue.toggleVisibility(true);
-        } catch (error) {
+        } catch (error: any) {
             showError('Download failed: ' + (error.message || 'Unknown error'));
             throw error;
         }
@@ -317,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Shows an error message
      */
-    function showError(message) {
+    function showError(message: string) {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error';
         errorDiv.textContent = message;
@@ -330,7 +335,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Shows a success message
      */
-    function showSuccess(message) {
+    function showSuccess(message: string) {
         const successDiv = document.createElement('div');
         successDiv.className = 'success';
         successDiv.textContent = message;
@@ -343,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Checks if a string is a valid Spotify URL
      */
-    function isSpotifyUrl(url) {
+    function isSpotifyUrl(url: string): boolean {
         return url.includes('open.spotify.com') || 
                url.includes('spotify:') ||
                url.includes('link.tospotify.com');
@@ -352,7 +357,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Extracts details from a Spotify URL
      */
-    function getSpotifyResourceDetails(url) {
+    function getSpotifyResourceDetails(url: string): { type: string; id: string } | null {
         // Allow optional path segments (e.g. intl-fr) before resource type
         const regex = /spotify\.com\/(?:[^\/]+\/)??(track|album|playlist|artist)\/([a-zA-Z0-9]+)/i;
         const match = url.match(regex);
@@ -369,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Formats milliseconds to MM:SS
      */
-    function msToMinutesSeconds(ms) {
+    function msToMinutesSeconds(ms: number | undefined): string {
         if (!ms) return '0:00';
         
         const minutes = Math.floor(ms / 60000);
@@ -380,7 +385,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Creates a result card element
      */
-    function createResultCard(item, type, index) {
+    function createResultCard(item: any, type: string, index: number): HTMLDivElement {
         const cardElement = document.createElement('div');
         cardElement.className = 'result-card';
         
@@ -433,10 +438,11 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         // Add click event to navigate to the item's detail page
-        cardElement.addEventListener('click', (e) => {
+        cardElement.addEventListener('click', (e: MouseEvent) => {
             // Don't trigger if the download button was clicked
-            if (e.target.classList.contains('download-btn') || 
-                e.target.parentElement.classList.contains('download-btn')) {
+            const target = e.target as HTMLElement;
+            if (target.classList.contains('download-btn') || 
+                target.parentElement?.classList.contains('download-btn')) {
                 return;
             }
             
@@ -451,7 +457,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Show/hide the empty state
      */
-    function showEmptyState(show) {
+    function showEmptyState(show: boolean) {
         if (emptyState) {
             emptyState.style.display = show ? 'flex' : 'none';
         }
@@ -460,7 +466,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Show/hide the loading indicator
      */
-    function showLoading(show) {
+    function showLoading(show: boolean) {
         if (loadingResults) {
             loadingResults.classList.toggle('hidden', !show);
         }

@@ -34,25 +34,32 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Renders playlist header and tracks.
  */
-function renderPlaylist(playlist) {
+function renderPlaylist(playlist: any) {
   // Hide loading and error messages
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('error').classList.add('hidden');
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.classList.add('hidden');
+  const errorEl = document.getElementById('error');
+  if (errorEl) errorEl.classList.add('hidden');
 
   // Check if explicit filter is enabled
   const isExplicitFilterEnabled = downloadQueue.isExplicitFilterEnabled();
 
   // Update header info
-  document.getElementById('playlist-name').textContent = playlist.name || 'Unknown Playlist';
-  document.getElementById('playlist-owner').textContent = `By ${playlist.owner?.display_name || 'Unknown User'}`;
-  document.getElementById('playlist-stats').textContent =
+  const playlistNameEl = document.getElementById('playlist-name');
+  if (playlistNameEl) playlistNameEl.textContent = playlist.name || 'Unknown Playlist';
+  const playlistOwnerEl = document.getElementById('playlist-owner');
+  if (playlistOwnerEl) playlistOwnerEl.textContent = `By ${playlist.owner?.display_name || 'Unknown User'}`;
+  const playlistStatsEl = document.getElementById('playlist-stats');
+  if (playlistStatsEl) playlistStatsEl.textContent =
     `${playlist.followers?.total || '0'} followers • ${playlist.tracks?.total || '0'} songs`;
-  document.getElementById('playlist-description').textContent = playlist.description || '';
+  const playlistDescriptionEl = document.getElementById('playlist-description');
+  if (playlistDescriptionEl) playlistDescriptionEl.textContent = playlist.description || '';
   const image = playlist.images?.[0]?.url || '/static/images/placeholder.jpg';
-  document.getElementById('playlist-image').src = image;
+  const playlistImageEl = document.getElementById('playlist-image') as HTMLImageElement;
+  if (playlistImageEl) playlistImageEl.src = image;
 
   // --- Add Home Button ---
-  let homeButton = document.getElementById('homeButton');
+  let homeButton = document.getElementById('homeButton') as HTMLButtonElement;
   if (!homeButton) {
     homeButton = document.createElement('button');
     homeButton.id = 'homeButton';
@@ -77,7 +84,7 @@ function renderPlaylist(playlist) {
   }
 
   // --- Add "Download Whole Playlist" Button ---
-  let downloadPlaylistBtn = document.getElementById('downloadPlaylistBtn');
+  let downloadPlaylistBtn = document.getElementById('downloadPlaylistBtn') as HTMLButtonElement;
   if (!downloadPlaylistBtn) {
     downloadPlaylistBtn = document.createElement('button');
     downloadPlaylistBtn.id = 'downloadPlaylistBtn';
@@ -91,7 +98,7 @@ function renderPlaylist(playlist) {
   }
 
   // --- Add "Download Playlist's Albums" Button ---
-  let downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn');
+  let downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn') as HTMLButtonElement;
   if (!downloadAlbumsBtn) {
     downloadAlbumsBtn = document.createElement('button');
     downloadAlbumsBtn.id = 'downloadAlbumsBtn';
@@ -106,54 +113,62 @@ function renderPlaylist(playlist) {
 
   if (isExplicitFilterEnabled && hasExplicitTrack) {
     // Disable both playlist buttons and display messages explaining why
-    downloadPlaylistBtn.disabled = true;
-    downloadPlaylistBtn.classList.add('download-btn--disabled');
-    downloadPlaylistBtn.innerHTML = `<span title="Cannot download entire playlist because it contains explicit tracks">Playlist Contains Explicit Tracks</span>`;
+    if (downloadPlaylistBtn) {
+      downloadPlaylistBtn.disabled = true;
+      downloadPlaylistBtn.classList.add('download-btn--disabled');
+      downloadPlaylistBtn.innerHTML = `<span title="Cannot download entire playlist because it contains explicit tracks">Playlist Contains Explicit Tracks</span>`;
+    }
     
-    downloadAlbumsBtn.disabled = true;
-    downloadAlbumsBtn.classList.add('download-btn--disabled');
-    downloadAlbumsBtn.innerHTML = `<span title="Cannot download albums from this playlist because it contains explicit tracks">Albums Access Restricted</span>`;
+    if (downloadAlbumsBtn) {
+      downloadAlbumsBtn.disabled = true;
+      downloadAlbumsBtn.classList.add('download-btn--disabled');
+      downloadAlbumsBtn.innerHTML = `<span title="Cannot download albums from this playlist because it contains explicit tracks">Albums Access Restricted</span>`;
+    }
   } else {
     // Normal behavior when no explicit tracks are present
-    downloadPlaylistBtn.addEventListener('click', () => {
-      // Remove individual track download buttons (but leave the whole playlist button).
-      document.querySelectorAll('.download-btn').forEach(btn => {
-        if (btn.id !== 'downloadPlaylistBtn') {
-          btn.remove();
-        }
-      });
-
-      // Disable the whole playlist button to prevent repeated clicks.
-      downloadPlaylistBtn.disabled = true;
-      downloadPlaylistBtn.textContent = 'Queueing...';
-
-      // Initiate the playlist download.
-      downloadWholePlaylist(playlist).then(() => {
-        downloadPlaylistBtn.textContent = 'Queued!';
-      }).catch(err => {
-        showError('Failed to queue playlist download: ' + (err?.message || 'Unknown error'));
-        downloadPlaylistBtn.disabled = false;
-      });
-    });
-
-    downloadAlbumsBtn.addEventListener('click', () => {
-      // Remove individual track download buttons (but leave this album button).
-      document.querySelectorAll('.download-btn').forEach(btn => {
-        if (btn.id !== 'downloadAlbumsBtn') btn.remove();
-      });
-
-      downloadAlbumsBtn.disabled = true;
-      downloadAlbumsBtn.textContent = 'Queueing...';
-
-      downloadPlaylistAlbums(playlist)
-        .then(() => {
-          downloadAlbumsBtn.textContent = 'Queued!';
-        })
-        .catch(err => {
-          showError('Failed to queue album downloads: ' + (err?.message || 'Unknown error'));
-          downloadAlbumsBtn.disabled = false;
+    if (downloadPlaylistBtn) {
+      downloadPlaylistBtn.addEventListener('click', () => {
+        // Remove individual track download buttons (but leave the whole playlist button).
+        document.querySelectorAll('.download-btn').forEach(btn => {
+          if (btn.id !== 'downloadPlaylistBtn') {
+            btn.remove();
+          }
         });
-    });
+
+        // Disable the whole playlist button to prevent repeated clicks.
+        downloadPlaylistBtn.disabled = true;
+        downloadPlaylistBtn.textContent = 'Queueing...';
+
+        // Initiate the playlist download.
+        downloadWholePlaylist(playlist).then(() => {
+          downloadPlaylistBtn.textContent = 'Queued!';
+        }).catch((err: any) => {
+          showError('Failed to queue playlist download: ' + (err?.message || 'Unknown error'));
+          downloadPlaylistBtn.disabled = false;
+        });
+      });
+    }
+
+    if (downloadAlbumsBtn) {
+      downloadAlbumsBtn.addEventListener('click', () => {
+        // Remove individual track download buttons (but leave this album button).
+        document.querySelectorAll('.download-btn').forEach(btn => {
+          if (btn.id !== 'downloadAlbumsBtn') btn.remove();
+        });
+
+        downloadAlbumsBtn.disabled = true;
+        downloadAlbumsBtn.textContent = 'Queueing...';
+
+        downloadPlaylistAlbums(playlist)
+          .then(() => {
+            if (downloadAlbumsBtn) downloadAlbumsBtn.textContent = 'Queued!';
+          })
+          .catch((err: any) => {
+            showError('Failed to queue album downloads: ' + (err?.message || 'Unknown error'));
+            if (downloadAlbumsBtn) downloadAlbumsBtn.disabled = false;
+          });
+      });
+    }
   }
 
   // Render tracks list
@@ -220,8 +235,10 @@ function renderPlaylist(playlist) {
   }
 
   // Reveal header and tracks container
-  document.getElementById('playlist-header').classList.remove('hidden');
-  document.getElementById('tracks-container').classList.remove('hidden');
+  const playlistHeaderEl = document.getElementById('playlist-header');
+  if (playlistHeaderEl) playlistHeaderEl.classList.remove('hidden');
+  const tracksContainerEl = document.getElementById('tracks-container');
+  if (tracksContainerEl) tracksContainerEl.classList.remove('hidden');
 
   // Attach download listeners to newly rendered download buttons
   attachDownloadListeners();
@@ -230,7 +247,7 @@ function renderPlaylist(playlist) {
 /**
  * Converts milliseconds to minutes:seconds.
  */
-function msToTime(duration) {
+function msToTime(duration: number) {
   if (!duration || isNaN(duration)) return '0:00';
   
   const minutes = Math.floor(duration / 60000);
@@ -241,7 +258,7 @@ function msToTime(duration) {
 /**
  * Displays an error message in the UI.
  */
-function showError(message) {
+function showError(message: string) {
   const errorEl = document.getElementById('error');
   if (errorEl) {
     errorEl.textContent = message || 'An error occurred';
@@ -256,14 +273,15 @@ function attachDownloadListeners() {
   document.querySelectorAll('.download-btn').forEach((btn) => {
     // Skip the whole playlist and album download buttons.
     if (btn.id === 'downloadPlaylistBtn' || btn.id === 'downloadAlbumsBtn') return;
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', (e: Event) => {
       e.stopPropagation();
-      const url = e.currentTarget.dataset.url || '';
-      const type = e.currentTarget.dataset.type || '';
-      const name = e.currentTarget.dataset.name || extractName(url) || 'Unknown';
+      const currentTarget = e.currentTarget as HTMLButtonElement;
+      const url = currentTarget.dataset.url || '';
+      const type = currentTarget.dataset.type || '';
+      const name = currentTarget.dataset.name || extractName(url) || 'Unknown';
       // Remove the button immediately after click.
-      e.currentTarget.remove();
-      startDownload(url, type, { name });
+      currentTarget.remove();
+      startDownload(url, type, { name }, ''); // Added empty string for albumType
     });
   });
 }
@@ -271,7 +289,7 @@ function attachDownloadListeners() {
 /**
  * Initiates the whole playlist download by calling the playlist endpoint.
  */
-async function downloadWholePlaylist(playlist) {
+async function downloadWholePlaylist(playlist: any) {
   if (!playlist) {
     throw new Error('Invalid playlist data');
   }
@@ -286,7 +304,7 @@ async function downloadWholePlaylist(playlist) {
     await downloadQueue.download(url, 'playlist', { name: playlist.name || 'Unknown Playlist' });
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
-  } catch (error) {
+  } catch (error: any) {
     showError('Playlist download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }
@@ -297,7 +315,7 @@ async function downloadWholePlaylist(playlist) {
  * adding a 20ms delay between each album download and updating the button
  * with the progress (queued_albums/total_albums).
  */
-async function downloadPlaylistAlbums(playlist) {
+async function downloadPlaylistAlbums(playlist: any) {
   if (!playlist?.tracks?.items) {
     showError('No tracks found in this playlist.');
     return;
@@ -322,7 +340,7 @@ async function downloadPlaylistAlbums(playlist) {
   }
 
   // Get a reference to the "Download Playlist's Albums" button.
-  const downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn');
+  const downloadAlbumsBtn = document.getElementById('downloadAlbumsBtn') as HTMLButtonElement | null;
   if (downloadAlbumsBtn) {
     // Initialize the progress display.
     downloadAlbumsBtn.textContent = `0/${totalAlbums}`;
@@ -360,7 +378,7 @@ async function downloadPlaylistAlbums(playlist) {
     
     // Make the queue visible after queueing all albums
     downloadQueue.toggleVisibility(true);
-  } catch (error) {
+  } catch (error: any) {
     // Propagate any errors encountered.
     throw error;
   }
@@ -369,7 +387,7 @@ async function downloadPlaylistAlbums(playlist) {
 /**
  * Starts the download process using the centralized download method from the queue.
  */
-async function startDownload(url, type, item, albumType) {
+async function startDownload(url: string, type: string, item: any, albumType?: string) {
   if (!url || !type) {
     showError('Missing URL or type for download');
     return;
@@ -381,7 +399,7 @@ async function startDownload(url, type, item, albumType) {
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
-  } catch (error) {
+  } catch (error: any) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }
@@ -390,6 +408,6 @@ async function startDownload(url, type, item, albumType) {
 /**
  * A helper function to extract a display name from the URL.
  */
-function extractName(url) {
+function extractName(url: string | null): string {
   return url || 'Unknown';
 }

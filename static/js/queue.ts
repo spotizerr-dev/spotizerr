@@ -1,28 +1,181 @@
 // --- MODIFIED: Custom URLSearchParams class that does not encode anything ---
 class CustomURLSearchParams {
+  params: Record<string, string>;
   constructor() {
     this.params = {};
   }
-  append(key, value) {
+  append(key: string, value: string): void {
     this.params[key] = value;
   }
-  toString() {
+  toString(): string {
     return Object.entries(this.params)
-      .map(([key, value]) => `${key}=${value}`)
+      .map(([key, value]: [string, string]) => `${key}=${value}`)
       .join('&');
   }
 }
 // --- END MODIFIED ---
 
-class DownloadQueue {
+// Interfaces for complex objects
+interface QueueItem {
+  name?: string;
+  music?: string;
+  song?: string;
+  artist?: string;
+  artists?: { name: string }[];
+  album?: { name: string };
+  owner?: string | { display_name?: string };
+  total_tracks?: number;
+  url?: string;
+  type?: string; // Added for artist downloads
+  parent?: ParentInfo; // For tracks within albums/playlists
+  // For PRG file loading
+  display_title?: string;
+  display_artist?: string;
+  endpoint?: string;
+  download_type?: string;
+  [key: string]: any; // Allow other properties
+}
+
+interface ParentInfo {
+  type: 'album' | 'playlist';
+  title?: string; // for album
+  artist?: string; // for album
+  name?: string; // for playlist
+  owner?: string; // for playlist
+  total_tracks?: number;
+  url?: string;
+  [key: string]: any; // Allow other properties
+}
+
+interface StatusData {
+  type?: string;
+  status?: string;
+  name?: string;
+  song?: string;
+  music?: string;
+  title?: string;
+  artist?: string;
+  artist_name?: string;
+  album?: string;
+  owner?: string;
+  total_tracks?: number | string;
+  current_track?: number | string;
+  parsed_current_track?: string; // Make sure these are handled if they are strings
+  parsed_total_tracks?: string;  // Make sure these are handled if they are strings
+  progress?: number | string; // Can be string initially
+  percentage?: number | string; // Can be string initially
+  percent?: number | string; // Can be string initially
+  time_elapsed?: number;
+  error?: string;
+  can_retry?: boolean;
+  retry_count?: number;
+  max_retries?: number; // from config potentially
+  seconds_left?: number;
+  prg_file?: string;
+  url?: string;
+  reason?: string; // for skipped
+  parent?: ParentInfo;
+  original_url?: string;
+  position?: number; // For queued items
+  original_request?: {
+    url?: string;
+    retry_url?: string;
+    name?: string;
+    artist?: string;
+    type?: string;
+    endpoint?: string;
+    download_type?: string;
+    display_title?: string;
+    display_type?: string;
+    display_artist?: string;
+    service?: string;
+    [key: string]: any; // For other potential original_request params
+  };
+  event?: string; // from SSE
+  overall_progress?: number;
+  display_type?: string; // from PRG data
+  [key: string]: any; // Allow other properties
+}
+
+interface QueueEntry {
+  item: QueueItem;
+  type: string;
+  prgFile: string;
+  requestUrl: string | null;
+  element: HTMLElement;
+  lastStatus: StatusData;
+  lastUpdated: number;
+  hasEnded: boolean;
+  intervalId: number | null; // NodeJS.Timeout for setInterval/clearInterval
+  uniqueId: string;
+  retryCount: number;
+  autoRetryInterval: number | null;
+  isNew: boolean;
+  status: string;
+  lastMessage: string;
+  parentInfo: ParentInfo | null;
+  isRetrying?: boolean;
+  progress?: number; // for multi-track overall progress
+  realTimeStallDetector: { count: number; lastStatusJson: string };
+  [key: string]: any; // Allow other properties
+}
+
+interface AppConfig {
+  downloadQueueVisible?: boolean;
+  maxRetries?: number;
+  retryDelaySeconds?: number;
+  retry_delay_increase?: number;
+  explicitFilter?: boolean;
+  [key: string]: any; // Allow other config properties
+}
+
+// Ensure DOM elements are queryable
+declare global {
+  interface Document {
+    getElementById(elementId: string): HTMLElement | null;
+  }
+}
+
+export class DownloadQueue {
+  // Constants read from the server config
+  MAX_RETRIES: number = 3;      // Default max retries
+  RETRY_DELAY: number = 5;      // Default retry delay in seconds
+  RETRY_DELAY_INCREASE: number = 5; // Default retry delay increase in seconds
+
+  // Cache for queue items
+  queueCache: Record<string, StatusData> = {};
+  
+  // Queue entry objects
+  queueEntries: Record<string, QueueEntry> = {};
+  
+  // Polling intervals for progress tracking
+  pollingIntervals: Record<string, number> = {}; // NodeJS.Timeout for setInterval
+  
+  // DOM elements cache (Consider if this is still needed or how it's used)
+  elements: Record<string, HTMLElement> = {}; // Example type, adjust as needed
+  
+  // Event handlers (Consider if this is still needed or how it's used)
+  eventHandlers: Record<string, Function> = {}; // Example type, adjust as needed
+  
+  // Configuration
+  config: AppConfig = {}; // Initialize with an empty object or a default config structure
+  
+  // Load the saved visible count (or default to 10)
+  visibleCount: number;
+  
   constructor() {
+    const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
+    this.visibleCount = storedVisibleCount ? parseInt(storedVisibleCount, 10) : 10;
+    
+    this.queueCache = JSON.parse(localStorage.getItem("downloadQueueCache") || "{}");
+    
     // Constants read from the server config
     this.MAX_RETRIES = 3;      // Default max retries
     this.RETRY_DELAY = 5;      // Default retry delay in seconds
     this.RETRY_DELAY_INCREASE = 5; // Default retry delay increase in seconds
 
     // Cache for queue items
-    this.queueCache = {};
+    // this.queueCache = {}; // Already initialized above
     
     // Queue entry objects
     this.queueEntries = {};
@@ -37,14 +190,14 @@ class DownloadQueue {
     this.eventHandlers = {};
     
     // Configuration
-    this.config = null;
+    this.config = {}; // Initialize config
     
-    // Load the saved visible count (or default to 10)
-    const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
-    this.visibleCount = storedVisibleCount ? parseInt(storedVisibleCount, 10) : 10;
+    // Load the saved visible count (or default to 10) - This block is redundant
+    // const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
+    // this.visibleCount = storedVisibleCount ? parseInt(storedVisibleCount, 10) : 10;
     
-    // Load the cached status info (object keyed by prgFile)
-    this.queueCache = JSON.parse(localStorage.getItem("downloadQueueCache") || "{}");
+    // Load the cached status info (object keyed by prgFile) - This is also redundant
+    // this.queueCache = JSON.parse(localStorage.getItem("downloadQueueCache") || "{}");
     
     // Wait for initDOM to complete before setting up event listeners and loading existing PRG files.
     this.initDOM().then(() => {
@@ -79,16 +232,22 @@ class DownloadQueue {
     // Override the server value with locally persisted queue visibility (if present).
     const storedVisible = localStorage.getItem("downloadQueueVisible");
     if (storedVisible !== null) {
-      this.config.downloadQueueVisible = storedVisible === "true";
+      // Ensure config is not null before assigning
+      if (this.config) {
+        this.config.downloadQueueVisible = storedVisible === "true";
+      }
     }
 
     const queueSidebar = document.getElementById('downloadQueue');
-    queueSidebar.hidden = !this.config.downloadQueueVisible;
-    queueSidebar.classList.toggle('active', this.config.downloadQueueVisible);
+    // Ensure config is not null and queueSidebar exists
+    if (this.config && queueSidebar) {
+      queueSidebar.hidden = !this.config.downloadQueueVisible;
+      queueSidebar.classList.toggle('active', !!this.config.downloadQueueVisible);
+    }
     
     // Initialize the queue icon based on sidebar visibility
     const queueIcon = document.getElementById('queueIcon');
-    if (queueIcon) {
+    if (queueIcon && this.config) {
       if (this.config.downloadQueueVisible) {
         queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
         queueIcon.setAttribute('aria-expanded', 'true');
@@ -104,9 +263,9 @@ class DownloadQueue {
   /* Event Handling */
   initEventListeners() {
     // Toggle queue visibility via Escape key.
-    document.addEventListener('keydown', async (e) => {
+    document.addEventListener('keydown', async (e: KeyboardEvent) => {
       const queueSidebar = document.getElementById('downloadQueue');
-      if (e.key === 'Escape' && queueSidebar.classList.contains('active')) {
+      if (e.key === 'Escape' && queueSidebar?.classList.contains('active')) {
         await this.toggleVisibility();
       }
     });
@@ -117,7 +276,7 @@ class DownloadQueue {
       cancelAllBtn.addEventListener('click', () => {
         for (const queueId in this.queueEntries) {
           const entry = this.queueEntries[queueId];
-          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
           if (entry && !entry.hasEnded && entry.prgFile) {
             // Mark as cancelling visually
             if (entry.element) {
@@ -135,7 +294,7 @@ class DownloadQueue {
                 if (data.status === "cancelled" || data.status === "cancel") {
                   entry.hasEnded = true;
                   if (entry.intervalId) {
-                    clearInterval(entry.intervalId);
+                    clearInterval(entry.intervalId as number); // Cast to number for clearInterval
                     entry.intervalId = null;
                   }
                   // Remove the entry as soon as the API confirms cancellation
@@ -156,8 +315,9 @@ class DownloadQueue {
   }
 
   /* Public API */
-  async toggleVisibility(force) {
+  async toggleVisibility(force?: boolean) {
     const queueSidebar = document.getElementById('downloadQueue');
+    if (!queueSidebar) return; // Guard against null
     // If force is provided, use that value, otherwise toggle the current state
     const isVisible = force !== undefined ? force : !queueSidebar.classList.contains('active');
     
@@ -166,7 +326,7 @@ class DownloadQueue {
 
     // Update the queue icon to show X when visible or queue icon when hidden
     const queueIcon = document.getElementById('queueIcon');
-    if (queueIcon) {
+    if (queueIcon && this.config) {
       if (isVisible) {
         // Replace the image with an X and add red tint
         queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
@@ -181,7 +341,7 @@ class DownloadQueue {
     }
 
     // Persist the state locally so it survives refreshes.
-    localStorage.setItem("downloadQueueVisible", isVisible);
+    localStorage.setItem("downloadQueueVisible", String(isVisible));
 
     try {
       await this.loadConfig();
@@ -194,7 +354,7 @@ class DownloadQueue {
       queueSidebar.classList.toggle('active', !isVisible);
       queueSidebar.hidden = isVisible;
       // Also revert the icon back
-      if (queueIcon) {
+      if (queueIcon && this.config) {
         if (!isVisible) {
           queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
           queueIcon.setAttribute('aria-expanded', 'true');
@@ -210,18 +370,18 @@ class DownloadQueue {
     }
   }
 
-  showError(message) {
+  showError(message: string) {
     const errorDiv = document.createElement('div');
     errorDiv.className = 'queue-error';
     errorDiv.textContent = message;
-    document.getElementById('queueItems').prepend(errorDiv);
+    document.getElementById('queueItems')?.prepend(errorDiv); // Optional chaining
     setTimeout(() => errorDiv.remove(), 3000);
   }
 
   /**
    * Adds a new download entry.
    */
-  addDownload(item, type, prgFile, requestUrl = null, startMonitoring = false) {
+  addDownload(item: QueueItem, type: string, prgFile: string, requestUrl: string | null = null, startMonitoring: boolean = false): string {
     const queueId = this.generateQueueId();
     const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
     this.queueEntries[queueId] = entry;
@@ -238,7 +398,7 @@ class DownloadQueue {
   }
 
   /* Start processing the entry. Removed visibility check to ensure all entries are monitored. */
-  async startDownloadStatusMonitoring(queueId) {
+  async startDownloadStatusMonitoring(queueId: string) {
     const entry = this.queueEntries[queueId];
     if (!entry || entry.hasEnded) return;
     
@@ -246,11 +406,11 @@ class DownloadQueue {
     if (this.pollingIntervals[queueId]) return;
     
     // Ensure entry has data containers for parent info
-    entry.parentInfo = entry.parentInfo || {};
+    entry.parentInfo = entry.parentInfo || null;
 
     // Show a preparing message for new entries
     if (entry.isNew) {
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
       if (logElement) {
         logElement.textContent = "Initializing download...";
       }
@@ -262,14 +422,14 @@ class DownloadQueue {
     try {
       const response = await fetch(`/api/prgs/${entry.prgFile}`);
       if (response.ok) {
-        const data = await response.json();
+        const data: StatusData = await response.json(); // Add type to data
         
         // Update entry type if available
         if (data.type) {
           entry.type = data.type;
           
           // Update type display if element exists
-          const typeElement = entry.element.querySelector('.type');
+          const typeElement = entry.element.querySelector('.type') as HTMLElement | null;
           if (typeElement) {
             typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
             typeElement.className = `type ${data.type}`;
@@ -294,10 +454,10 @@ class DownloadQueue {
         if (data.last_line) {
           entry.lastStatus = data.last_line;
           entry.lastUpdated = Date.now();
-          entry.status = data.last_line.status;
+          entry.status = data.last_line.status || 'unknown'; // Ensure status is not undefined
           
           // Update status message without recreating the element
-          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
           if (logElement) {
             const statusMessage = this.getStatusMessage(data.last_line);
             logElement.textContent = statusMessage;
@@ -325,7 +485,7 @@ class DownloadQueue {
                 entry.type = parent.type;
                 
                 // Update the type indicator
-                const typeEl = entry.element.querySelector('.type');
+                const typeEl = entry.element.querySelector('.type') as HTMLElement | null;
                 if (typeEl) {
                   const displayType = parent.type.charAt(0).toUpperCase() + parent.type.slice(1);
                   typeEl.textContent = displayType;
@@ -333,8 +493,8 @@ class DownloadQueue {
                 }
                 
                 // Update the title and subtitle based on parent type
-                const titleEl = entry.element.querySelector('.title');
-                const artistEl = entry.element.querySelector('.artist');
+                const titleEl = entry.element.querySelector('.title') as HTMLElement | null;
+                const artistEl = entry.element.querySelector('.artist') as HTMLElement | null;
                 
                 if (parent.type === 'album') {
                   if (titleEl) titleEl.textContent = parent.title || 'Unknown album';
@@ -350,7 +510,7 @@ class DownloadQueue {
           localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
           
           // If the entry is already in a terminal state, don't set up polling
-          if (['error', 'complete', 'cancel', 'cancelled', 'done'].includes(data.last_line.status)) {
+          if (['error', 'complete', 'cancel', 'cancelled', 'done'].includes(data.last_line.status || '')) { // Add null check for status
             entry.hasEnded = true;
             this.handleDownloadCompletion(entry, queueId, data.last_line);
             return;
@@ -373,11 +533,11 @@ class DownloadQueue {
   /**
    * Creates a new queue entry. It checks localStorage for any cached info.
    */
-  createQueueEntry(item, type, prgFile, queueId, requestUrl) {
+  createQueueEntry(item: QueueItem, type: string, prgFile: string, queueId: string, requestUrl: string | null): QueueEntry {
     console.log(`Creating queue entry with initial type: ${type}`);
     
     // Get cached data if it exists
-    const cachedData = this.queueCache[prgFile];
+    const cachedData: StatusData | undefined = this.queueCache[prgFile]; // Add type
     
     // If we have cached data, use it to determine the true type and item properties
     if (cachedData) {
@@ -406,19 +566,19 @@ class DownloadQueue {
         item = {
           name: cachedData.title || cachedData.album || 'Unknown album',
           artist: cachedData.artist || 'Unknown artist',
-          total_tracks: cachedData.total_tracks || 0
+          total_tracks: typeof cachedData.total_tracks === 'string' ? parseInt(cachedData.total_tracks, 10) : cachedData.total_tracks || 0
         };
       } else if (cachedData.type === 'playlist') {
         item = {
           name: cachedData.name || 'Unknown playlist',
           owner: cachedData.owner || 'Unknown creator',
-          total_tracks: cachedData.total_tracks || 0
+          total_tracks: typeof cachedData.total_tracks === 'string' ? parseInt(cachedData.total_tracks, 10) : cachedData.total_tracks || 0
         };
       }
     }
     
     // Build the basic entry with possibly updated type and item
-    const entry = {
+    const entry: QueueEntry = { // Add type to entry
       item,
       type, 
       prgFile,
@@ -432,7 +592,7 @@ class DownloadQueue {
         artist: item.artist || item.artists?.[0]?.name || '',
         album: item.album?.name || '',
         title: item.name || '',
-        owner: item.owner || item.owner?.display_name || '',
+        owner: typeof item.owner === 'string' ? item.owner : item.owner?.display_name || '',
         total_tracks: item.total_tracks || 0
       },
       lastUpdated: Date.now(),
@@ -451,7 +611,7 @@ class DownloadQueue {
     // If cached info exists for this PRG file, use it.
     if (cachedData) {
       entry.lastStatus = cachedData;
-      const logEl = entry.element.querySelector('.log');
+      const logEl = entry.element.querySelector('.log') as HTMLElement | null;
       
       // Store parent information if available
       if (cachedData.parent) {
@@ -459,7 +619,9 @@ class DownloadQueue {
       }
       
       // Render status message for cached data
-      logEl.textContent = this.getStatusMessage(entry.lastStatus);
+      if (logEl) { // Check if logEl is not null
+        logEl.textContent = this.getStatusMessage(entry.lastStatus);
+      }
     }
     
     // Store it in our queue object
@@ -471,7 +633,7 @@ class DownloadQueue {
   /**
  * Returns an HTML element for the queue entry with modern UI styling.
  */
-createQueueItem(item, type, prgFile, queueId) {
+createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string): HTMLElement {
   // Track whether this is a multi-track item (album or playlist)
   const isMultiTrack = type === 'album' || type === 'playlist';
   const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
@@ -481,7 +643,7 @@ createQueueItem(item, type, prgFile, queueId) {
   const displayArtist = item.artist || '';
   const displayType = type.charAt(0).toUpperCase() + type.slice(1);
   
-  const div = document.createElement('article');
+  const div = document.createElement('article') as HTMLElement; // Cast to HTMLElement
   div.className = 'queue-item queue-item-new'; // Add the animation class
   div.setAttribute('aria-live', 'polite');
   div.setAttribute('aria-atomic', 'true');
@@ -535,7 +697,7 @@ createQueueItem(item, type, prgFile, queueId) {
   
   div.innerHTML = innerHtml;
   
-  div.querySelector('.cancel-btn').addEventListener('click', (e) => this.handleCancelDownload(e));
+  (div.querySelector('.cancel-btn') as HTMLButtonElement | null)?.addEventListener('click', (e: MouseEvent) => this.handleCancelDownload(e)); // Add types and optional chaining
   
   // Remove the animation class after animation completes
   setTimeout(() => {
@@ -546,7 +708,7 @@ createQueueItem(item, type, prgFile, queueId) {
 }
 
   // Add a helper method to apply the right CSS classes based on status
-  applyStatusClasses(entry, status) {
+  applyStatusClasses(entry: QueueEntry, statusData: StatusData) { // Add types for statusData
     // If no element, nothing to do
     if (!entry.element) return;
     
@@ -557,7 +719,7 @@ createQueueItem(item, type, prgFile, queueId) {
     );
     
     // Handle various status types
-    switch (status) {
+    switch (statusData.status) { // Use statusData.status
       case 'queued':
         entry.element.classList.add('queued');
         break;
@@ -576,7 +738,7 @@ createQueueItem(item, type, prgFile, queueId) {
       case 'error':
         entry.element.classList.add('error');
         // Hide error-details to prevent duplicate error display
-        const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+        const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
         if (errorDetailsContainer) {
           errorDetailsContainer.style.display = 'none';
         }
@@ -586,7 +748,7 @@ createQueueItem(item, type, prgFile, queueId) {
         entry.element.classList.add('complete');
         // Hide error details if present
         if (entry.element) {
-          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
           if (errorDetailsContainer) {
             errorDetailsContainer.style.display = 'none';
           }
@@ -596,7 +758,7 @@ createQueueItem(item, type, prgFile, queueId) {
         entry.element.classList.add('cancelled');
         // Hide error details if present
         if (entry.element) {
-          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`);
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
           if (errorDetailsContainer) {
             errorDetailsContainer.style.display = 'none';
           }
@@ -605,10 +767,13 @@ createQueueItem(item, type, prgFile, queueId) {
     }
   }
 
-  async handleCancelDownload(e) {
-    const btn = e.target.closest('button');
+  async handleCancelDownload(e: MouseEvent) { // Add type for e
+    const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null; // Add types and null check
+    if (!btn) return; // Guard clause
     btn.style.display = 'none';
     const { prg, type, queueid } = btn.dataset;
+    if (!prg || !type || !queueid) return; // Guard against undefined dataset properties
+
     try {
       // Get the queue item element
       const entry = this.queueEntries[queueid];
@@ -618,7 +783,7 @@ createQueueItem(item, type, prgFile, queueId) {
       }
       
       // Show cancellation in progress
-      const logElement = document.getElementById(`log-${queueid}-${prg}`);
+      const logElement = document.getElementById(`log-${queueid}-${prg}`) as HTMLElement | null;
       if (logElement) {
         logElement.textContent = "Cancelling...";
       }
@@ -635,7 +800,7 @@ createQueueItem(item, type, prgFile, queueId) {
           this.clearPollingInterval(queueid);
           
           if (entry.intervalId) {
-            clearInterval(entry.intervalId);
+            clearInterval(entry.intervalId as number); // Cast to number
             entry.intervalId = null;
           }
           
@@ -657,11 +822,12 @@ createQueueItem(item, type, prgFile, queueId) {
   updateQueueOrder() {
     const container = document.getElementById('queueItems');
     const footer = document.getElementById('queueFooter');
+    if (!container || !footer) return; // Guard against null
     const entries = Object.values(this.queueEntries);
 
     // Sorting: errors/canceled first (group 0), ongoing next (group 1), queued last (group 2, sorted by position).
     entries.sort((a, b) => {
-      const getGroup = (entry) => {
+      const getGroup = (entry: QueueEntry) => { // Add type
         if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
           return 0;
         } else if (entry.lastStatus && entry.lastStatus.status === "queued") {
@@ -685,7 +851,10 @@ createQueueItem(item, type, prgFile, queueId) {
     });
 
     // Update the header with just the total count
-    document.getElementById('queueTotalCount').textContent = entries.length;
+    const queueTotalCountEl = document.getElementById('queueTotalCount') as HTMLElement | null;
+    if (queueTotalCountEl) {
+      queueTotalCountEl.textContent = entries.length.toString();
+    }
     
     // Remove subtitle with detailed stats if it exists
     const subtitleEl = document.getElementById('queueSubtitle');
@@ -723,8 +892,8 @@ createQueueItem(item, type, prgFile, queueId) {
         // Create a map of current DOM elements by queue ID
         const existingElementMap = {};
         visibleItems.forEach(el => {
-          const queueId = el.querySelector('.cancel-btn')?.dataset.queueid;
-          if (queueId) existingElementMap[queueId] = el;
+          const queueId = (el.querySelector('.cancel-btn') as HTMLElement | null)?.dataset.queueid; // Optional chaining
+          if (queueId) existingElementMap[queueId] = el as HTMLElement; // Cast to HTMLElement
         });
         
         // Clear container to re-add in correct order
@@ -752,7 +921,7 @@ createQueueItem(item, type, prgFile, queueId) {
       showMoreBtn.textContent = `Show ${remaining} more`;
       showMoreBtn.addEventListener('click', () => {
         this.visibleCount += 10;
-        localStorage.setItem("downloadQueueVisibleCount", this.visibleCount);
+        localStorage.setItem("downloadQueueVisibleCount", this.visibleCount.toString()); // toString
         this.updateQueueOrder();
       });
       footer.appendChild(showMoreBtn);
@@ -760,10 +929,10 @@ createQueueItem(item, type, prgFile, queueId) {
   }
 
   /* Checks if an entry is visible in the queue display. */
-  isEntryVisible(queueId) {
+  isEntryVisible(queueId: string): boolean { // Add return type
     const entries = Object.values(this.queueEntries);
     entries.sort((a, b) => {
-      const getGroup = (entry) => {
+      const getGroup = (entry: QueueEntry) => { // Add type
         if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
           return 0;
         } else if (entry.lastStatus && entry.lastStatus.status === "queued") {
@@ -789,7 +958,7 @@ createQueueItem(item, type, prgFile, queueId) {
     return index >= 0 && index < this.visibleCount;
   }
 
-  async cleanupEntry(queueId) {
+  async cleanupEntry(queueId: string) {
     const entry = this.queueEntries[queueId];
     if (entry) {
       // Close any polling interval
@@ -797,10 +966,10 @@ createQueueItem(item, type, prgFile, queueId) {
       
       // Clean up any intervals
       if (entry.intervalId) {
-        clearInterval(entry.intervalId);
+        clearInterval(entry.intervalId as number); // Cast to number
       }
       if (entry.autoRetryInterval) {
-        clearInterval(entry.autoRetryInterval);
+        clearInterval(entry.autoRetryInterval as number); // Cast to number
       }
       
       // Remove from the DOM
@@ -833,12 +1002,12 @@ createQueueItem(item, type, prgFile, queueId) {
   }
 
   /* Event Dispatching */
-  dispatchEvent(name, detail) {
+  dispatchEvent(name: string, detail: any) { // Add type for name
     document.dispatchEvent(new CustomEvent(name, { detail }));
   }
 
   /* Status Message Handling */
-  getStatusMessage(data) {
+  getStatusMessage(data: StatusData): string { // Add types
     // Determine the true display type - if this is a track with a parent, we may want to
     // show it as part of the parent's download process
     let displayType = data.type || 'unknown';
@@ -851,7 +1020,7 @@ createQueueItem(item, type, prgFile, queueId) {
     }
     
     // Find the queue item this status belongs to
-    let queueItem = null;
+    let queueItem: QueueEntry | null = null;
     const prgFile = data.prg_file || Object.keys(this.queueCache).find(key => 
       this.queueCache[key].status === data.status && this.queueCache[key].type === data.type
     );
@@ -875,7 +1044,7 @@ createQueueItem(item, type, prgFile, queueId) {
     const playlistName = data.name || data.parent?.name || 
                         (queueItem?.item?.name) || '';
     const playlistOwner = data.owner || data.parent?.owner || 
-                         (queueItem?.item?.owner) || '';
+                         (queueItem?.item?.owner) || ''; // Add type check if item.owner is object
     const currentTrack = data.current_track || data.parsed_current_track || '';
     const totalTracks = data.total_tracks || data.parsed_total_tracks || data.parent?.total_tracks || 
                        (queueItem?.item?.total_tracks) || '';
@@ -883,15 +1052,15 @@ createQueueItem(item, type, prgFile, queueId) {
     // Format percentage for display when available
     let formattedPercentage = '0';
     if (data.progress !== undefined) {
-      formattedPercentage = parseFloat(data.progress).toFixed(1);
+      formattedPercentage = parseFloat(data.progress as string).toFixed(1); // Cast to string
     } else if (data.percentage) {
-      formattedPercentage = (parseFloat(data.percentage) * 100).toFixed(1);
+      formattedPercentage = (parseFloat(data.percentage as string) * 100).toFixed(1); // Cast to string
     } else if (data.percent) {
-      formattedPercentage = (parseFloat(data.percent) * 100).toFixed(1);
+      formattedPercentage = (parseFloat(data.percent as string) * 100).toFixed(1); // Cast to string
     }
     
     // Helper for constructing info about the parent item
-    const getParentInfo = () => {
+    const getParentInfo = (): string => { // Add return type
       if (!data.parent) return '';
       
       if (data.parent.type === 'album') {
@@ -1104,16 +1273,16 @@ createQueueItem(item, type, prgFile, queueId) {
   }
 
   /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
-  handleDownloadCompletion(entry, queueId, progress) {
+  handleDownloadCompletion(entry: QueueEntry, queueId: string, progress: StatusData | number) { // Add types
     // Mark the entry as ended
     entry.hasEnded = true;
     
     // Update progress bar if available
     if (typeof progress === 'number') {
-      const progressBar = entry.element.querySelector('.progress-bar');
+      const progressBar = entry.element.querySelector('.progress-bar') as HTMLElement | null;
       if (progressBar) {
         progressBar.style.width = '100%';
-        progressBar.setAttribute('aria-valuenow', 100);
+        progressBar.setAttribute('aria-valuenow', "100"); // Use string for aria-valuenow
         progressBar.classList.add('bg-success');
       }
     }
@@ -1130,7 +1299,7 @@ createQueueItem(item, type, prgFile, queueId) {
     }, cleanupDelay);
   }
 
-  handleInactivity(entry, queueId, logElement) {
+  handleInactivity(entry: QueueEntry, queueId: string, logElement: HTMLElement | null) { // Add types
     if (entry.lastStatus && entry.lastStatus.status === 'queued') {
       if (logElement) {
         logElement.textContent = this.getStatusMessage(entry.lastStatus);
@@ -1139,8 +1308,8 @@ createQueueItem(item, type, prgFile, queueId) {
     }
     const now = Date.now();
     if (now - entry.lastUpdated > 300000) {
-      const progress = { status: 'error', message: 'Inactivity timeout' };
-      this.handleDownloadCompletion(entry, queueId, progress);
+      const progressData: StatusData = { status: 'error', error: 'Inactivity timeout' }; // Use error property
+      this.handleDownloadCompletion(entry, queueId, progressData); // Pass StatusData
     } else {
       if (logElement) {
         logElement.textContent = this.getStatusMessage(entry.lastStatus);
@@ -1148,7 +1317,7 @@ createQueueItem(item, type, prgFile, queueId) {
     }
   }
 
-  async retryDownload(queueId, logElement) {
+  async retryDownload(queueId: string, logElement: HTMLElement | null) { // Add type
     const entry = this.queueEntries[queueId];
     if (!entry) {
       console.warn(`Retry called for non-existent queueId: ${queueId}`);
@@ -1157,15 +1326,15 @@ createQueueItem(item, type, prgFile, queueId) {
 
     // The retry button is already showing "Retrying..." and is disabled by the click handler.
     // We will update the error message div within logElement if retry fails.
-    const errorMessageDiv = logElement?.querySelector('.error-message');
-    const retryBtn = logElement?.querySelector('.retry-btn');
+    const errorMessageDiv = logElement?.querySelector('.error-message') as HTMLElement | null;
+    const retryBtn = logElement?.querySelector('.retry-btn') as HTMLButtonElement | null;
 
     entry.isRetrying = true; // Mark the original entry as being retried.
-
+    
     // Determine if we should use parent information for retry (existing logic)
     let useParent = false;
-    let parentType = null;
-    let parentUrl = null;
+    let parentType: string | null = null; // Add type
+    let parentUrl: string | null = null; // Add type
     if (entry.lastStatus && entry.lastStatus.parent) {
       const parent = entry.lastStatus.parent;
       if (parent.type && parent.url) {
@@ -1175,8 +1344,8 @@ createQueueItem(item, type, prgFile, queueId) {
         console.log(`Using parent info for retry: ${parentType} with URL: ${parentUrl}`);
       }
     }
-
-    const getRetryUrl = () => {
+    
+    const getRetryUrl = (): string | null => { // Add return type
       if (entry.lastStatus && entry.lastStatus.original_url) return entry.lastStatus.original_url;
       if (useParent && parentUrl) return parentUrl;
       if (entry.requestUrl) return entry.requestUrl;
@@ -1187,9 +1356,9 @@ createQueueItem(item, type, prgFile, queueId) {
       if (entry.lastStatus && entry.lastStatus.url) return entry.lastStatus.url;
       return null;
     };
-
+    
     const retryUrl = getRetryUrl();
-
+    
     if (!retryUrl) {
       if (errorMessageDiv) errorMessageDiv.textContent = 'Retry not available: missing URL information.';
       entry.isRetrying = false;
@@ -1199,16 +1368,16 @@ createQueueItem(item, type, prgFile, queueId) {
       }
       return;
     }
-
+    
     // Store details needed for the new entry BEFORE any async operations
-    const originalItem = { ...entry.item }; // Shallow copy
-    const apiTypeForNewEntry = useParent ? parentType : entry.type;
+    const originalItem: QueueItem = { ...entry.item }; // Shallow copy, add type
+    const apiTypeForNewEntry = useParent && parentType ? parentType : entry.type; // Ensure parentType is not null
     console.log(`Retrying download using type: ${apiTypeForNewEntry} with base URL: ${retryUrl}`);
-
-    let fullRetryUrl;
+      
+      let fullRetryUrl;
     if (retryUrl.startsWith('http') || retryUrl.startsWith('/api/')) { // if it's already a full URL or an API path
         fullRetryUrl = retryUrl;
-    } else {
+      } else {
         // Construct full URL if retryUrl is just a resource identifier
         fullRetryUrl = `/api/${apiTypeForNewEntry}/download?url=${encodeURIComponent(retryUrl)}`;
         // Append metadata if retryUrl is raw resource URL
@@ -1218,7 +1387,7 @@ createQueueItem(item, type, prgFile, queueId) {
         if (originalItem && originalItem.artist) {
         fullRetryUrl += `&artist=${encodeURIComponent(originalItem.artist)}`;
         }
-    }
+      }
     const requestUrlForNewEntry = fullRetryUrl;
 
     try {
@@ -1230,16 +1399,16 @@ createQueueItem(item, type, prgFile, queueId) {
         const errorText = await retryResponse.text();
         throw new Error(`Server returned ${retryResponse.status}${errorText ? (': ' + errorText) : ''}`);
       }
-
-      const retryData = await retryResponse.json();
-
+      
+      const retryData: StatusData = await retryResponse.json(); // Add type
+      
       if (retryData.prg_file) {
         const newPrgFile = retryData.prg_file;
-
+        
         // Clean up the old entry from UI, memory, cache, and server (PRG file)
         // logElement and retryBtn are part of the old entry's DOM structure and will be removed.
         await this.cleanupEntry(queueId);
-
+        
         // Add the new download entry. This will create a new element, start monitoring, etc.
         this.addDownload(originalItem, apiTypeForNewEntry, newPrgFile, requestUrlForNewEntry, true);
         
@@ -1261,11 +1430,11 @@ createQueueItem(item, type, prgFile, queueId) {
       const stillExistingEntry = this.queueEntries[queueId];
       if (stillExistingEntry && stillExistingEntry.element) {
         // logElement might be stale if the element was re-rendered, so query again if possible.
-        const currentLogOnFailedEntry = stillExistingEntry.element.querySelector('.log');
-        const errorDivOnFailedEntry = currentLogOnFailedEntry?.querySelector('.error-message') || errorMessageDiv;
-        const retryButtonOnFailedEntry = currentLogOnFailedEntry?.querySelector('.retry-btn') || retryBtn;
+        const currentLogOnFailedEntry = stillExistingEntry.element.querySelector('.log') as HTMLElement | null;
+        const errorDivOnFailedEntry = currentLogOnFailedEntry?.querySelector('.error-message') as HTMLElement | null || errorMessageDiv;
+        const retryButtonOnFailedEntry = currentLogOnFailedEntry?.querySelector('.retry-btn') as HTMLButtonElement | null || retryBtn;
 
-        if (errorDivOnFailedEntry) errorDivOnFailedEntry.textContent = 'Retry failed: ' + error.message;
+        if (errorDivOnFailedEntry) errorDivOnFailedEntry.textContent = 'Retry failed: ' + (error as Error).message; // Cast error to Error
         stillExistingEntry.isRetrying = false;
         if (retryButtonOnFailedEntry) {
           retryButtonOnFailedEntry.disabled = false;
@@ -1273,7 +1442,7 @@ createQueueItem(item, type, prgFile, queueId) {
         }
       } else if (errorMessageDiv) { 
         // Fallback if entry is gone from queue but original logElement's parts are somehow still accessible
-        errorMessageDiv.textContent = 'Retry failed: ' + error.message;
+        errorMessageDiv.textContent = 'Retry failed: ' + (error as Error).message;
          if (retryBtn) {
             retryBtn.disabled = false;
             retryBtn.innerHTML = 'Retry';
@@ -1300,7 +1469,7 @@ createQueueItem(item, type, prgFile, queueId) {
    * This method replaces the individual startTrackDownload, startAlbumDownload, etc. methods.
    * It will be called by all the other JS files.
    */
-  async download(url, type, item, albumType = null) {
+  async download(url: string, type: string, item: QueueItem, albumType: string | null = null): Promise<string | string[] | StatusData> { // Add types and return type
     if (!url) {
       throw new Error('Missing URL for download');
     }
@@ -1317,8 +1486,9 @@ createQueueItem(item, type, prgFile, queueId) {
     
     try {
       // Show a loading indicator
-      if (document.getElementById('queueIcon')) {
-        document.getElementById('queueIcon').classList.add('queue-icon-active');
+      const queueIcon = document.getElementById('queueIcon'); // No direct classList manipulation
+      if (queueIcon) {
+        queueIcon.classList.add('queue-icon-active');
       }
       
       const response = await fetch(apiUrl);
@@ -1326,23 +1496,23 @@ createQueueItem(item, type, prgFile, queueId) {
         throw new Error(`Server returned ${response.status}`);
       }
       
-      const data = await response.json();
+      const data: StatusData | { task_ids?: string[], album_prg_files?: string[] } = await response.json(); // Add type for data
       
       // Handle artist downloads which return multiple album tasks
       if (type === 'artist') {
         // Check for new API response format
-        if (data.task_ids && Array.isArray(data.task_ids)) {
+        if ('task_ids' in data && data.task_ids && Array.isArray(data.task_ids)) { // Type guard
           console.log(`Queued artist discography with ${data.task_ids.length} albums`);
           
           // Make queue visible to show progress
           this.toggleVisibility(true);
           
           // Create entries directly from task IDs and start monitoring them
-          const queueIds = [];
+          const queueIds: string[] = []; // Add type
           for (const taskId of data.task_ids) {
             console.log(`Adding album task with ID: ${taskId}`);
             // Create an album item with better display information
-            const albumItem = {
+            const albumItem: QueueItem = { // Add type
               name: `${item.name || 'Artist'} - Album (loading...)`, 
               artist: item.name || 'Unknown artist',
               type: 'album'
@@ -1355,18 +1525,18 @@ createQueueItem(item, type, prgFile, queueId) {
           return queueIds;
         } 
         // Check for older API response format
-        else if (data.album_prg_files && Array.isArray(data.album_prg_files)) {
+        else if ('album_prg_files' in data && data.album_prg_files && Array.isArray(data.album_prg_files)) { // Type guard
           console.log(`Queued artist discography with ${data.album_prg_files.length} albums (old format)`);
           
           // Make queue visible to show progress
           this.toggleVisibility(true);
           
           // Add each album to the download queue separately with forced monitoring
-          const queueIds = [];
+          const queueIds: string[] = []; // Add type
           data.album_prg_files.forEach(prgFile => {
             console.log(`Adding album with PRG file: ${prgFile}`);
             // Create an album item with better display information
-            const albumItem = {
+            const albumItem: QueueItem = { // Add type
               name: `${item.name || 'Artist'} - Album (loading...)`, 
               artist: item.name || 'Unknown artist',
               type: 'album'
@@ -1401,8 +1571,8 @@ createQueueItem(item, type, prgFile, queueId) {
       }
       
       // Handle single-file downloads (tracks, albums, playlists)
-      if (data.prg_file) {
-        console.log(`Adding ${type} with PRG file: ${data.prg_file}`);
+      if ('prg_file' in data && data.prg_file) { // Type guard
+        console.log(`Adding ${type} PRG file: ${data.prg_file}`);
         
         // Store the initial metadata in the cache so it's available
         // even before the first status update
@@ -1412,7 +1582,7 @@ createQueueItem(item, type, prgFile, queueId) {
           name: item.name || 'Unknown',
           title: item.name || 'Unknown',
           artist: item.artist || (item.artists && item.artists.length > 0 ? item.artists[0].name : ''),
-          owner: item.owner || (item.owner ? item.owner.display_name : ''),
+          owner: typeof item.owner === 'string' ? item.owner : item.owner?.display_name || '',
           total_tracks: item.total_tracks || 0
         };
         
@@ -1420,7 +1590,7 @@ createQueueItem(item, type, prgFile, queueId) {
         const queueId = this.addDownload(item, type, data.prg_file, apiUrl, true);
         
         // Make queue visible to show progress if not already visible
-        if (!this.config.downloadQueueVisible) {
+        if (this.config && !this.config.downloadQueueVisible) { // Add null check for config
           this.toggleVisibility(true);
         }
         
@@ -1450,7 +1620,7 @@ createQueueItem(item, type, prgFile, queueId) {
       }
       
       const response = await fetch('/api/prgs/list');
-      const prgFiles = await response.json();
+      const prgFiles: string[] = await response.json(); // Add type
       
       // Sort filenames by the numeric portion (assumes format "type_number.prg").
       prgFiles.sort((a, b) => {
@@ -1464,7 +1634,7 @@ createQueueItem(item, type, prgFile, queueId) {
         try {
           const prgResponse = await fetch(`/api/prgs/${prgFile}`);
           if (!prgResponse.ok) continue;
-          const prgData = await prgResponse.json();
+          const prgData: StatusData = await prgResponse.json(); // Add type
           
           // Skip prg files that are marked as cancelled, completed, or interrupted
           if (prgData.last_line && 
@@ -1483,7 +1653,7 @@ createQueueItem(item, type, prgFile, queueId) {
           }
           
           // Check cached status - if we marked it cancelled locally, delete it and skip
-          const cachedStatus = this.queueCache[prgFile];
+          const cachedStatus: StatusData | undefined = this.queueCache[prgFile]; // Add type
           if (cachedStatus && 
               (cachedStatus.status === 'cancelled' || 
                cachedStatus.status === 'cancel' ||
@@ -1500,11 +1670,11 @@ createQueueItem(item, type, prgFile, queueId) {
           
           // Use the enhanced original request info from the first line
           const originalRequest = prgData.original_request || {};
-          let lastLineData = prgData.last_line || {};
+          let lastLineData: StatusData = prgData.last_line || {}; // Add type
           
           // First check if this is a track with a parent (part of an album/playlist)
           let itemType = lastLineData.type || prgData.display_type || originalRequest.display_type || originalRequest.type || 'unknown';
-          let dummyItem = {};
+          let dummyItem: QueueItem = {}; // Add type
           
           // If this is a track with a parent, treat it as the parent type for UI purposes
           if (lastLineData.type === 'track' && lastLineData.parent) {
@@ -1516,11 +1686,10 @@ createQueueItem(item, type, prgFile, queueId) {
                 name: parent.title || 'Unknown Album',
                 artist: parent.artist || 'Unknown Artist',
                 type: 'album',
-                total_tracks: parent.total_tracks || 0,
                 url: parent.url || '',
                 // Keep track of the current track info for progress display
                 current_track: lastLineData.current_track,
-                total_tracks: parent.total_tracks || lastLineData.total_tracks,
+                total_tracks: (typeof parent.total_tracks === 'string' ? parseInt(parent.total_tracks, 10) : parent.total_tracks) || (typeof lastLineData.total_tracks === 'string' ? parseInt(lastLineData.total_tracks, 10) : lastLineData.total_tracks) || 0,
                 // Store parent info directly in the item
                 parent: parent
               };
@@ -1530,11 +1699,10 @@ createQueueItem(item, type, prgFile, queueId) {
                 name: parent.name || 'Unknown Playlist',
                 owner: parent.owner || 'Unknown Creator',
                 type: 'playlist',
-                total_tracks: parent.total_tracks || 0,
                 url: parent.url || '',
                 // Keep track of the current track info for progress display
                 current_track: lastLineData.current_track,
-                total_tracks: parent.total_tracks || lastLineData.total_tracks,
+                total_tracks: (typeof parent.total_tracks === 'string' ? parseInt(parent.total_tracks, 10) : parent.total_tracks) || (typeof lastLineData.total_tracks === 'string' ? parseInt(lastLineData.total_tracks, 10) : lastLineData.total_tracks) || 0,
                 // Store parent info directly in the item
                 parent: parent
               };
@@ -1551,7 +1719,7 @@ createQueueItem(item, type, prgFile, queueId) {
               // Include any available track info
               song: lastLineData.song,
               title: lastLineData.title,
-              total_tracks: lastLineData.total_tracks,
+              total_tracks: typeof lastLineData.total_tracks === 'string' ? parseInt(lastLineData.total_tracks, 10) : lastLineData.total_tracks,
               current_track: lastLineData.current_track
             };
           };
@@ -1570,7 +1738,7 @@ createQueueItem(item, type, prgFile, queueId) {
           }
           
           // Build a potential requestUrl from the original information
-          let requestUrl = null;
+          let requestUrl: string | null = null; // Add type
           if (dummyItem.endpoint && dummyItem.url) {
             const params = new CustomURLSearchParams();
             params.append('url', dummyItem.url);
@@ -1582,7 +1750,7 @@ createQueueItem(item, type, prgFile, queueId) {
             for (const [key, value] of Object.entries(originalRequest)) {
               if (!['url', 'name', 'artist', 'type', 'endpoint', 'download_type', 
                    'display_title', 'display_type', 'display_artist', 'service'].includes(key)) {
-                params.append(key, value);
+                params.append(key, value as string); // Cast value to string
               }
             }
             
@@ -1610,12 +1778,12 @@ createQueueItem(item, type, prgFile, queueId) {
             this.applyStatusClasses(entry, prgData.last_line);
             
             // Update log display with current info
-            const logElement = entry.element.querySelector('.log');
+            const logElement = entry.element.querySelector('.log') as HTMLElement | null;
             if (logElement) {
               if (prgData.last_line.song && prgData.last_line.artist && 
-                  ['progress', 'real-time', 'real_time', 'processing', 'downloading'].includes(prgData.last_line.status)) {
+                  ['progress', 'real-time', 'real_time', 'processing', 'downloading'].includes(prgData.last_line.status || '')) { // Add null check
                 logElement.textContent = `Currently downloading: ${prgData.last_line.song} by ${prgData.last_line.artist}`;
-              } else if (entry.parentInfo && !['done', 'complete', 'error', 'skipped'].includes(prgData.last_line.status)) {
+              } else if (entry.parentInfo && !['done', 'complete', 'error', 'skipped'].includes(prgData.last_line.status || '')) {
                 // Show parent info for non-terminal states
                 if (entry.parentInfo.type === 'album') {
                   logElement.textContent = `From album: "${entry.parentInfo.title}"`;
@@ -1666,11 +1834,17 @@ createQueueItem(item, type, prgFile, queueId) {
       console.log(`Loaded retry settings from config: max=${this.MAX_RETRIES}, delay=${this.RETRY_DELAY}, increase=${this.RETRY_DELAY_INCREASE}`);
     } catch (error) {
       console.error('Error loading config:', error);
-      this.config = {};
+      this.config = { // Initialize with a default structure on error
+        downloadQueueVisible: false,
+        maxRetries: 3,
+        retryDelaySeconds: 5,
+        retry_delay_increase: 5,
+        explicitFilter: false
+      };
     }
   }
 
-  async saveConfig(updatedConfig) {
+  async saveConfig(updatedConfig: AppConfig) { // Add type
     try {
       const response = await fetch('/api/config', {
         method: 'POST',
@@ -1686,12 +1860,12 @@ createQueueItem(item, type, prgFile, queueId) {
   }
 
   // Add a method to check if explicit filter is enabled
-  isExplicitFilterEnabled() {
+  isExplicitFilterEnabled(): boolean { // Add return type
     return !!this.config.explicitFilter;
   }
 
   /* Sets up a polling interval for real-time status updates */
-  setupPollingInterval(queueId) {
+  setupPollingInterval(queueId: string) { // Add type
     console.log(`Setting up polling for ${queueId}`);
     const entry = this.queueEntries[queueId];
     if (!entry || !entry.prgFile) {
@@ -1712,18 +1886,18 @@ createQueueItem(item, type, prgFile, queueId) {
       }, 500);
       
       // Store the interval ID for later cleanup
-      this.pollingIntervals[queueId] = intervalId;
+      this.pollingIntervals[queueId] = intervalId as unknown as number; // Cast to number via unknown
     } catch (error) {
       console.error(`Error creating polling for ${queueId}:`, error);
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
       if (logElement) {
-        logElement.textContent = `Error with download: ${error.message}`;
+        logElement.textContent = `Error with download: ${(error as Error).message}`; // Cast to Error
         entry.element.classList.add('error');
       }
     }
   }
   
-  async fetchDownloadStatus(queueId) {
+  async fetchDownloadStatus(queueId: string) { // Add type
     const entry = this.queueEntries[queueId];
     if (!entry || !entry.prgFile) {
       console.warn(`No entry or prgFile for ${queueId}`);
@@ -1736,7 +1910,7 @@ createQueueItem(item, type, prgFile, queueId) {
         throw new Error(`HTTP error: ${response.status}`);
       }
       
-      const data = await response.json();
+      const data: StatusData = await response.json(); // Add type
       
       // If the last_line doesn't have name/artist/title info, add it from our stored item data
       if (data.last_line && entry.item) {
@@ -1752,7 +1926,7 @@ createQueueItem(item, type, prgFile, queueId) {
           data.last_line.artist = entry.item.artists[0].name;
         }
         if (!data.last_line.owner && entry.item.owner) {
-          data.last_line.owner = entry.item.owner;
+          data.last_line.owner = typeof entry.item.owner === 'string' ? entry.item.owner : entry.item.owner?.display_name ;
         }
         if (!data.last_line.total_tracks && entry.item.total_tracks) {
           data.last_line.total_tracks = entry.item.total_tracks;
@@ -1765,7 +1939,7 @@ createQueueItem(item, type, prgFile, queueId) {
         entry.type = data.type;
         
         // Update type display if element exists
-        const typeElement = entry.element.querySelector('.type');
+        const typeElement = entry.element.querySelector('.type') as HTMLElement | null;
         if (typeElement) {
           typeElement.textContent = data.type.charAt(0).toUpperCase() + data.type.slice(1);
           // Update type class without triggering animation
@@ -1795,7 +1969,7 @@ createQueueItem(item, type, prgFile, queueId) {
       this.handleStatusUpdate(queueId, data);
       
       // Handle terminal states
-      if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status)) {
+      if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status || '')) { // Add null check
         console.log(`Terminal state detected: ${data.last_line.status} for ${queueId}`);
         entry.hasEnded = true;
         
@@ -1816,9 +1990,10 @@ createQueueItem(item, type, prgFile, queueId) {
         if (!isRetrying) {
           setTimeout(() => {
             // Double-check the entry still exists and has not been retried before cleaning up
-            if (this.queueEntries[queueId] && 
-                !this.queueEntries[queueId].isRetrying &&
-                this.queueEntries[queueId].hasEnded) {
+            const currentEntry = this.queueEntries[queueId]; // Get current entry
+            if (currentEntry &&  // Check if currentEntry exists
+                !currentEntry.isRetrying &&
+                currentEntry.hasEnded) {
               this.clearPollingInterval(queueId);
               this.cleanupEntry(queueId);
             }
@@ -1830,18 +2005,18 @@ createQueueItem(item, type, prgFile, queueId) {
       console.error(`Error fetching status for ${queueId}:`, error);
       
       // Show error in log
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
       if (logElement) {
-        logElement.textContent = `Error updating status: ${error.message}`;
+        logElement.textContent = `Error updating status: ${(error as Error).message}`; // Cast to Error
       }
     }
   }
   
-  clearPollingInterval(queueId) {
+  clearPollingInterval(queueId: string) { // Add type
     if (this.pollingIntervals[queueId]) {
       console.log(`Stopping polling for ${queueId}`);
       try {
-        clearInterval(this.pollingIntervals[queueId]);
+        clearInterval(this.pollingIntervals[queueId] as number); // Cast to number
       } catch (error) {
         console.error(`Error stopping polling for ${queueId}:`, error);
       }
@@ -1850,7 +2025,7 @@ createQueueItem(item, type, prgFile, queueId) {
   }
 
   /* Handle status updates from the progress API */
-  handleStatusUpdate(queueId, data) {
+  handleStatusUpdate(queueId: string, data: StatusData) { // Add types
     const entry = this.queueEntries[queueId];
     if (!entry) {
       console.warn(`No entry for ${queueId}`);
@@ -1858,7 +2033,7 @@ createQueueItem(item, type, prgFile, queueId) {
     }
     
     // Extract the actual status data from the API response
-    const statusData = data.last_line || {};
+    const statusData: StatusData = data.last_line || {}; // Add type
     
     // Special handling for track status updates that are part of an album/playlist
     // We want to keep these for showing the track-by-track progress
@@ -1930,7 +2105,7 @@ createQueueItem(item, type, prgFile, queueId) {
     // Update type if needed - could be more specific now (e.g., from 'album' to 'compilation')
     if (statusData.type && statusData.type !== entry.type) {
       entry.type = statusData.type;
-      const typeEl = entry.element.querySelector('.type');
+      const typeEl = entry.element.querySelector('.type') as HTMLElement | null;
       if (typeEl) {
         const displayType = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
         typeEl.textContent = displayType;
@@ -1946,7 +2121,7 @@ createQueueItem(item, type, prgFile, queueId) {
     
     // Update log message - but only if we're not handling a track update for an album/playlist
     // That case is handled separately in updateItemMetadata to ensure we show the right track info
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
     if (logElement && status !== 'error' && !(statusData.type === 'track' && statusData.parent && 
         (entry.type === 'album' || entry.type === 'playlist'))) {
       logElement.textContent = message;
@@ -1967,22 +2142,22 @@ createQueueItem(item, type, prgFile, queueId) {
     }
     
     // Apply appropriate status classes
-    this.applyStatusClasses(entry, status);
+    this.applyStatusClasses(entry, statusData); // Pass statusData instead of status string
     
     // Special handling for error status based on new API response format
     if (status === 'error') {
       entry.hasEnded = true;
       // Hide cancel button
-      const cancelBtn = entry.element.querySelector('.cancel-btn');
+      const cancelBtn = entry.element.querySelector('.cancel-btn') as HTMLButtonElement | null;
       if (cancelBtn) cancelBtn.style.display = 'none';
 
       // Hide progress bars for errored items
-      const trackProgressContainer = entry.element.querySelector(`#track-progress-container-${entry.uniqueId}-${entry.prgFile}`);
+      const trackProgressContainer = entry.element.querySelector(`#track-progress-container-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
       if (trackProgressContainer) trackProgressContainer.style.display = 'none';
-      const overallProgressContainer = entry.element.querySelector('.overall-progress-container');
+      const overallProgressContainer = entry.element.querySelector('.overall-progress-container') as HTMLElement | null;
       if (overallProgressContainer) overallProgressContainer.style.display = 'none';
       // Hide time elapsed for errored items
-      const timeElapsedContainer = entry.element.querySelector(`#time-elapsed-${entry.uniqueId}-${entry.prgFile}`);
+      const timeElapsedContainer = entry.element.querySelector(`#time-elapsed-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
       if (timeElapsedContainer) timeElapsedContainer.style.display = 'none';
 
       // Extract error details
@@ -1995,50 +2170,52 @@ createQueueItem(item, type, prgFile, queueId) {
 
       console.log(`Error for ${entry.type} download. Can retry: ${!!entry.requestUrl}. Retry URL: ${entry.requestUrl}`);
 
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-      if (logElement) {
-        let errorMessageElement = logElement.querySelector('.error-message');
+      const errorLogElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null; // Use a different variable name
+      if (errorLogElement) { // Check errorLogElement
+        let errorMessageElement = errorLogElement.querySelector('.error-message') as HTMLElement | null;
         
         if (!errorMessageElement) { // If error UI (message and buttons) is not built yet
-          // Build error UI with manual retry always available
-          logElement.innerHTML = `
-            <div class="error-message">${errMsg}</div>
-            <div class="error-buttons">
-              <button class="close-error-btn" title="Close">&times;</button>
-              <button class="retry-btn" title="Retry download">Retry</button>
-            </div>
-          `;
-          errorMessageElement = logElement.querySelector('.error-message'); // Re-select after innerHTML change
+        // Build error UI with manual retry always available
+        errorLogElement.innerHTML = `
+          <div class="error-message">${errMsg}</div>
+          <div class="error-buttons">
+            <button class="close-error-btn" title="Close">&times;</button>
+            <button class="retry-btn" title="Retry download">Retry</button>
+          </div>
+        `;
+          errorMessageElement = errorLogElement.querySelector('.error-message') as HTMLElement | null; // Re-select after innerHTML change
 
           // Attach listeners ONLY when creating the buttons
-          const closeErrorBtn = logElement.querySelector('.close-error-btn');
+          const closeErrorBtn = errorLogElement.querySelector('.close-error-btn') as HTMLButtonElement | null;
           if (closeErrorBtn) {
             closeErrorBtn.addEventListener('click', () => {
-              this.cleanupEntry(queueId);
-            });
+          this.cleanupEntry(queueId);
+        });
           }
           
-          const retryBtnElem = logElement.querySelector('.retry-btn');
+          const retryBtnElem = errorLogElement.querySelector('.retry-btn') as HTMLButtonElement | null;
           if (retryBtnElem) {
-            retryBtnElem.addEventListener('click', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              retryBtnElem.disabled = true;
-              retryBtnElem.innerHTML = '<span class="loading-spinner small"></span> Retrying...';
-              this.retryDownload(queueId, logElement); 
-            });
+            retryBtnElem.addEventListener('click', (e: MouseEvent) => { // Add type for e
+          e.preventDefault();
+          e.stopPropagation();
+              if (retryBtnElem) { // Check if retryBtnElem is not null
+                retryBtnElem.disabled = true;
+                retryBtnElem.innerHTML = '<span class="loading-spinner small"></span> Retrying...';
+              }
+          this.retryDownload(queueId, errorLogElement); // Pass errorLogElement
+        });
           }
 
           // Auto cleanup after 15s - only set this timeout once when error UI is first built
-          setTimeout(() => {
+        setTimeout(() => {
             const currentEntryForCleanup = this.queueEntries[queueId];
             if (currentEntryForCleanup && 
                 currentEntryForCleanup.hasEnded && 
                 currentEntryForCleanup.lastStatus?.status === 'error' && 
                 !currentEntryForCleanup.isRetrying) {
-              this.cleanupEntry(queueId);
-            }
-          }, 15000);
+            this.cleanupEntry(queueId);
+          }
+        }, 15000);
 
         } else { // Error UI already exists, just update the message text if it's different
           if (errorMessageElement.textContent !== errMsg) {
@@ -2060,13 +2237,13 @@ createQueueItem(item, type, prgFile, queueId) {
   }
 
   // Update item metadata (title, artist, etc.)
-  updateItemMetadata(entry, statusData, data) {
-    const titleEl = entry.element.querySelector('.title');
-    const artistEl = entry.element.querySelector('.artist');
+  updateItemMetadata(entry: QueueEntry, statusData: StatusData, data: StatusData) { // Add types
+    const titleEl = entry.element.querySelector('.title') as HTMLElement | null;
+    const artistEl = entry.element.querySelector('.artist') as HTMLElement | null;
     
     if (titleEl) {
       // Check various data sources for a better title
-      let betterTitle = null;
+      let betterTitle: string | null | undefined = null;
       
       // First check the statusData
       if (statusData.song) {
@@ -2107,16 +2284,16 @@ createQueueItem(item, type, prgFile, queueId) {
   }
   
   // Update real-time progress for track downloads
-  updateRealTimeProgress(entry, statusData) {
+  updateRealTimeProgress(entry: QueueEntry, statusData: StatusData) { // Add types
     // Get track progress bar
-    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile);
-    const timeElapsedEl = entry.element.querySelector('#time-elapsed-' + entry.uniqueId + '-' + entry.prgFile);
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
+    const timeElapsedEl = entry.element.querySelector('#time-elapsed-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
     
     if (trackProgressBar && statusData.progress !== undefined) {
       // Update track progress bar
-      const progress = parseFloat(statusData.progress);
+      const progress = parseFloat(statusData.progress as string); // Cast to string
       trackProgressBar.style.width = `${progress}%`;
-      trackProgressBar.setAttribute('aria-valuenow', progress);
+      trackProgressBar.setAttribute('aria-valuenow', progress.toString()); // Use string
       
       // Add success class when complete
       if (progress >= 100) {
@@ -2137,12 +2314,13 @@ createQueueItem(item, type, prgFile, queueId) {
   }
   
   // Update progress for single track downloads
-  updateSingleTrackProgress(entry, statusData) {
+  updateSingleTrackProgress(entry: QueueEntry, statusData: StatusData) { // Add types
     // Get track progress bar and other UI elements
-    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile);
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    const titleElement = entry.element.querySelector('.title');
-    const artistElement = entry.element.querySelector('.artist');
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const titleElement = entry.element.querySelector('.title') as HTMLElement | null;
+    const artistElement = entry.element.querySelector('.artist') as HTMLElement | null;
+    let progress = 0; // Declare progress here
     
     // If this track has a parent, this is actually part of an album/playlist
     // We should update the entry type and handle it as a multi-track download
@@ -2154,7 +2332,7 @@ createQueueItem(item, type, prgFile, queueId) {
       entry.type = statusData.parent.type;
       
       // Update UI to reflect the parent type
-      const typeEl = entry.element.querySelector('.type');
+      const typeEl = entry.element.querySelector('.type') as HTMLElement | null;
       if (typeEl) {
         const displayType = entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
         typeEl.textContent = displayType;
@@ -2186,7 +2364,7 @@ createQueueItem(item, type, prgFile, queueId) {
     }
     
     // For individual track downloads, show the parent context if available
-    if (!['done', 'complete', 'error', 'skipped'].includes(statusData.status)) {
+    if (!['done', 'complete', 'error', 'skipped'].includes(statusData.status || '')) { // Add null check
       // First check if we have parent data in the current status update
       if (statusData.parent && logElement) {
         // Store parent info in the entry for persistence across refreshes
@@ -2219,20 +2397,20 @@ createQueueItem(item, type, prgFile, queueId) {
     }
     
     // Calculate progress based on available data
-    let progress = 0;
+    progress = 0;
     
     // Real-time progress for direct track download
     if (statusData.status === 'real-time' && statusData.progress !== undefined) {
-      progress = parseFloat(statusData.progress);
+      progress = parseFloat(statusData.progress as string); // Cast to string
     } else if (statusData.percent !== undefined) {
-      progress = parseFloat(statusData.percent) * 100;
+      progress = parseFloat(statusData.percent as string) * 100; // Cast to string
     } else if (statusData.percentage !== undefined) {
-      progress = parseFloat(statusData.percentage) * 100;
+      progress = parseFloat(statusData.percentage as string) * 100; // Cast to string
     } else if (statusData.status === 'done' || statusData.status === 'complete') {
       progress = 100;
     } else if (statusData.current_track && statusData.total_tracks) {
       // If we don't have real-time progress but do have track position
-      progress = (parseInt(statusData.current_track, 10) / parseInt(statusData.total_tracks, 10)) * 100;
+      progress = (parseInt(statusData.current_track as string, 10) / parseInt(statusData.total_tracks as string, 10)) * 100; // Cast to string
     }
     
     // Update track progress bar if available
@@ -2241,10 +2419,10 @@ createQueueItem(item, type, prgFile, queueId) {
       const safeProgress = isNaN(progress) ? 0 : Math.max(0, Math.min(100, progress));
       
       trackProgressBar.style.width = `${safeProgress}%`;
-      trackProgressBar.setAttribute('aria-valuenow', safeProgress);
+      trackProgressBar.setAttribute('aria-valuenow', safeProgress.toString()); // Use string
       
       // Make sure progress bar is visible
-      const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile);
+      const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
       if (trackProgressContainer) {
         trackProgressContainer.style.display = 'block';
       }
@@ -2259,14 +2437,15 @@ createQueueItem(item, type, prgFile, queueId) {
   }
   
   // Update progress for multi-track downloads (albums and playlists)
-  updateMultiTrackProgress(entry, statusData) {
+  updateMultiTrackProgress(entry: QueueEntry, statusData: StatusData) { // Add types
     // Get progress elements
-    const progressCounter = document.getElementById(`progress-count-${entry.uniqueId}-${entry.prgFile}`);
-    const overallProgressBar = document.getElementById(`overall-bar-${entry.uniqueId}-${entry.prgFile}`);
-    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile);
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`);
-    const titleElement = entry.element.querySelector('.title');
-    const artistElement = entry.element.querySelector('.artist');
+    const progressCounter = document.getElementById(`progress-count-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const overallProgressBar = document.getElementById(`overall-bar-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const titleElement = entry.element.querySelector('.title') as HTMLElement | null;
+    const artistElement = entry.element.querySelector('.artist') as HTMLElement | null;
+    let progress = 0; // Declare progress here for this function's scope
     
     // Initialize track progress variables
     let currentTrack = 0;
@@ -2299,13 +2478,13 @@ createQueueItem(item, type, prgFile, queueId) {
       
       // Get current track and total tracks from the status data
       if (statusData.current_track !== undefined) {
-        currentTrack = parseInt(statusData.current_track, 10);
+        currentTrack = parseInt(String(statusData.current_track), 10);
         
         // Get total tracks - try from statusData first, then from parent
         if (statusData.total_tracks !== undefined) {
-          totalTracks = parseInt(statusData.total_tracks, 10);
+          totalTracks = parseInt(String(statusData.total_tracks), 10);
         } else if (statusData.parent && statusData.parent.total_tracks !== undefined) {
-          totalTracks = parseInt(statusData.parent.total_tracks, 10);
+          totalTracks = parseInt(String(statusData.parent.total_tracks), 10);
         }
         
         console.log(`Track info: ${currentTrack}/${totalTracks}`);
@@ -2313,7 +2492,7 @@ createQueueItem(item, type, prgFile, queueId) {
       
       // Get track progress for real-time updates
       if (statusData.status === 'real-time' && statusData.progress !== undefined) {
-        trackProgress = parseFloat(statusData.progress);
+        trackProgress = parseFloat(statusData.progress as string); // Cast to string
       }
       
       // Update the track progress counter display
@@ -2348,7 +2527,7 @@ createQueueItem(item, type, prgFile, queueId) {
         if (overallProgressBar) {
           const safeProgress = Math.max(0, Math.min(100, overallProgress));
           overallProgressBar.style.width = `${safeProgress}%`;
-          overallProgressBar.setAttribute('aria-valuenow', safeProgress);
+          overallProgressBar.setAttribute('aria-valuenow', safeProgress.toString()); // Use string
           
           if (safeProgress >= 100) {
             overallProgressBar.classList.add('complete');
@@ -2360,7 +2539,7 @@ createQueueItem(item, type, prgFile, queueId) {
         // Update the track-level progress bar
         if (trackProgressBar) {
           // Make sure progress bar container is visible
-          const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile);
+          const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
           if (trackProgressContainer) {
             trackProgressContainer.style.display = 'block';
           }
@@ -2369,7 +2548,7 @@ createQueueItem(item, type, prgFile, queueId) {
             // Real-time progress for the current track
             const safeTrackProgress = Math.max(0, Math.min(100, trackProgress));
             trackProgressBar.style.width = `${safeTrackProgress}%`;
-            trackProgressBar.setAttribute('aria-valuenow', safeTrackProgress);
+            trackProgressBar.setAttribute('aria-valuenow', safeTrackProgress.toString()); // Use string
             trackProgressBar.classList.add('real-time');
             
             if (safeTrackProgress >= 100) {
@@ -2381,7 +2560,7 @@ createQueueItem(item, type, prgFile, queueId) {
             // Indeterminate progress animation for non-real-time updates
             trackProgressBar.classList.add('progress-pulse');
             trackProgressBar.style.width = '100%';
-            trackProgressBar.setAttribute('aria-valuenow', 50);
+            trackProgressBar.setAttribute('aria-valuenow', "50"); // Use string
           }
         }
         
@@ -2412,12 +2591,12 @@ createQueueItem(item, type, prgFile, queueId) {
     
     // Extract track counting data from status data
     if (statusData.current_track && statusData.total_tracks) {
-      currentTrack = parseInt(statusData.current_track, 10);
-      totalTracks = parseInt(statusData.total_tracks, 10);
+      currentTrack = parseInt(statusData.current_track as string, 10); // Cast to string
+      totalTracks = parseInt(statusData.total_tracks as string, 10); // Cast to string
     } else if (statusData.parsed_current_track && statusData.parsed_total_tracks) {
-      currentTrack = parseInt(statusData.parsed_current_track, 10);
-      totalTracks = parseInt(statusData.parsed_total_tracks, 10);
-    } else if (statusData.current_track && /^\d+\/\d+$/.test(statusData.current_track)) {
+      currentTrack = parseInt(statusData.parsed_current_track as string, 10); // Cast to string
+      totalTracks = parseInt(statusData.parsed_total_tracks as string, 10); // Cast to string
+    } else if (statusData.current_track && typeof statusData.current_track === 'string' && /^\d+\/\d+$/.test(statusData.current_track)) { // Add type check
       // Parse formats like "1/12"
       const parts = statusData.current_track.split('/');
       currentTrack = parseInt(parts[0], 10);
@@ -2427,13 +2606,18 @@ createQueueItem(item, type, prgFile, queueId) {
     // Get track progress for real-time downloads
     if (statusData.status === 'real-time' && statusData.progress !== undefined) {
       // For real-time downloads, progress comes as a percentage value (0-100)
-      trackProgress = parseFloat(statusData.progress);
+      trackProgress = parseFloat(statusData.progress as string); // Cast to string
     } else if (statusData.percent !== undefined) {
       // Handle percent values (0-1)
-      trackProgress = parseFloat(statusData.percent) * 100;
+      trackProgress = parseFloat(statusData.percent as string) * 100; // Cast to string
     } else if (statusData.percentage !== undefined) {
       // Handle percentage values (0-1)
-      trackProgress = parseFloat(statusData.percentage) * 100;
+      trackProgress = parseFloat(statusData.percentage as string) * 100; // Cast to string
+    } else if (statusData.status === 'done' || statusData.status === 'complete') {
+      progress = 100;
+    } else if (statusData.current_track && statusData.total_tracks) {
+      // If we don't have real-time progress but do have track position
+      progress = (parseInt(statusData.current_track as string, 10) / parseInt(statusData.total_tracks as string, 10)) * 100; // Cast to string
     }
     
     // Update progress counter if available
@@ -2446,7 +2630,7 @@ createQueueItem(item, type, prgFile, queueId) {
     if (totalTracks > 0) {
       // Use explicit overall_progress if provided
       if (statusData.overall_progress !== undefined) {
-        overallProgress = parseFloat(statusData.overall_progress);
+        overallProgress = statusData.overall_progress; // overall_progress is number
       } else if (trackProgress !== undefined) {
         // For both real-time and standard multi-track downloads, use same formula
         const completedTracksProgress = (currentTrack - 1) / totalTracks;
@@ -2462,7 +2646,7 @@ createQueueItem(item, type, prgFile, queueId) {
         // Ensure progress is between 0-100
         const safeProgress = Math.max(0, Math.min(100, overallProgress));
         overallProgressBar.style.width = `${safeProgress}%`;
-        overallProgressBar.setAttribute('aria-valuenow', safeProgress);
+        overallProgressBar.setAttribute('aria-valuenow', String(safeProgress));
         
         // Add success class when complete
         if (safeProgress >= 100) {
@@ -2475,7 +2659,7 @@ createQueueItem(item, type, prgFile, queueId) {
       // Update track progress bar for current track in multi-track items
       if (trackProgressBar) {
         // Make sure progress bar container is visible
-        const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile);
+        const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
         if (trackProgressContainer) {
           trackProgressContainer.style.display = 'block';
         }
@@ -2485,7 +2669,7 @@ createQueueItem(item, type, prgFile, queueId) {
           // This shows download progress for the current track only
           const safeProgress = isNaN(trackProgress) ? 0 : Math.max(0, Math.min(100, trackProgress));
           trackProgressBar.style.width = `${safeProgress}%`;
-          trackProgressBar.setAttribute('aria-valuenow', safeProgress);
+          trackProgressBar.setAttribute('aria-valuenow', String(safeProgress));
           trackProgressBar.classList.add('real-time');
           
           if (safeProgress >= 100) {
@@ -2493,18 +2677,18 @@ createQueueItem(item, type, prgFile, queueId) {
           } else {
             trackProgressBar.classList.remove('complete');
           }
-        } else if (['progress', 'processing'].includes(statusData.status)) {
+        } else if (['progress', 'processing'].includes(statusData.status || '')) {
           // For non-real-time progress updates, show an indeterminate-style progress
           // by using a pulsing animation via CSS
           trackProgressBar.classList.add('progress-pulse');
           trackProgressBar.style.width = '100%';
-          trackProgressBar.setAttribute('aria-valuenow', 50); // indicate in-progress
+          trackProgressBar.setAttribute('aria-valuenow', String(50)); // indicate in-progress
         } else {
           // For other status updates, use current track position
           trackProgressBar.classList.remove('progress-pulse');
           const trackPositionPercent = currentTrack > 0 ? 100 : 0;
           trackProgressBar.style.width = `${trackPositionPercent}%`;
-          trackProgressBar.setAttribute('aria-valuenow', trackPositionPercent);
+          trackProgressBar.setAttribute('aria-valuenow', String(trackPositionPercent));
         }
       }
       
@@ -2522,4 +2706,4 @@ createQueueItem(item, type, prgFile, queueId) {
 }
 
 // Singleton instance
-export const downloadQueue = new DownloadQueue();
+export const downloadQueue = new DownloadQueue(); 
