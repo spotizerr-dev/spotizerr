@@ -928,3 +928,78 @@ input:checked + .slider:before {
   opacity: 1;
   transform: translateY(0);
 }
+
+/* Credentials List Wrapper */
+.credentials-list-wrapper {
+  background: #181818; /* Same as original .credentials-list.card */
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  padding: 1.5rem; /* Add padding here if you want it around the whole block */
+  margin-bottom: 2rem;
+}
+
+/* Where individual credential items will be rendered */
+.credentials-list-items {
+  /* No specific styles needed here unless items need separation from the add button */
+}
+
+/* Styling for the Add New Account button to make it look like a list item */
+.add-account-item {
+  margin-top: 0.75rem; /* Space above the add button if there are items */
+}
+
+.btn-add-account-styled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 1.25rem;
+  background-color: #1db954; /* Green background */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px; /* Same as credential-item */
+  font-size: 1.1rem; /* Similar to credential-name */
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  text-align: center;
+  opacity: 1; /* Ensure it's not transparent by default */
+}
+
+.btn-add-account-styled img {
+  width: 20px; /* Adjust as needed */
+  height: 20px; /* Adjust as needed */
+  margin-right: 10px;
+  filter: brightness(0) invert(1); /* Make icon white if it's not already */
+}
+
+.btn-add-account-styled:hover {
+  background-color: #1aa34a; /* Darker green on hover */
+  transform: translateY(-1px);
+}
+
+/* New styles for the icon-based cancel button */
+.btn-cancel-icon {
+  background-color: #c0392b !important; /* Red background */
+  padding: 0.6rem !important; /* Adjust padding for icon */
+  width: auto; /* Allow button to size to icon */
+  min-width: 40px; /* Ensure a minimum touch target size */
+  height: 40px; /* Ensure a minimum touch target size */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50% !important; /* Make it circular */
+  opacity: 1 !important; /* Ensure it's always visible when its container is */
+  visibility: visible !important; /* Ensure it's not hidden by visibility property */
+}
+
+.btn-cancel-icon img {
+  width: 16px; /* Adjust icon size as needed */
+  height: 16px;
+  filter: brightness(0) invert(1); /* Make icon white */
+}
+
+.btn-cancel-icon:hover {
+  background-color: #e74c3c !important; /* Lighter red on hover */
+  transform: translateY(-2px) scale(1.05);
+}

@@ -47,11 +47,11 @@ def download_playlist(
         # Smartly determine where to look for Spotify search credentials
         if service == 'spotify' and fallback:
             # If fallback is enabled, use the fallback account for Spotify search credentials
-            search_creds_path = Path(f'./creds/spotify/{fallback}/search.json')
+            search_creds_path = Path(f'./data/creds/spotify/{fallback}/search.json')
             print(f"DEBUG: Using Spotify search credentials from fallback: {search_creds_path}")
         else:
             # Otherwise use the main account for Spotify search credentials
-            search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+            search_creds_path = Path(f'./data/creds/spotify/{main}/search.json')
             print(f"DEBUG: Using Spotify search credentials from main: {search_creds_path}")
             
         if search_creds_path.exists():
@@ -77,7 +77,7 @@ def download_playlist(
                 deezer_error = None
                 try:
                     # Load Deezer credentials from 'main' under deezer directory
-                    deezer_creds_dir = os.path.join('./creds/deezer', main)
+                    deezer_creds_dir = os.path.join('./data/creds/deezer', main)
                     deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
                     
                     # DEBUG: Print Deezer credential paths being used
@@ -124,7 +124,7 @@ def download_playlist(
                     
                     # Load fallback Spotify credentials and attempt download
                     try:
-                        spo_creds_dir = os.path.join('./creds/spotify', fallback)
+                        spo_creds_dir = os.path.join('./data/creds/spotify', fallback)
                         spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
                         
                         print(f"DEBUG: Using Spotify fallback credentials from: {spo_creds_path}")
@@ -168,7 +168,7 @@ def download_playlist(
                 # Original behavior: use Spotify main
                 if quality is None:
                     quality = 'HIGH'
-                creds_dir = os.path.join('./creds/spotify', main)
+                creds_dir = os.path.join('./data/creds/spotify', main)
                 credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
                 print(f"DEBUG: Using Spotify main credentials from: {credentials_path}")
                 print(f"DEBUG: Credentials exist: {os.path.exists(credentials_path)}")
@@ -203,7 +203,7 @@ def download_playlist(
             if quality is None:
                 quality = 'FLAC'
             # Existing code for Deezer, using main as Deezer account.
-            creds_dir = os.path.join('./creds/deezer', main)
+            creds_dir = os.path.join('./data/creds/deezer', main)
             creds_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
             print(f"DEBUG: Using Deezer credentials from: {creds_path}")
             print(f"DEBUG: Credentials exist: {os.path.exists(creds_path)}")

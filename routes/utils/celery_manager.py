@@ -17,7 +17,8 @@ from .celery_tasks import (
     get_task_info,
     get_last_task_status,
     store_task_status,
-    get_all_tasks as get_all_celery_tasks_info
+    get_all_tasks as get_all_celery_tasks_info,
+    cleanup_stale_errors
 )
 from .celery_config import get_config_params
 
@@ -25,7 +26,7 @@ from .celery_config import get_config_params
 logger = logging.getLogger(__name__)
 
 # Configuration
-CONFIG_PATH = './config/main.json'
+CONFIG_PATH = './data/config/main.json'
 CELERY_APP = 'routes.utils.celery_tasks.celery_app'
 CELERY_PROCESS = None
 CONFIG_CHECK_INTERVAL = 30  # seconds
@@ -39,6 +40,7 @@ class CeleryManager:
         self.celery_process = None
         self.current_worker_count = 0
         self.monitoring_thread = None
+        self.error_cleanup_thread = None
         self.running = False
         self.log_queue = queue.Queue()
         self.output_threads = []
@@ -114,6 +116,10 @@ class CeleryManager:
         # Start monitoring thread for config changes
         self.monitoring_thread = threading.Thread(target=self._monitor_config, daemon=True)
         self.monitoring_thread.start()
+
+        # Start periodic error cleanup thread
+        self.error_cleanup_thread = threading.Thread(target=self._run_periodic_error_cleanup, daemon=True)
+        self.error_cleanup_thread.start()
         
         # Register shutdown handler
         atexit.register(self.stop)
@@ -324,6 +330,25 @@ class CeleryManager:
             except Exception as e:
                 logger.error(f"Error in config monitoring thread: {e}")
                 time.sleep(5)  # Wait before retrying
+
+    def _run_periodic_error_cleanup(self):
+        """Periodically triggers the cleanup_stale_errors Celery task."""
+        cleanup_interval = 60  # Run cleanup task every 60 seconds
+        logger.info(f"Starting periodic error cleanup scheduler (runs every {cleanup_interval}s).")
+        while self.running:
+            try:
+                logger.info("Scheduling cleanup_stale_errors task...")
+                cleanup_stale_errors.delay() # Call the Celery task
+            except Exception as e:
+                logger.error(f"Error scheduling cleanup_stale_errors task: {e}", exc_info=True)
+            
+            # Wait for the next interval
+            # Use a loop to check self.running more frequently to allow faster shutdown
+            for _ in range(cleanup_interval):
+                if not self.running:
+                    break
+                time.sleep(1)
+        logger.info("Periodic error cleanup scheduler stopped.")
 
 # Create single instance
 celery_manager = CeleryManager() 

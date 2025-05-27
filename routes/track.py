@@ -2,7 +2,10 @@ from flask import Blueprint, Response, request
 import os
 import json
 import traceback
+import uuid # For generating error task IDs
+import time # For timestamps
 from routes.utils.celery_queue_manager import download_queue_manager
+from routes.utils.celery_tasks import store_task_info, store_task_status, ProgressState # For error task creation
 from urllib.parse import urlparse  # for URL validation
 
 track_bp = Blueprint('track', __name__)
@@ -13,6 +16,8 @@ def handle_download():
     url = request.args.get('url')
     name = request.args.get('name')
     artist = request.args.get('artist')
+    orig_params = request.args.to_dict()
+    orig_params["original_url"] = request.url
     
     # Validate required parameters
     if not url:
@@ -31,20 +36,40 @@ def handle_download():
             mimetype='application/json'
         )
     
-    # Add the task to the queue with only essential parameters
-    # The queue manager will now handle all config parameters
-    orig_params = request.args.to_dict()
-    orig_params["original_url"] = request.url
-    task_id = download_queue_manager.add_task({
-        "download_type": "track",
-        "url": url,
-        "name": name,
-        "artist": artist,
-        "orig_request": orig_params
-    })
+    try:
+        task_id = download_queue_manager.add_task({
+            "download_type": "track",
+            "url": url,
+            "name": name,
+            "artist": artist,
+            "orig_request": orig_params
+        })
+    # Removed DuplicateDownloadError handling, add_task now manages this by creating an error task.
+    except Exception as e:
+        # Generic error handling for other issues during task submission
+        error_task_id = str(uuid.uuid4())
+        store_task_info(error_task_id, {
+            "download_type": "track",
+            "url": url,
+            "name": name,
+            "artist": artist,
+            "original_request": orig_params,
+            "created_at": time.time(),
+            "is_submission_error_task": True
+        })
+        store_task_status(error_task_id, {
+            "status": ProgressState.ERROR,
+            "error": f"Failed to queue track download: {str(e)}",
+            "timestamp": time.time()
+        })
+        return Response(
+            json.dumps({"error": f"Failed to queue track download: {str(e)}", "task_id": error_task_id}),
+            status=500,
+            mimetype='application/json'
+        )
     
     return Response(
-        json.dumps({"prg_file": task_id}),
+        json.dumps({"prg_file": task_id}), # prg_file is the old name for task_id
         status=202,
         mimetype='application/json'
     )

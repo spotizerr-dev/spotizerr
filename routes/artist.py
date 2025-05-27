@@ -40,20 +40,25 @@ def handle_artist_download():
         from routes.utils.artist import download_artist_albums
         
         # Delegate to the download_artist_albums function which will handle album filtering
-        task_ids = download_artist_albums(
+        successfully_queued_albums, duplicate_albums = download_artist_albums(
             url=url,
             album_type=album_type,
             request_args=request.args.to_dict()
         )
         
         # Return the list of album task IDs.
+        response_data = {
+            "status": "complete",
+            "message": f"Artist discography processing initiated. {len(successfully_queued_albums)} albums queued.",
+            "queued_albums": successfully_queued_albums
+        }
+        if duplicate_albums:
+            response_data["duplicate_albums"] = duplicate_albums
+            response_data["message"] += f" {len(duplicate_albums)} albums were already in progress or queued."
+
         return Response(
-            json.dumps({
-                "status": "complete",
-                "task_ids": task_ids,
-                "message": f"Artist discography queued – {len(task_ids)} album tasks have been queued."
-            }),
-            status=202,
+            json.dumps(response_data),
+            status=202, # Still 202 Accepted as some operations may have succeeded
             mimetype='application/json'
         )
     except Exception as e:

@@ -29,7 +29,7 @@ def get_spotify_info(spotify_id, spotify_type):
         raise ValueError("No Spotify account configured in settings")
     
     if spotify_id:
-        search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+        search_creds_path = Path(f'./data/creds/spotify/{main}/search.json')
         if search_creds_path.exists():
             try:
                 with open(search_creds_path, 'r') as f:

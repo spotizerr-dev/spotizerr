@@ -7,7 +7,7 @@ import time
 import os
 
 config_bp = Blueprint('config_bp', __name__)
-CONFIG_PATH = Path('./config/main.json')
+CONFIG_PATH = Path('./data/config/main.json')
 
 # Flag for config change notifications
 config_changed = False
@@ -70,7 +70,7 @@ def handle_config():
         return jsonify({"error": "Could not read config file"}), 500
         
     # Create config/state directory
-    Path('./config/state').mkdir(parents=True, exist_ok=True)
+    Path('./data/config/state').mkdir(parents=True, exist_ok=True)
         
     # Set default values for any missing config options
     defaults = {
@@ -116,7 +116,14 @@ def update_config():
         if not save_config(new_config):
             return jsonify({"error": "Failed to save config"}), 500
             
-        return jsonify({"message": "Config updated successfully"})
+        # Return the updated config
+        updated_config_values = get_config()
+        if updated_config_values is None:
+            # This case should ideally not be reached if save_config succeeded
+            # and get_config handles errors by returning a default or None.
+            return jsonify({"error": "Failed to retrieve configuration after saving"}), 500
+            
+        return jsonify(updated_config_values)
     except json.JSONDecodeError:
         return jsonify({"error": "Invalid JSON data"}), 400
     except Exception as e:

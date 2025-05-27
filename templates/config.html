@@ -32,6 +32,7 @@
         <div class="config-item spotify-specific">
           <label>Active Spotify Account:</label>
           <select id="spotifyAccountSelect" class="form-select"></select>
+          <div id="spotifyAccountMessage" style="display: none; color: #888; margin-top: 5px;"></div>
         </div>
         <div class="config-item spotify-specific">
           <label>Spotify Quality:</label>
@@ -44,6 +45,7 @@
         <div class="config-item deezer-specific">
           <label>Active Deezer Account:</label>
           <select id="deezerAccountSelect" class="form-select"></select>
+          <div id="deezerAccountMessage" style="display: none; color: #888; margin-top: 5px;"></div>
         </div>
         <div class="config-item deezer-specific">
           <label>Deezer Quality:</label>
@@ -229,7 +231,18 @@
           <button class="tab-button" data-service="deezer">Deezer</button>
         </div>
 
-        <div class="credentials-list card"></div>
+        <!-- Wrapper for the list and the add button -->
+        <div class="credentials-list-wrapper card">
+          <div class="credentials-list-items">
+            <!-- Dynamic credential items will be rendered here by JavaScript -->
+            <!-- "No credentials" message will also be rendered here -->
+          </div>
+          <div class="add-account-item">
+            <button id="showAddAccountFormBtn" class="btn-add-account-styled" type="button">
+              <img src="{{ url_for('static', filename='images/plus-circle.svg') }}" alt="Add" /> Add New Account
+            </button>
+          </div>
+        </div>
 
         <div class="credentials-form card">
           <h2 id="formTitle" class="section-title">Add New Spotify Account</h2>
@@ -241,6 +254,9 @@
             <div id="serviceFields"></div>
             <div id="searchFields" style="display: none;"></div>
             <button type="submit" id="submitCredentialBtn" class="btn btn-primary save-btn">Save Account</button>
+            <button type="button" id="cancelAddAccountBtn" class="btn btn-secondary cancel-btn btn-cancel-icon" style="margin-left: 10px;" title="Cancel">
+              <img src="{{ url_for('static', filename='images/cross.svg') }}" alt="Cancel" />
+            </button>
           </form>
           <div id="configSuccess" class="success"></div>
           <div id="configError" class="error"></div>

@@ -22,7 +22,7 @@ REDIS_BACKEND = os.getenv('REDIS_BACKEND', REDIS_URL)
 logger.info(f"Redis configuration: REDIS_URL={REDIS_URL}, REDIS_BACKEND={REDIS_BACKEND}")
 
 # Config path
-CONFIG_PATH = './config/main.json'
+CONFIG_PATH = './data/config/main.json'
 
 def get_config_params():
     """

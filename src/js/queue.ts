@@ -215,7 +215,7 @@ export class DownloadQueue {
           <h2>Download Queue (<span id="queueTotalCount">0</span> items)</h2>
           <div class="header-actions">
             <button id="cancelAllBtn" aria-label="Cancel all downloads">
-              <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Skull" class="skull-icon">
+              <img src="/static/images/skull-head.svg" alt="Cancel All" class="skull-icon">
               Cancel all
             </button>
           </div>
@@ -249,7 +249,7 @@ export class DownloadQueue {
     const queueIcon = document.getElementById('queueIcon');
     if (queueIcon && this.config) {
       if (this.config.downloadQueueVisible) {
-        queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
+        queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
         queueIcon.setAttribute('aria-expanded', 'true');
         queueIcon.classList.add('queue-icon-active'); // Add red tint class
       } else {
@@ -329,7 +329,7 @@ export class DownloadQueue {
     if (queueIcon && this.config) {
       if (isVisible) {
         // Replace the image with an X and add red tint
-        queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
+        queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
         queueIcon.setAttribute('aria-expanded', 'true');
         queueIcon.classList.add('queue-icon-active'); // Add red tint class
       } else {
@@ -356,13 +356,13 @@ export class DownloadQueue {
       // Also revert the icon back
       if (queueIcon && this.config) {
         if (!isVisible) {
-          queueIcon.innerHTML = '<span class="queue-x">&times;</span>';
+          queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
           queueIcon.setAttribute('aria-expanded', 'true');
           queueIcon.classList.add('queue-icon-active'); // Add red tint class
         } else {
-          queueIcon.innerHTML = '<img src="/static/images/queue.svg" alt="Queue Icon">';
-          queueIcon.setAttribute('aria-expanded', 'false');
-          queueIcon.classList.remove('queue-icon-active'); // Remove red tint class
+          queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
+          queueIcon.setAttribute('aria-expanded', 'true');
+          queueIcon.classList.add('queue-icon-active'); // Add red tint class
         }
       }
       this.dispatchEvent('queueVisibilityChanged', { visible: !isVisible });
@@ -658,7 +658,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         <div class="type ${type}">${displayType}</div>
       </div>
       <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
-        <img src="https://www.svgrepo.com/show/488384/skull-head.svg" alt="Cancel Download">
+        <img src="/static/images/skull-head.svg" alt="Cancel Download" style="width: 16px; height: 16px;">
       </button>
     </div>
     
@@ -2179,7 +2179,9 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         errorLogElement.innerHTML = `
           <div class="error-message">${errMsg}</div>
           <div class="error-buttons">
-            <button class="close-error-btn" title="Close">&times;</button>
+            <button class="close-error-btn" title="Close">
+              <img src="/static/images/cross.svg" alt="Close error" style="width: 12px; height: 12px; vertical-align: middle;">
+            </button>
             <button class="retry-btn" title="Retry download">Retry</button>
           </div>
         `;

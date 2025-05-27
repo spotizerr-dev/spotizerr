@@ -25,7 +25,7 @@ from routes.utils.celery_tasks import (
 logger = logging.getLogger(__name__)
 
 # Load configuration
-CONFIG_PATH = './config/main.json'
+CONFIG_PATH = './data/config/main.json'
 try:
     with open(CONFIG_PATH, 'r') as f:
         config_data = json.load(f)
@@ -96,16 +96,89 @@ class CeleryDownloadQueueManager:
     
     def add_task(self, task):
         """
-        Add a new download task to the Celery queue
+        Add a new download task to the Celery queue.
+        If a duplicate active task is found, a new task ID is created and immediately set to an ERROR state.
         
         Args:
             task (dict): Task parameters including download_type, url, etc.
             
         Returns:
-            str: Task ID
+            str: Task ID (either for a new task or for a new error-state task if duplicate detected).
         """
         try:
-            # Extract essential parameters
+            # Extract essential parameters for duplicate check
+            incoming_url = task.get("url")
+            incoming_type = task.get("download_type", "unknown")
+
+            if not incoming_url:
+                # This should ideally be validated before calling add_task
+                # For now, let it proceed and potentially fail in Celery task if URL is vital and missing.
+                # Or, create an error task immediately if URL is strictly required for any task logging.
+                logger.warning("Task being added with no URL. Duplicate check might be unreliable.")
+
+            # --- Check for Duplicates ---
+            NON_BLOCKING_STATES = [
+                ProgressState.COMPLETE,
+                ProgressState.CANCELLED,
+                ProgressState.ERROR 
+            ]
+            
+            all_existing_tasks_summary = get_all_tasks() 
+            if incoming_url: # Only check for duplicates if we have a URL
+                for task_summary in all_existing_tasks_summary:
+                    existing_task_id = task_summary.get("task_id")
+                    if not existing_task_id:
+                        continue
+
+                    existing_task_info = get_task_info(existing_task_id)
+                    existing_last_status_obj = get_last_task_status(existing_task_id)
+
+                    if not existing_task_info or not existing_last_status_obj:
+                        continue
+                    
+                    existing_url = existing_task_info.get("url")
+                    existing_type = existing_task_info.get("download_type")
+                    existing_status = existing_last_status_obj.get("status")
+
+                    if (existing_url == incoming_url and
+                        existing_type == incoming_type and
+                        existing_status not in NON_BLOCKING_STATES):
+                        
+                        message = f"Duplicate download: URL '{incoming_url}' (type: {incoming_type}) is already being processed by task {existing_task_id} (status: {existing_status})."
+                        logger.warning(message)
+                        
+                        # Create a new task_id for this duplicate request and mark it as an error
+                        error_task_id = str(uuid.uuid4())
+                        
+                        # Store minimal info for this error task
+                        error_task_info_payload = {
+                            "download_type": incoming_type,
+                            "type": task.get("type", incoming_type),
+                            "name": task.get("name", "Duplicate Task"),
+                            "artist": task.get("artist", ""),
+                            "url": incoming_url,
+                            "original_request": task.get("orig_request", task.get("original_request", {})),
+                            "created_at": time.time(),
+                            "is_duplicate_error_task": True
+                        }
+                        store_task_info(error_task_id, error_task_info_payload)
+                        
+                        # Store error status for this new task_id
+                        error_status_payload = {
+                            "status": ProgressState.ERROR,
+                            "error": message,
+                            "existing_task_id": existing_task_id, # So client knows which task it duplicates
+                            "timestamp": time.time(),
+                            "type": error_task_info_payload["type"],
+                            "name": error_task_info_payload["name"],
+                            "artist": error_task_info_payload["artist"]
+                        }
+                        store_task_status(error_task_id, error_status_payload)
+                        
+                        return error_task_id # Return the ID of this new error-state task
+            # --- End Duplicate Check ---
+
+            # Proceed with normal task creation if no duplicate found or no URL to check
             download_type = task.get("download_type", "unknown")
             
             # Debug existing task data

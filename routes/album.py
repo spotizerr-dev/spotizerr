@@ -2,7 +2,10 @@ from flask import Blueprint, Response, request
 import json
 import os
 import traceback
+import uuid
+import time
 from routes.utils.celery_queue_manager import download_queue_manager
+from routes.utils.celery_tasks import store_task_info, store_task_status, ProgressState
 
 album_bp = Blueprint('album', __name__)
 
@@ -26,13 +29,38 @@ def handle_download():
     # Include full original request URL in metadata
     orig_params = request.args.to_dict()
     orig_params["original_url"] = request.url
-    task_id = download_queue_manager.add_task({
-        "download_type": "album",
-        "url": url,
-        "name": name,
-        "artist": artist,
-        "orig_request": orig_params
-    })
+    try:
+        task_id = download_queue_manager.add_task({
+            "download_type": "album",
+            "url": url,
+            "name": name,
+            "artist": artist,
+            "orig_request": orig_params
+        })
+    except Exception as e:
+        # Generic error handling for other issues during task submission
+        # Create an error task ID if add_task itself fails before returning an ID
+        error_task_id = str(uuid.uuid4())
+        
+        store_task_info(error_task_id, {
+            "download_type": "album",
+            "url": url,
+            "name": name,
+            "artist": artist,
+            "original_request": orig_params,
+            "created_at": time.time(),
+            "is_submission_error_task": True
+        })
+        store_task_status(error_task_id, {
+            "status": ProgressState.ERROR,
+            "error": f"Failed to queue album download: {str(e)}",
+            "timestamp": time.time()
+        })
+        return Response(
+            json.dumps({"error": f"Failed to queue album download: {str(e)}", "task_id": error_task_id}),
+            status=500,
+            mimetype='application/json'
+        )
     
     return Response(
         json.dumps({"prg_file": task_id}),

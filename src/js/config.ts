@@ -53,6 +53,24 @@ let isEditingSearch = false;
 let activeSpotifyAccount = '';
 let activeDeezerAccount = '';
 
+// Reference to the credentials form card and add button
+let credentialsFormCard: HTMLElement | null = null;
+let showAddAccountFormBtn: HTMLElement | null = null;
+let cancelAddAccountBtn: HTMLElement | null = null;
+
+// Helper function to manage visibility of form and add button
+function setFormVisibility(showForm: boolean) {
+  if (credentialsFormCard && showAddAccountFormBtn) {
+    credentialsFormCard.style.display = showForm ? 'block' : 'none';
+    showAddAccountFormBtn.style.display = showForm ? 'none' : 'flex'; // Assuming flex for styled button
+    if (showForm) {
+      resetForm(); // Reset form to "add new" state when showing for add
+      const credentialNameInput = document.getElementById('credentialName') as HTMLInputElement | null;
+      if(credentialNameInput) credentialNameInput.focus();
+    }
+  }
+}
+
 async function loadConfig() {
   try {
     const response = await fetch('/api/config');
@@ -75,6 +93,8 @@ async function loadConfig() {
     // but updateAccountSelectors() will rebuild the options and set the proper values.)
     const spotifySelect = document.getElementById('spotifyAccountSelect') as HTMLSelectElement | null;
     const deezerSelect = document.getElementById('deezerAccountSelect') as HTMLSelectElement | null;
+    const spotifyMessage = document.getElementById('spotifyAccountMessage') as HTMLElement | null;
+    const deezerMessage = document.getElementById('deezerAccountMessage') as HTMLElement | null;
     if (spotifySelect) spotifySelect.value = activeSpotifyAccount;
     if (deezerSelect) deezerSelect.value = activeDeezerAccount;
 
@@ -114,6 +134,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initConfig();
     setupServiceTabs();
     setupEventListeners();
+
+    // Setup for the collapsable "Add Account" form
+    credentialsFormCard = document.querySelector('.credentials-form.card');
+    showAddAccountFormBtn = document.getElementById('showAddAccountFormBtn');
+    cancelAddAccountBtn = document.getElementById('cancelAddAccountBtn');
+
+    if (credentialsFormCard && showAddAccountFormBtn) {
+      // Initially hide form, show add button (default state handled by setFormVisibility if called)
+      credentialsFormCard.style.display = 'none'; 
+      showAddAccountFormBtn.style.display = 'flex'; // Assuming styled button uses flex
+    }
+
+    if (showAddAccountFormBtn) {
+      showAddAccountFormBtn.addEventListener('click', () => {
+        setFormVisibility(true);
+      });
+    }
+
+    if (cancelAddAccountBtn && credentialsFormCard && showAddAccountFormBtn) {
+      cancelAddAccountBtn.addEventListener('click', () => {
+        setFormVisibility(false);
+        resetForm(); // Also reset form state on cancel
+      });
+    }
 
     const queueIcon = document.getElementById('queueIcon');
     if (queueIcon) {
@@ -231,46 +275,65 @@ async function updateAccountSelectors() {
     // Get the select elements
     const spotifySelect = document.getElementById('spotifyAccountSelect') as HTMLSelectElement | null;
     const deezerSelect = document.getElementById('deezerAccountSelect') as HTMLSelectElement | null;
+    const spotifyMessage = document.getElementById('spotifyAccountMessage') as HTMLElement | null;
+    const deezerMessage = document.getElementById('deezerAccountMessage') as HTMLElement | null;
 
     // Rebuild the Spotify selector options
-    if (spotifySelect) {
-        spotifySelect.innerHTML = spotifyAccounts
-          .map((a: string) => `<option value="${a}">${a}</option>`)
-          .join('');
+    if (spotifySelect && spotifyMessage) {
+        if (spotifyAccounts.length > 0) {
+            spotifySelect.innerHTML = spotifyAccounts
+              .map((a: string) => `<option value="${a}">${a}</option>`)
+              .join('');
+            spotifySelect.style.display = '';
+            spotifyMessage.style.display = 'none';
 
-        // Use the active account loaded from the config (activeSpotifyAccount)
-        if (spotifyAccounts.includes(activeSpotifyAccount)) {
-          spotifySelect.value = activeSpotifyAccount;
-        } else if (spotifyAccounts.length > 0) {
-          spotifySelect.value = spotifyAccounts[0];
-          activeSpotifyAccount = spotifyAccounts[0];
-          await saveConfig();
+            // Use the active account loaded from the config (activeSpotifyAccount)
+            if (activeSpotifyAccount && spotifyAccounts.includes(activeSpotifyAccount)) {
+                spotifySelect.value = activeSpotifyAccount;
+            } else {
+                spotifySelect.value = spotifyAccounts[0];
+                activeSpotifyAccount = spotifyAccounts[0];
+                await saveConfig(); // Save if we defaulted
+            }
+        } else {
+            spotifySelect.innerHTML = '';
+            spotifySelect.style.display = 'none';
+            spotifyMessage.textContent = 'No Spotify accounts available.';
+            spotifyMessage.style.display = '';
+            if (activeSpotifyAccount !== '') { // Clear active account if it was set
+                activeSpotifyAccount = '';
+                await saveConfig();
+            }
         }
     }
 
     // Rebuild the Deezer selector options
-    if (deezerSelect) {
-        deezerSelect.innerHTML = deezerAccounts
-          .map((a: string) => `<option value="${a}">${a}</option>`)
-          .join('');
+    if (deezerSelect && deezerMessage) {
+        if (deezerAccounts.length > 0) {
+            deezerSelect.innerHTML = deezerAccounts
+              .map((a: string) => `<option value="${a}">${a}</option>`)
+              .join('');
+            deezerSelect.style.display = '';
+            deezerMessage.style.display = 'none';
 
-        if (deezerAccounts.includes(activeDeezerAccount)) {
-          deezerSelect.value = activeDeezerAccount;
-        } else if (deezerAccounts.length > 0) {
-          deezerSelect.value = deezerAccounts[0];
-          activeDeezerAccount = deezerAccounts[0];
-          await saveConfig();
+            if (activeDeezerAccount && deezerAccounts.includes(activeDeezerAccount)) {
+                deezerSelect.value = activeDeezerAccount;
+            } else {
+                deezerSelect.value = deezerAccounts[0];
+                activeDeezerAccount = deezerAccounts[0];
+                await saveConfig(); // Save if we defaulted
+            }
+        } else {
+            deezerSelect.innerHTML = '';
+            deezerSelect.style.display = 'none';
+            deezerMessage.textContent = 'No Deezer accounts available.';
+            deezerMessage.style.display = '';
+            if (activeDeezerAccount !== '') { // Clear active account if it was set
+                activeDeezerAccount = '';
+                await saveConfig();
+            }
         }
     }
-
-    // Handle empty account lists
-    [spotifySelect, deezerSelect].forEach((select, index) => {
-      const accounts = index === 0 ? spotifyAccounts : deezerAccounts;
-      if (select && accounts.length === 0) {
-        select.innerHTML = '<option value="">No accounts available</option>';
-        select.value = '';
-      }
-    });
   } catch (error: any) {
     showConfigError('Error updating accounts: ' + error.message);
   }
@@ -291,7 +354,7 @@ async function loadCredentials(service: string) {
 }
 
 function renderCredentialsList(service: string, credentials: any[]) {
-  const list = document.querySelector('.credentials-list') as HTMLElement | null;
+  const list = document.querySelector('.credentials-list-items') as HTMLElement | null;
   if (!list) return;
   list.innerHTML = '';
 
@@ -396,6 +459,8 @@ async function handleEditCredential(e: MouseEvent) {
     (document.querySelector(`[data-service="${service}"]`) as HTMLElement | null)?.click();
     await new Promise(resolve => setTimeout(resolve, 50));
 
+    setFormVisibility(true); // Show form for editing, will hide add button
+
     const response = await fetch(`/api/credentials/${service}/${name}`);
     if (!response.ok) {
       throw new Error(`Failed to load credential: ${response.statusText}`);
@@ -429,6 +494,8 @@ async function handleEditSearchCredential(e: Event) {
     if (service !== 'spotify') {
       throw new Error('Search credentials are only available for Spotify');
     }
+
+    setFormVisibility(true); // Show form for editing search creds, will hide add button
 
     (document.querySelector(`[data-service="${service}"]`) as HTMLElement | null)?.click();
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -662,7 +729,7 @@ async function handleCredentialSubmit(e: Event) {
     await updateAccountSelectors();
     await saveConfig();
     loadCredentials(service!);
-    resetForm();
+    setFormVisibility(false); // Hide form and show add button on successful submission
     
     // Show success message
     showConfigSuccess(isEditingSearch ? 'API credentials saved successfully' : 'Account saved successfully');
