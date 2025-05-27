@@ -826,7 +826,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     const entries = Object.values(this.queueEntries);
 
     // Sorting: errors/canceled first (group 0), ongoing next (group 1), queued last (group 2, sorted by position).
-    entries.sort((a, b) => {
+    entries.sort((a: QueueEntry, b: QueueEntry) => {
       const getGroup = (entry: QueueEntry) => { // Add type
         if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
           return 0;
@@ -881,7 +881,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       if (visibleItems.length === 0) {
         // No items in container, append all visible entries
         container.innerHTML = ''; // Clear any empty state
-        visibleEntries.forEach(entry => {
+        visibleEntries.forEach((entry: QueueEntry) => {
           // We no longer automatically start monitoring here
           // Monitoring is now explicitly started by the methods that create downloads
           container.appendChild(entry.element);
@@ -890,7 +890,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         // Container already has items, update more efficiently
         
         // Create a map of current DOM elements by queue ID
-        const existingElementMap = {};
+        const existingElementMap: { [key: string]: HTMLElement } = {};
         visibleItems.forEach(el => {
           const queueId = (el.querySelector('.cancel-btn') as HTMLElement | null)?.dataset.queueid; // Optional chaining
           if (queueId) existingElementMap[queueId] = el as HTMLElement; // Cast to HTMLElement
@@ -900,7 +900,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         container.innerHTML = '';
         
         // Add visible entries in correct order
-        visibleEntries.forEach(entry => {
+        visibleEntries.forEach((entry: QueueEntry) => {
           // We no longer automatically start monitoring here
           container.appendChild(entry.element);
           
@@ -931,7 +931,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
   /* Checks if an entry is visible in the queue display. */
   isEntryVisible(queueId: string): boolean { // Add return type
     const entries = Object.values(this.queueEntries);
-    entries.sort((a, b) => {
+    entries.sort((a: QueueEntry, b: QueueEntry) => {
       const getGroup = (entry: QueueEntry) => { // Add type
         if (entry.lastStatus && (entry.lastStatus.status === "error" || entry.lastStatus.status === "cancel")) {
           return 0;
@@ -954,7 +954,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         return a.lastUpdated - b.lastUpdated;
       }
     });
-    const index = entries.findIndex(e => e.uniqueId === queueId);
+    const index = entries.findIndex((e: QueueEntry) => e.uniqueId === queueId);
     return index >= 0 && index < this.visibleCount;
   }
 

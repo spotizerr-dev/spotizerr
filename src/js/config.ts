@@ -1,12 +1,27 @@
 import { downloadQueue } from './queue.js';
 
+// Interfaces for validator data
+interface SpotifyValidatorData {
+  username: string;
+  credentials?: string; // Credentials might be optional if only username is used as an identifier
+}
+
+interface SpotifySearchValidatorData {
+  client_id: string;
+  client_secret: string;
+}
+
+interface DeezerValidatorData {
+  arl: string;
+}
+
 const serviceConfig: Record<string, any> = {
   spotify: {
     fields: [
       { id: 'username', label: 'Username', type: 'text' },
-      { id: 'credentials', label: 'Credentials', type: 'text' }
+      { id: 'credentials', label: 'Credentials', type: 'text' } // Assuming this is password/token
     ],
-    validator: (data) => ({
+    validator: (data: SpotifyValidatorData) => ({ // Typed data
       username: data.username,
       credentials: data.credentials
     }),
@@ -15,7 +30,7 @@ const serviceConfig: Record<string, any> = {
       { id: 'client_id', label: 'Client ID', type: 'text' },
       { id: 'client_secret', label: 'Client Secret', type: 'password' }
     ],
-    searchValidator: (data) => ({
+    searchValidator: (data: SpotifySearchValidatorData) => ({ // Typed data
       client_id: data.client_id,
       client_secret: data.client_secret
     })
@@ -24,7 +39,7 @@ const serviceConfig: Record<string, any> = {
     fields: [
       { id: 'arl', label: 'ARL', type: 'text' }
     ],
-    validator: (data) => ({
+    validator: (data: DeezerValidatorData) => ({ // Typed data
       arl: data.arl
     })
   }

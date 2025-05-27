@@ -1,6 +1,75 @@
 // main.ts
 import { downloadQueue } from './queue.js';
 
+// Define interfaces for API data and search results
+interface Image {
+  url: string;
+  height?: number;
+  width?: number;
+}
+
+interface Artist {
+  id?: string; // Artist ID might not always be present in search results for track artists
+  name: string;
+  external_urls?: { spotify?: string };
+  genres?: string[]; // For artist type results
+}
+
+interface Album {
+  id?: string; // Album ID might not always be present
+  name: string;
+  images?: Image[];
+  album_type?: string; // Used in startDownload
+  artists?: Artist[]; // Album can have artists too
+  total_tracks?: number;
+  release_date?: string;
+  external_urls?: { spotify?: string };
+}
+
+interface Track {
+  id: string;
+  name: string;
+  artists: Artist[];
+  album: Album;
+  duration_ms?: number;
+  explicit?: boolean;
+  external_urls: { spotify: string };
+  href?: string; // Some spotify responses use href
+}
+
+interface Playlist {
+  id: string;
+  name: string;
+  owner: { display_name?: string; id?: string };
+  images?: Image[];
+  tracks: { total: number }; // Simplified for search results
+  external_urls: { spotify: string };
+  href?: string; // Some spotify responses use href
+  explicit?: boolean; // Playlists themselves aren't explicit, but items can be
+}
+
+// Specific item types for search results
+interface TrackResultItem extends Track {}
+interface AlbumResultItem extends Album { id: string; images?: Image[]; explicit?: boolean; external_urls: { spotify: string }; href?: string; }
+interface PlaylistResultItem extends Playlist {}
+interface ArtistResultItem extends Artist { id: string; images?: Image[]; explicit?: boolean; external_urls: { spotify: string }; href?: string; followers?: { total: number }; }
+
+// Union type for any search result item
+type SearchResultItem = TrackResultItem | AlbumResultItem | PlaylistResultItem | ArtistResultItem;
+
+// Interface for the API response structure
+interface SearchResponse {
+  items: SearchResultItem[];
+  // Add other top-level properties from the search API if needed (e.g., total, limit, offset)
+}
+
+// Interface for the item passed to downloadQueue.download
+interface DownloadQueueItem {
+    name: string;
+    artist?: string;
+    album?: { name: string; album_type?: string };
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // DOM elements
     const searchInput = document.getElementById('searchInput') as HTMLInputElement | null;
@@ -106,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('Network response was not ok');
             }
             
-            const data = await response.json();
+            const data = await response.json() as SearchResponse; // Assert type for API response
             
             // Hide loading indicator
             showLoading(false);
@@ -164,7 +233,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Filters out items with null/undefined essential display parameters based on search type
      */
-    function filterValidItems(items: any[], type: string) {
+    function filterValidItems(items: SearchResultItem[], type: string): SearchResultItem[] {
         if (!items) return [];
         
         return items.filter(item => {
@@ -172,59 +241,59 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!item) return false;
             
             // Skip explicit content if filter is enabled
-            if (downloadQueue.isExplicitFilterEnabled() && item.explicit === true) {
+            if (downloadQueue.isExplicitFilterEnabled() && ('explicit' in item && item.explicit === true)) {
                 return false;
             }
             
             // Check essential parameters based on search type
             switch (type) {
                 case 'track':
-                    // For tracks, we need name, artists, and album
+                    const trackItem = item as TrackResultItem;
                     return (
-                        item.name &&
-                        item.artists && 
-                        item.artists.length > 0 &&
-                        item.artists[0] && 
-                        item.artists[0].name &&
-                        item.album && 
-                        item.album.name &&
-                        item.external_urls && 
-                        item.external_urls.spotify
+                        trackItem.name &&
+                        trackItem.artists && 
+                        trackItem.artists.length > 0 &&
+                        trackItem.artists[0] && 
+                        trackItem.artists[0].name &&
+                        trackItem.album && 
+                        trackItem.album.name &&
+                        trackItem.external_urls && 
+                        trackItem.external_urls.spotify
                     );
                     
                 case 'album':
-                    // For albums, we need name, artists, and cover image
+                    const albumItem = item as AlbumResultItem;
                     return (
-                        item.name &&
-                        item.artists && 
-                        item.artists.length > 0 &&
-                        item.artists[0] && 
-                        item.artists[0].name &&
-                        item.external_urls && 
-                        item.external_urls.spotify
+                        albumItem.name &&
+                        albumItem.artists && 
+                        albumItem.artists.length > 0 &&
+                        albumItem.artists[0] && 
+                        albumItem.artists[0].name &&
+                        albumItem.external_urls && 
+                        albumItem.external_urls.spotify
                     );
                     
                 case 'playlist':
-                    // For playlists, we need name, owner, and tracks
+                    const playlistItem = item as PlaylistResultItem;
                     return (
-                        item.name &&
-                        item.owner && 
-                        item.owner.display_name &&
-                        item.tracks &&
-                        item.external_urls && 
-                        item.external_urls.spotify
+                        playlistItem.name &&
+                        playlistItem.owner && 
+                        playlistItem.owner.display_name &&
+                        playlistItem.tracks &&
+                        playlistItem.external_urls && 
+                        playlistItem.external_urls.spotify
                     );
                     
                 case 'artist':
-                    // For artists, we need name
+                    const artistItem = item as ArtistResultItem;
                     return (
-                        item.name &&
-                        item.external_urls && 
-                        item.external_urls.spotify
+                        artistItem.name &&
+                        artistItem.external_urls && 
+                        artistItem.external_urls.spotify
                     );
                     
                 default:
-                    // Default case - just check if the item exists
+                    // Default case - just check if the item exists (already handled by `if (!item) return false;`)
                     return true;
             }
         });
@@ -233,7 +302,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Attaches download handlers to result cards
      */
-    function attachDownloadListeners(items: any[]) {
+    function attachDownloadListeners(items: SearchResultItem[]) {
         document.querySelectorAll('.download-btn').forEach((btnElm) => {
             const btn = btnElm as HTMLButtonElement;
             btn.addEventListener('click', (e: Event) => {
@@ -262,10 +331,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // Prepare metadata for the download
-                const metadata = { 
-                    name: item.name || 'Unknown',
-                    artist: item.artists ? item.artists[0]?.name : undefined
-                };
+                let metadata: DownloadQueueItem;
+                if (currentSearchType === 'track') {
+                    const trackItem = item as TrackResultItem;
+                    metadata = { 
+                        name: trackItem.name || 'Unknown',
+                        artist: trackItem.artists ? trackItem.artists[0]?.name : undefined,
+                        album: trackItem.album ? { name: trackItem.album.name, album_type: trackItem.album.album_type } : undefined
+                    };
+                } else if (currentSearchType === 'album') {
+                    const albumItem = item as AlbumResultItem;
+                    metadata = { 
+                        name: albumItem.name || 'Unknown',
+                        artist: albumItem.artists ? albumItem.artists[0]?.name : undefined,
+                        album: { name: albumItem.name, album_type: albumItem.album_type}
+                    };
+                } else if (currentSearchType === 'playlist') {
+                    const playlistItem = item as PlaylistResultItem;
+                    metadata = { 
+                        name: playlistItem.name || 'Unknown',
+                        // artist for playlist is owner
+                        artist: playlistItem.owner?.display_name
+                    };
+                } else if (currentSearchType === 'artist') {
+                    const artistItem = item as ArtistResultItem;
+                    metadata = { 
+                        name: artistItem.name || 'Unknown',
+                        artist: artistItem.name // For artist type, artist is the item name itself
+                    };
+                } else {
+                    metadata = { name: item.name || 'Unknown' }; // Fallback
+                }
                 
                 // Disable the button and update text
                 btn.disabled = true;
@@ -278,7 +374,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // Start the download
-                startDownload(url, currentSearchType, metadata, item.album ? item.album.album_type : null)
+                startDownload(url, currentSearchType, metadata, 
+                    (item as AlbumResultItem).album_type || ((item as TrackResultItem).album ? (item as TrackResultItem).album.album_type : null))
                     .then(() => {
                         // For artists, show how many albums were queued
                         if (currentSearchType === 'artist') {
@@ -301,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Starts the download process via API
      */
-    async function startDownload(url: string, type: string, item: any, albumType: string | null) {
+    async function startDownload(url: string, type: string, item: DownloadQueueItem, albumType: string | null | undefined) {
         if (!url || !type) {
             showError('Missing URL or type for download');
             return;
@@ -385,7 +482,7 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Creates a result card element
      */
-    function createResultCard(item: any, type: string, index: number): HTMLDivElement {
+    function createResultCard(item: SearchResultItem, type: string, index: number): HTMLDivElement {
         const cardElement = document.createElement('div');
         cardElement.className = 'result-card';
         
@@ -394,10 +491,22 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Get the appropriate image URL
         let imageUrl = '/static/images/placeholder.jpg';
-        if (item.album && item.album.images && item.album.images.length > 0) {
-            imageUrl = item.album.images[0].url;
-        } else if (item.images && item.images.length > 0) {
-            imageUrl = item.images[0].url;
+        // Type guards to safely access images
+        if (type === 'album' || type === 'artist') {
+            const albumOrArtistItem = item as AlbumResultItem | ArtistResultItem;
+            if (albumOrArtistItem.images && albumOrArtistItem.images.length > 0) {
+                imageUrl = albumOrArtistItem.images[0].url;
+            }
+        } else if (type === 'track') {
+            const trackItem = item as TrackResultItem;
+            if (trackItem.album && trackItem.album.images && trackItem.album.images.length > 0) {
+                imageUrl = trackItem.album.images[0].url;
+            }
+        } else if (type === 'playlist') {
+            const playlistItem = item as PlaylistResultItem;
+            if (playlistItem.images && playlistItem.images.length > 0) {
+                imageUrl = playlistItem.images[0].url;
+            }
         }
         
         // Get the appropriate details based on type
@@ -406,20 +515,32 @@ document.addEventListener('DOMContentLoaded', function() {
         
         switch (type) {
             case 'track':
-                subtitle = item.artists ? item.artists.map(a => a.name).join(', ') : 'Unknown Artist';
-                details = item.album ? `<span>${item.album.name}</span><span class="duration">${msToMinutesSeconds(item.duration_ms)}</span>` : '';
+                {
+                    const trackItem = item as TrackResultItem;
+                    subtitle = trackItem.artists ? trackItem.artists.map((a: Artist) => a.name).join(', ') : 'Unknown Artist';
+                    details = trackItem.album ? `<span>${trackItem.album.name}</span><span class="duration">${msToMinutesSeconds(trackItem.duration_ms)}</span>` : '';
+                }
                 break;
             case 'album':
-                subtitle = item.artists ? item.artists.map(a => a.name).join(', ') : 'Unknown Artist';
-                details = `<span>${item.total_tracks || 0} tracks</span><span>${item.release_date ? new Date(item.release_date).getFullYear() : ''}</span>`;
+                {
+                    const albumItem = item as AlbumResultItem;
+                    subtitle = albumItem.artists ? albumItem.artists.map((a: Artist) => a.name).join(', ') : 'Unknown Artist';
+                    details = `<span>${albumItem.total_tracks || 0} tracks</span><span>${albumItem.release_date ? new Date(albumItem.release_date).getFullYear() : ''}</span>`;
+                }
                 break;
             case 'playlist':
-                subtitle = `By ${item.owner ? item.owner.display_name : 'Unknown'}`;
-                details = `<span>${item.tracks && item.tracks.total ? item.tracks.total : 0} tracks</span>`;
+                {
+                    const playlistItem = item as PlaylistResultItem;
+                    subtitle = `By ${playlistItem.owner ? playlistItem.owner.display_name : 'Unknown'}`;
+                    details = `<span>${playlistItem.tracks && playlistItem.tracks.total ? playlistItem.tracks.total : 0} tracks</span>`;
+                }
                 break;
             case 'artist':
-                subtitle = 'Artist';
-                details = item.genres ? `<span>${item.genres.slice(0, 2).join(', ')}</span>` : '';
+                {
+                    const artistItem = item as ArtistResultItem;
+                    subtitle = 'Artist';
+                    details = artistItem.genres ? `<span>${artistItem.genres.slice(0, 2).join(', ')}</span>` : '';
+                }
                 break;
         }
         

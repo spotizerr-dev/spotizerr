@@ -1,6 +1,68 @@
 // Import the downloadQueue singleton from your working queue.js implementation.
 import { downloadQueue } from './queue.js';
 
+// Define interfaces for API data
+interface Image {
+  url: string;
+  height?: number;
+  width?: number;
+}
+
+interface Artist {
+  id: string;
+  name: string;
+  external_urls?: { spotify?: string };
+}
+
+interface Album {
+  id: string;
+  name: string;
+  images?: Image[];
+  external_urls?: { spotify?: string };
+}
+
+interface Track {
+  id: string;
+  name: string;
+  artists: Artist[];
+  album: Album;
+  duration_ms: number;
+  explicit: boolean;
+  external_urls?: { spotify?: string };
+}
+
+interface PlaylistItem {
+  track: Track | null;
+  // Add other playlist item properties like added_at, added_by if needed
+}
+
+interface Playlist {
+  id: string;
+  name: string;
+  description: string | null;
+  owner: {
+    display_name?: string;
+    id?: string;
+  };
+  images: Image[];
+  tracks: {
+    items: PlaylistItem[];
+    total: number;
+  };
+  followers?: {
+    total: number;
+  };
+  external_urls?: { spotify?: string };
+}
+
+interface DownloadQueueItem {
+    name: string;
+    artist?: string; // Can be a simple string for the queue
+    album?: { name: string }; // Match QueueItem's album structure
+    owner?: string; // For playlists, owner can be a string
+    // Add any other properties your item might have, compatible with QueueItem
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Parse playlist ID from URL
   const pathSegments = window.location.pathname.split('/');
@@ -15,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
-      return response.json();
+      return response.json() as Promise<Playlist>;
     })
     .then(data => renderPlaylist(data))
     .catch(error => {
@@ -34,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Renders playlist header and tracks.
  */
-function renderPlaylist(playlist: any) {
+function renderPlaylist(playlist: Playlist) {
   // Hide loading and error messages
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.classList.add('hidden');
@@ -80,7 +142,7 @@ function renderPlaylist(playlist: any) {
   // Check if any track in the playlist is explicit when filter is enabled
   let hasExplicitTrack = false;
   if (isExplicitFilterEnabled && playlist.tracks?.items) {
-    hasExplicitTrack = playlist.tracks.items.some(item => item?.track && item.track.explicit);
+    hasExplicitTrack = playlist.tracks.items.some((item: PlaylistItem) => item?.track && item.track.explicit);
   }
 
   // --- Add "Download Whole Playlist" Button ---
@@ -178,7 +240,7 @@ function renderPlaylist(playlist: any) {
   tracksList.innerHTML = ''; // Clear any existing content
 
   if (playlist.tracks?.items) {
-    playlist.tracks.items.forEach((item, index) => {
+    playlist.tracks.items.forEach((item: PlaylistItem, index: number) => {
       if (!item || !item.track) return; // Skip null/undefined tracks
       
       const track = item.track;
@@ -281,7 +343,10 @@ function attachDownloadListeners() {
       const name = currentTarget.dataset.name || extractName(url) || 'Unknown';
       // Remove the button immediately after click.
       currentTarget.remove();
-      startDownload(url, type, { name }, ''); // Added empty string for albumType
+      // For individual track downloads, we might not have album/artist name readily here.
+      // The queue.ts download method should be robust enough or we might need to fetch more data.
+      // For now, pass what we have.
+      startDownload(url, type, { name }, ''); // Pass name, artist/album are optional in DownloadQueueItem
     });
   });
 }
@@ -289,7 +354,7 @@ function attachDownloadListeners() {
 /**
  * Initiates the whole playlist download by calling the playlist endpoint.
  */
-async function downloadWholePlaylist(playlist: any) {
+async function downloadWholePlaylist(playlist: Playlist) {
   if (!playlist) {
     throw new Error('Invalid playlist data');
   }
@@ -301,7 +366,11 @@ async function downloadWholePlaylist(playlist: any) {
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, 'playlist', { name: playlist.name || 'Unknown Playlist' });
+    await downloadQueue.download(url, 'playlist', { 
+        name: playlist.name || 'Unknown Playlist',
+        owner: playlist.owner?.display_name // Pass owner as a string
+        // total_tracks can also be passed if QueueItem supports it directly
+    });
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
   } catch (error: any) {
@@ -315,15 +384,15 @@ async function downloadWholePlaylist(playlist: any) {
  * adding a 20ms delay between each album download and updating the button
  * with the progress (queued_albums/total_albums).
  */
-async function downloadPlaylistAlbums(playlist: any) {
+async function downloadPlaylistAlbums(playlist: Playlist) {
   if (!playlist?.tracks?.items) {
     showError('No tracks found in this playlist.');
     return;
   }
   
   // Build a map of unique albums (using album ID as the key).
-  const albumMap = new Map();
-  playlist.tracks.items.forEach(item => {
+  const albumMap = new Map<string, Album>();
+  playlist.tracks.items.forEach((item: PlaylistItem) => {
     if (!item?.track?.album) return;
     
     const album = item.track.album;
@@ -359,7 +428,11 @@ async function downloadPlaylistAlbums(playlist: any) {
       await downloadQueue.download(
         albumUrl,
         'album',
-        { name: album.name || 'Unknown Album' }
+        { 
+            name: album.name || 'Unknown Album',
+            // If artist information is available on album objects from playlist, pass it
+            // artist: album.artists?.[0]?.name 
+        }
       );
 
       // Update button text with current progress.
@@ -387,7 +460,7 @@ async function downloadPlaylistAlbums(playlist: any) {
 /**
  * Starts the download process using the centralized download method from the queue.
  */
-async function startDownload(url: string, type: string, item: any, albumType?: string) {
+async function startDownload(url: string, type: string, item: DownloadQueueItem, albumType?: string) {
   if (!url || !type) {
     showError('Missing URL or type for download');
     return;
