@@ -95,55 +95,6 @@ body {
   margin: 0;
 }
 
-/* Queue button as floating icon */
-.queue-icon.floating-icon {
-  position: fixed;
-  width: 56px;
-  height: 56px;
-  bottom: 20px;
-  right: 20px;
-  background-color: var(--color-primary);
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, background-color 0.2s ease;
-  text-decoration: none !important;
-}
-
-.queue-icon.floating-icon:hover {
-  background-color: var(--color-primary-hover);
-  transform: scale(1.05);
-}
-
-.queue-icon.floating-icon img {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1);
-  margin: 0;
-}
-
-/* Queue Icon Active State */
-.queue-icon.queue-icon-active {
-  background-color: #d13838 !important;
-  transition: background-color 0.3s ease;
-}
-
-.queue-icon.queue-icon-active:hover {
-  background-color: #e04c4c !important;
-}
-
-.queue-icon .queue-x {
-  font-size: 28px;
-  font-weight: bold;
-  color: white;
-  line-height: 24px;
-  display: inline-block;
-  transform: translateY(-2px);
-}
-
 /* Queue Sidebar for Config Page */
 #downloadQueue {
   position: fixed;
@@ -849,25 +800,7 @@ input:checked + .slider:before {
     width: 28px;
     height: 28px;
   }
-  
-  /* Queue icon mobile styles */
-  .queue-icon.floating-icon {
-    width: 50px;
-    height: 50px;
-    right: 16px;
-    bottom: 16px;
-  }
-  
-  .queue-icon.floating-icon img {
-    width: 22px;
-    height: 22px;
-  }
-  
-  .queue-icon .queue-x {
-    font-size: 24px;
-    line-height: 20px;
-  }
-}
+
 
 /* Format help styles */
 .format-help {
@@ -985,7 +918,6 @@ input:checked + .slider:before {
   width: auto; /* Allow button to size to icon */
   min-width: 40px; /* Ensure a minimum touch target size */
   height: 40px; /* Ensure a minimum touch target size */
-  display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50% !important; /* Make it circular */
@@ -1002,4 +934,5 @@ input:checked + .slider:before {
 .btn-cancel-icon:hover {
   background-color: #e74c3c !important; /* Lighter red on hover */
   transform: translateY(-2px) scale(1.05);
+}
 }

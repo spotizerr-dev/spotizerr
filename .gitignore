@@ -36,3 +36,4 @@ logs/spotizerr.log
 /.venv
 static/js
 data
+logs/

@@ -131,7 +131,7 @@ def check_redis_connection():
     return False
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='static/html')
     
     # Set up CORS
     CORS(app)
@@ -184,7 +184,7 @@ def create_app():
     # Serve favicon.ico from the same directory as index.html (templates)
     @app.route('/favicon.ico')
     def serve_favicon():
-        return send_from_directory('templates', 'favicon.ico')
+        return send_from_directory('static/html', 'favicon.ico')
 
     # Add request logging middleware
     @app.before_request

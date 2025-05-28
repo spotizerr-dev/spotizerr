@@ -3,8 +3,7 @@ name: spotizerr
 services:
   spotizerr:
     volumes:
-      - ./creds:/app/creds
-      - ./config:/app/config
+      - ./data:/app/data
       - ./downloads:/app/downloads  # <-- Change this for your music library dir
       - ./logs:/app/logs  # <-- Volume for persistent logs
     ports:

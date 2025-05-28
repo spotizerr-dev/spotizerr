@@ -7,6 +7,8 @@ from datetime import datetime
 from celery import Celery, Task, states
 from celery.signals import task_prerun, task_postrun, task_failure, worker_ready, worker_init, setup_logging
 from celery.exceptions import Retry
+import os # Added for path operations
+from pathlib import Path # Added for path operations
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -358,6 +360,27 @@ class ProgressTrackingTask(Task):
         """
         task_id = self.request.id
         
+        # Ensure ./logs/tasks directory exists
+        logs_tasks_dir = Path('./logs/tasks') # Using relative path as per your update
+        try:
+            logs_tasks_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Task {task_id}: Could not create log directory {logs_tasks_dir}: {e}")
+
+        # Define log file path
+        log_file_path = logs_tasks_dir / f"{task_id}.log"
+
+        # Log progress_data to the task-specific file
+        try:
+            with open(log_file_path, 'a') as log_file:
+                # Add a timestamp to the log entry if not present, for consistency in the file
+                log_entry = progress_data.copy()
+                if 'timestamp' not in log_entry:
+                    log_entry['timestamp'] = time.time()
+                print(json.dumps(log_entry), file=log_file) # Use print to file
+        except Exception as e:
+            logger.error(f"Task {task_id}: Could not write to task log file {log_file_path}: {e}")
+            
         # Add timestamp if not present
         if 'timestamp' not in progress_data:
             progress_data['timestamp'] = time.time()
