@@ -254,7 +254,7 @@ function renderAlbum(album: Album) {
           </div>
           <div class="track-duration">${msToTime(track.duration_ms || 0)}</div>
           <button class="download-btn download-btn--circle" 
-                  data-url="${track.external_urls?.spotify || ''}" 
+                  data-id="${track.id || ''}"
                   data-type="track"
                   data-name="${track.name || 'Unknown Track'}"
                   title="Download">
@@ -300,14 +300,14 @@ function renderAlbum(album: Album) {
 }
 
 async function downloadWholeAlbum(album: Album) {
-  const url = album.external_urls?.spotify || '';
-  if (!url) {
-    throw new Error('Missing album URL');
+  const albumIdToDownload = album.id || '';
+  if (!albumIdToDownload) {
+    throw new Error('Missing album ID');
   }
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, 'album', { name: album.name || 'Unknown Album' });
+    await downloadQueue.download(albumIdToDownload, 'album', { name: album.name || 'Unknown Album' });
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
   } catch (error: any) { // Add type for error
@@ -339,25 +339,30 @@ function attachDownloadListeners() {
       const currentTarget = e.currentTarget as HTMLButtonElement | null; // Cast currentTarget
       if (!currentTarget) return;
 
-      const url = currentTarget.dataset.url || '';
+      const itemId = currentTarget.dataset.id || '';
       const type = currentTarget.dataset.type || '';
-      const name = currentTarget.dataset.name || extractName(url) || 'Unknown';
+      const name = currentTarget.dataset.name || 'Unknown';
+      
+      if (!itemId) {
+        showError('Missing item ID for download in album page');
+        return;
+      }
       // Remove the button immediately after click.
       currentTarget.remove();
-      startDownload(url, type, { name }); // albumType will be undefined
+      startDownload(itemId, type, { name }); // albumType will be undefined
     });
   });
 }
 
-async function startDownload(url: string, type: string, item: { name: string }, albumType?: string) { // Add types and make albumType optional
-  if (!url) {
-    showError('Missing URL for download');
-    return Promise.reject(new Error('Missing URL for download')); // Return a rejected promise
+async function startDownload(itemId: string, type: string, item: { name: string }, albumType?: string) { // Add types and make albumType optional
+  if (!itemId || !type) {
+    showError('Missing ID or type for download');
+    return Promise.reject(new Error('Missing ID or type for download')); // Return a rejected promise
   }
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, type, item, albumType);
+    await downloadQueue.download(itemId, type, item, albumType);
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
@@ -365,8 +370,4 @@ async function startDownload(url: string, type: string, item: { name: string }, 
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }
-}
-
-function extractName(url: string | null | undefined): string { // Add type
-  return url || 'Unknown';
 }

@@ -150,9 +150,16 @@ function renderTrack(track: any) {
         downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
         return;
       }
+      const trackIdToDownload = track.id || '';
+      if (!trackIdToDownload) {
+        showError('Missing track ID for download');
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
+        return;
+      }
       
       // Use the centralized downloadQueue.download method
-      downloadQueue.download(trackUrl, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
+      downloadQueue.download(trackIdToDownload, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
         .then(() => {
           downloadBtn.innerHTML = `<span>Queued!</span>`;
           // Make the queue visible to show the download
@@ -196,15 +203,15 @@ function showError(message: string) {
 /**
  * Starts the download process by calling the centralized downloadQueue method
  */
-async function startDownload(url: string, type: string, item: any) {
-  if (!url || !type) {
-    showError('Missing URL or type for download');
+async function startDownload(itemId: string, type: string, item: any) {
+  if (!itemId || !type) {
+    showError('Missing ID or type for download');
     return;
   }
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, type, item);
+    await downloadQueue.download(itemId, type, item);
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);

@@ -33,6 +33,14 @@
             <img src="{{ url_for('static', filename='images/album.svg') }}" alt="Albums">
             Download Playlist's Albums
           </button>
+          <button id="watchPlaylistBtn" class="download-btn watch-btn">
+            <img src="{{ url_for('static', filename='images/eye.svg') }}" alt="Watch">
+            Watch Playlist
+          </button>
+          <button id="syncPlaylistBtn" class="download-btn sync-btn hidden">
+            <img src="{{ url_for('static', filename='images/refresh.svg') }}" alt="Sync">
+            Sync Watched Playlist
+          </button>
         </div>
       </div>
     </div>

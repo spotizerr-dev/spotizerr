@@ -226,6 +226,41 @@
         </div>
       </div>
 
+      <div class="watch-options-config card">
+        <h2 class="section-title">Watch Options</h2>
+        <div class="config-item">
+          <label for="watchedArtistAlbumGroup">Artist Page - Album Groups to Watch:</label>
+          <div id="watchedArtistAlbumGroupChecklist" class="checklist-container">
+            <div class="checklist-item">
+              <input type="checkbox" id="albumGroup-album" name="watchedArtistAlbumGroup" value="album">
+              <label for="albumGroup-album">Album</label>
+            </div>
+            <div class="checklist-item">
+              <input type="checkbox" id="albumGroup-single" name="watchedArtistAlbumGroup" value="single">
+              <label for="albumGroup-single">Single</label>
+            </div>
+            <div class="checklist-item">
+              <input type="checkbox" id="albumGroup-compilation" name="watchedArtistAlbumGroup" value="compilation">
+              <label for="albumGroup-compilation">Compilation</label>
+            </div>
+            <div class="checklist-item">
+              <input type="checkbox" id="albumGroup-appears_on" name="watchedArtistAlbumGroup" value="appears_on">
+              <label for="albumGroup-appears_on">Appears On</label>
+            </div>
+          </div>
+          <div class="setting-description">
+            Select which album groups to monitor on watched artist pages.
+          </div>
+        </div>
+        <div class="config-item">
+          <label for="watchPollIntervalSeconds">Watch Poll Interval (seconds):</label>
+          <input type="number" id="watchPollIntervalSeconds" min="60" value="3600" class="form-input">
+          <div class="setting-description">
+            How often to check watched items for updates (e.g., new playlist tracks, new artist albums).
+          </div>
+        </div>
+      </div>
+
       <div class="accounts-section">
         <div class="service-tabs">
           <button class="tab-button active" data-service="spotify">Spotify</button>

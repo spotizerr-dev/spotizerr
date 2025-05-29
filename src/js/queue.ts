@@ -368,6 +368,11 @@ export class DownloadQueue {
       this.dispatchEvent('queueVisibilityChanged', { visible: !isVisible });
       this.showError('Failed to save queue visibility');
     }
+
+    if (isVisible) {
+      // If the queue is now visible, ensure all visible items are being polled.
+      this.startMonitoringActiveEntries();
+    }
   }
 
   showError(message: string) {
@@ -912,6 +917,15 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     
     // We no longer start or stop monitoring based on visibility changes here
     // This allows the explicit monitoring control from the download methods
+    
+    // Ensure all currently visible and active entries are being polled
+    // This is important for items that become visible after "Show More" or other UI changes
+    Object.values(this.queueEntries).forEach(entry => {
+      if (this.isEntryVisible(entry.uniqueId) && !entry.hasEnded && !this.pollingIntervals[entry.uniqueId]) {
+        console.log(`updateQueueOrder: Ensuring polling for visible/active entry ${entry.uniqueId} (${entry.prgFile})`);
+        this.setupPollingInterval(entry.uniqueId);
+      }
+    });
     
     // Update footer
     footer.innerHTML = '';
@@ -1469,21 +1483,34 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
    * This method replaces the individual startTrackDownload, startAlbumDownload, etc. methods.
    * It will be called by all the other JS files.
    */
-  async download(url: string, type: string, item: QueueItem, albumType: string | null = null): Promise<string | string[] | StatusData> { // Add types and return type
-    if (!url) {
-      throw new Error('Missing URL for download');
+  async download(itemId: string, type: string, item: QueueItem, albumType: string | null = null): Promise<string | string[] | StatusData> { // Add types and return type
+    if (!itemId) {
+      throw new Error('Missing ID for download');
     }
     
     await this.loadConfig();
+
+    // Construct the API URL in the new format /api/{type}/download/{itemId}
+    let apiUrl = `/api/${type}/download/${itemId}`;
     
-    // Build the API URL with only the URL parameter as it's all that's needed
-    let apiUrl = `/api/${type}/download?url=${encodeURIComponent(url)}`;
+    // Prepare query parameters
+    const queryParams = new URLSearchParams();
+    // Add item.name and item.artist only if they are not empty or undefined
+    if (item.name && item.name.trim() !== '') queryParams.append('name', item.name);
+    if (item.artist && item.artist.trim() !== '') queryParams.append('artist', item.artist);
     
     // For artist downloads, include album_type as it may still be needed
     if (type === 'artist' && albumType) {
-      apiUrl += `&album_type=${encodeURIComponent(albumType)}`;
+      queryParams.append('album_type', albumType);
+    }
+
+    const queryString = queryParams.toString();
+    if (queryString) {
+      apiUrl += `?${queryString}`;
     }
     
+    console.log(`Constructed API URL for download: ${apiUrl}`); // Log the constructed URL
+
     try {
       // Show a loading indicator
       const queueIcon = document.getElementById('queueIcon'); // No direct classList manipulation

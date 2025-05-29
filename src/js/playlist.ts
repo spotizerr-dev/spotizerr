@@ -29,6 +29,7 @@ interface Track {
   duration_ms: number;
   explicit: boolean;
   external_urls?: { spotify?: string };
+  is_locally_known?: boolean; // Added for local DB status
 }
 
 interface PlaylistItem {
@@ -53,6 +54,11 @@ interface Playlist {
     total: number;
   };
   external_urls?: { spotify?: string };
+}
+
+interface WatchedPlaylistStatus {
+  is_watched: boolean;
+  playlist_data?: Playlist; // Optional, present if watched
 }
 
 interface DownloadQueueItem {
@@ -84,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Error:', error);
       showError('Failed to load playlist.');
     });
+
+  // Fetch initial watch status
+  fetchWatchStatus(playlistId);
 
   const queueIcon = document.getElementById('queueIcon');
   if (queueIcon) {
@@ -206,7 +215,7 @@ function renderPlaylist(playlist: Playlist) {
           downloadPlaylistBtn.textContent = 'Queued!';
         }).catch((err: any) => {
           showError('Failed to queue playlist download: ' + (err?.message || 'Unknown error'));
-          downloadPlaylistBtn.disabled = false;
+          if (downloadPlaylistBtn) downloadPlaylistBtn.disabled = false; // Re-enable on error
         });
       });
     }
@@ -227,7 +236,7 @@ function renderPlaylist(playlist: Playlist) {
           })
           .catch((err: any) => {
             showError('Failed to queue album downloads: ' + (err?.message || 'Unknown error'));
-            if (downloadAlbumsBtn) downloadAlbumsBtn.disabled = false;
+            if (downloadAlbumsBtn) downloadAlbumsBtn.disabled = false; // Re-enable on error
           });
       });
     }
@@ -238,6 +247,10 @@ function renderPlaylist(playlist: Playlist) {
   if (!tracksList) return;
   
   tracksList.innerHTML = ''; // Clear any existing content
+
+  // Determine if the playlist is being watched to show/hide management buttons
+  const watchPlaylistButton = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
+  const isPlaylistWatched = watchPlaylistButton && watchPlaylistButton.classList.contains('watching');
 
   if (playlist.tracks?.items) {
     playlist.tracks.items.forEach((item: PlaylistItem, index: number) => {
@@ -263,14 +276,13 @@ function renderPlaylist(playlist: Playlist) {
         return;
       }
       
-      // Create links for track, artist, and album using their IDs.
       const trackLink = `/track/${track.id || ''}`;
       const artistLink = `/artist/${track.artists?.[0]?.id || ''}`;
       const albumLink = `/album/${track.album?.id || ''}`;
 
       const trackElement = document.createElement('div');
       trackElement.className = 'track';
-      trackElement.innerHTML = `
+      let trackHTML = `
         <div class="track-number">${index + 1}</div>
         <div class="track-info">
           <div class="track-name">
@@ -284,14 +296,45 @@ function renderPlaylist(playlist: Playlist) {
           <a href="${albumLink}" title="View album details">${track.album?.name || 'Unknown Album'}</a>
         </div>
         <div class="track-duration">${msToTime(track.duration_ms || 0)}</div>
-        <button class="download-btn download-btn--circle" 
-                data-url="${track.external_urls?.spotify || ''}" 
-                data-type="track"
-                data-name="${track.name || 'Unknown Track'}"
-                title="Download">
-          <img src="/static/images/download.svg" alt="Download">
-        </button>
       `;
+      
+      const actionsContainer = document.createElement('div');
+      actionsContainer.className = 'track-actions-container';
+
+      if (!(isExplicitFilterEnabled && hasExplicitTrack)) {
+        const downloadBtnHTML = `
+          <button class="download-btn download-btn--circle track-download-btn" 
+                  data-id="${track.id || ''}"
+                  data-type="track"
+                  data-name="${track.name || 'Unknown Track'}"
+                  title="Download">
+            <img src="/static/images/download.svg" alt="Download">
+          </button>
+        `;
+        actionsContainer.innerHTML += downloadBtnHTML;
+      }
+
+      if (isPlaylistWatched) {
+        // Initial state is set based on track.is_locally_known
+        const isKnown = track.is_locally_known === true; // Ensure boolean check, default to false if undefined
+        const initialStatus = isKnown ? "known" : "missing";
+        const initialIcon = isKnown ? "/static/images/check.svg" : "/static/images/missing.svg";
+        const initialTitle = isKnown ? "Click to mark as missing from DB" : "Click to mark as known in DB";
+
+        const toggleKnownBtnHTML = `
+          <button class="action-btn toggle-known-status-btn" 
+                  data-id="${track.id || ''}"
+                  data-playlist-id="${playlist.id || ''}" 
+                  data-status="${initialStatus}" 
+                  title="${initialTitle}">
+            <img src="${initialIcon}" alt="Mark as Missing/Known">
+          </button>
+        `;
+        actionsContainer.innerHTML += toggleKnownBtnHTML;
+      }
+      
+      trackElement.innerHTML = trackHTML;
+      trackElement.appendChild(actionsContainer);
       tracksList.appendChild(trackElement);
     });
   }
@@ -303,7 +346,7 @@ function renderPlaylist(playlist: Playlist) {
   if (tracksContainerEl) tracksContainerEl.classList.remove('hidden');
 
   // Attach download listeners to newly rendered download buttons
-  attachDownloadListeners();
+  attachTrackActionListeners();
 }
 
 /**
@@ -329,26 +372,101 @@ function showError(message: string) {
 }
 
 /**
- * Attaches event listeners to all individual download buttons.
+ * Attaches event listeners to all individual track action buttons (download, mark known, mark missing).
  */
-function attachDownloadListeners() {
-  document.querySelectorAll('.download-btn').forEach((btn) => {
-    // Skip the whole playlist and album download buttons.
-    if (btn.id === 'downloadPlaylistBtn' || btn.id === 'downloadAlbumsBtn') return;
+function attachTrackActionListeners() {
+  document.querySelectorAll('.track-download-btn').forEach((btn) => {
     btn.addEventListener('click', (e: Event) => {
       e.stopPropagation();
       const currentTarget = e.currentTarget as HTMLButtonElement;
-      const url = currentTarget.dataset.url || '';
-      const type = currentTarget.dataset.type || '';
-      const name = currentTarget.dataset.name || extractName(url) || 'Unknown';
-      // Remove the button immediately after click.
+      const itemId = currentTarget.dataset.id || '';
+      const type = currentTarget.dataset.type || 'track';
+      const name = currentTarget.dataset.name || 'Unknown';
+      if (!itemId) {
+        showError('Missing item ID for download on playlist page');
+        return;
+      }
       currentTarget.remove();
-      // For individual track downloads, we might not have album/artist name readily here.
-      // The queue.ts download method should be robust enough or we might need to fetch more data.
-      // For now, pass what we have.
-      startDownload(url, type, { name }, ''); // Pass name, artist/album are optional in DownloadQueueItem
+      startDownload(itemId, type, { name }, '');
     });
   });
+
+  document.querySelectorAll('.toggle-known-status-btn').forEach((btn) => {
+    btn.addEventListener('click', async (e: Event) => {
+      e.stopPropagation();
+      const button = e.currentTarget as HTMLButtonElement;
+      const trackId = button.dataset.id || '';
+      const playlistId = button.dataset.playlistId || '';
+      const currentStatus = button.dataset.status;
+      const img = button.querySelector('img');
+
+      if (!trackId || !playlistId || !img) {
+        showError('Missing data for toggling track status');
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        if (currentStatus === 'missing') {
+          await handleMarkTrackAsKnown(playlistId, trackId);
+          button.dataset.status = 'known';
+          img.src = '/static/images/check.svg';
+          button.title = 'Click to mark as missing from DB';
+        } else {
+          await handleMarkTrackAsMissing(playlistId, trackId);
+          button.dataset.status = 'missing';
+          img.src = '/static/images/missing.svg';
+          button.title = 'Click to mark as known in DB';
+        }
+      } catch (error) {
+        // Revert UI on error if needed, error is shown by handlers
+        showError('Failed to update track status. Please try again.'); 
+      }
+      button.disabled = false;
+    });
+  });
+}
+
+async function handleMarkTrackAsKnown(playlistId: string, trackId: string) {
+  try {
+    const response = await fetch(`/api/playlist/watch/${playlistId}/tracks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([trackId]),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    const result = await response.json();
+    showNotification(result.message || 'Track marked as known.');
+  } catch (error: any) {
+    showError(`Failed to mark track as known: ${error.message}`);
+    throw error; // Re-throw for the caller to handle button state if needed
+  }
+}
+
+async function handleMarkTrackAsMissing(playlistId: string, trackId: string) {
+  try {
+    const response = await fetch(`/api/playlist/watch/${playlistId}/tracks`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify([trackId]),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    const result = await response.json();
+    showNotification(result.message || 'Track marked as missing.');
+  } catch (error: any) {
+    showError(`Failed to mark track as missing: ${error.message}`);
+    throw error; // Re-throw
+  }
 }
 
 /**
@@ -359,14 +477,14 @@ async function downloadWholePlaylist(playlist: Playlist) {
     throw new Error('Invalid playlist data');
   }
   
-  const url = playlist.external_urls?.spotify || '';
-  if (!url) {
-    throw new Error('Missing playlist URL');
+  const playlistId = playlist.id || '';
+  if (!playlistId) {
+    throw new Error('Missing playlist ID');
   }
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, 'playlist', { 
+    await downloadQueue.download(playlistId, 'playlist', { 
         name: playlist.name || 'Unknown Playlist',
         owner: playlist.owner?.display_name // Pass owner as a string
         // total_tracks can also be passed if QueueItem supports it directly
@@ -426,7 +544,7 @@ async function downloadPlaylistAlbums(playlist: Playlist) {
       
       // Use the centralized downloadQueue.download method
       await downloadQueue.download(
-        albumUrl,
+        album.id, // Pass album ID directly
         'album',
         { 
             name: album.name || 'Unknown Album',
@@ -460,15 +578,15 @@ async function downloadPlaylistAlbums(playlist: Playlist) {
 /**
  * Starts the download process using the centralized download method from the queue.
  */
-async function startDownload(url: string, type: string, item: DownloadQueueItem, albumType?: string) {
-  if (!url || !type) {
-    showError('Missing URL or type for download');
+async function startDownload(itemId: string, type: string, item: DownloadQueueItem, albumType?: string) {
+  if (!itemId || !type) {
+    showError('Missing ID or type for download');
     return;
   }
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, type, item, albumType);
+    await downloadQueue.download(itemId, type, item, albumType);
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
@@ -483,4 +601,137 @@ async function startDownload(url: string, type: string, item: DownloadQueueItem,
  */
 function extractName(url: string | null): string {
   return url || 'Unknown';
+}
+
+/**
+ * Fetches the watch status of the current playlist and updates the UI.
+ */
+async function fetchWatchStatus(playlistId: string) {
+  if (!playlistId) return;
+  try {
+    const response = await fetch(`/api/playlist/watch/${playlistId}/status`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch watch status');
+    }
+    const data: WatchedPlaylistStatus = await response.json();
+    updateWatchButtons(data.is_watched, playlistId);
+  } catch (error) {
+    console.error('Error fetching watch status:', error);
+    // Don't show a blocking error, but maybe a small notification or log
+    // For now, assume not watched if status fetch fails, or keep buttons in default state
+    updateWatchButtons(false, playlistId); 
+  }
+}
+
+/**
+ * Updates the Watch/Unwatch and Sync buttons based on the playlist's watch status.
+ */
+function updateWatchButtons(isWatched: boolean, playlistId: string) {
+  const watchBtn = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
+  const syncBtn = document.getElementById('syncPlaylistBtn') as HTMLButtonElement;
+
+  if (!watchBtn || !syncBtn) return;
+
+  const watchBtnImg = watchBtn.querySelector('img');
+
+  if (isWatched) {
+    watchBtn.innerHTML = `<img src="/static/images/eye-crossed.svg" alt="Unwatch"> Unwatch Playlist`;
+    watchBtn.classList.add('watching');
+    watchBtn.onclick = () => unwatchPlaylist(playlistId);
+    syncBtn.classList.remove('hidden');
+    syncBtn.onclick = () => syncPlaylist(playlistId);
+  } else {
+    watchBtn.innerHTML = `<img src="/static/images/eye.svg" alt="Watch"> Watch Playlist`;
+    watchBtn.classList.remove('watching');
+    watchBtn.onclick = () => watchPlaylist(playlistId);
+    syncBtn.classList.add('hidden');
+  }
+  watchBtn.disabled = false; // Enable after status is known
+}
+
+/**
+ * Adds the current playlist to the watchlist.
+ */
+async function watchPlaylist(playlistId: string) {
+  const watchBtn = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
+  if (watchBtn) watchBtn.disabled = true;
+
+  try {
+    const response = await fetch(`/api/playlist/watch/${playlistId}`, { method: 'PUT' });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to watch playlist');
+    }
+    updateWatchButtons(true, playlistId);
+    showNotification(`Playlist added to watchlist. It will be synced shortly.`);
+  } catch (error: any) {
+    showError(`Error watching playlist: ${error.message}`);
+    if (watchBtn) watchBtn.disabled = false;
+  }
+}
+
+/**
+ * Removes the current playlist from the watchlist.
+ */
+async function unwatchPlaylist(playlistId: string) {
+  const watchBtn = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
+  if (watchBtn) watchBtn.disabled = true;
+
+  try {
+    const response = await fetch(`/api/playlist/watch/${playlistId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to unwatch playlist');
+    }
+    updateWatchButtons(false, playlistId);
+    showNotification('Playlist removed from watchlist.');
+  } catch (error: any) {
+    showError(`Error unwatching playlist: ${error.message}`);
+    if (watchBtn) watchBtn.disabled = false;
+  }
+}
+
+/**
+ * Triggers a manual sync for the watched playlist.
+ */
+async function syncPlaylist(playlistId: string) {
+  const syncBtn = document.getElementById('syncPlaylistBtn') as HTMLButtonElement;
+  let originalButtonContent = ''; // Define outside
+
+  if (syncBtn) {
+    syncBtn.disabled = true;
+    originalButtonContent = syncBtn.innerHTML; // Store full HTML
+    syncBtn.innerHTML = `<img src="/static/images/refresh.svg" alt="Sync"> Syncing...`; // Keep icon
+  }
+
+  try {
+    const response = await fetch(`/api/playlist/watch/trigger_check/${playlistId}`, { method: 'POST' });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to trigger sync');
+    }
+    showNotification('Playlist sync triggered successfully.');
+  } catch (error: any) {
+    showError(`Error triggering sync: ${error.message}`);
+  } finally {
+    if (syncBtn) {
+      syncBtn.disabled = false;
+      syncBtn.innerHTML = originalButtonContent; // Restore full original HTML
+    }
+  }
+}
+
+/**
+ * Displays a temporary notification message.
+ */
+function showNotification(message: string) {
+  // Basic notification - consider a more robust solution for production
+  const notificationEl = document.createElement('div');
+  notificationEl.className = 'notification';
+  notificationEl.textContent = message;
+  document.body.appendChild(notificationEl);
+  setTimeout(() => {
+    notificationEl.remove();
+  }, 3000);
 }

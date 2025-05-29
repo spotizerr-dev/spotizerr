@@ -9,12 +9,14 @@ from routes.utils.celery_tasks import store_task_info, store_task_status, Progre
 
 album_bp = Blueprint('album', __name__)
 
-@album_bp.route('/download', methods=['GET'])
-def handle_download():
+@album_bp.route('/download/<album_id>', methods=['GET'])
+def handle_download(album_id):
     # Retrieve essential parameters from the request.
-    url = request.args.get('url')
     name = request.args.get('name')
     artist = request.args.get('artist')
+    
+    # Construct the URL from album_id
+    url = f"https://open.spotify.com/album/{album_id}"
     
     # Validate required parameters
     if not url:

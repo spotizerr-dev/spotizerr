@@ -7,13 +7,15 @@ from routes.utils.celery_queue_manager import get_config_params
 
 # We'll rely on get_config_params() instead of directly loading the config file
 
-def get_spotify_info(spotify_id, spotify_type):
+def get_spotify_info(spotify_id, spotify_type, limit=None, offset=None):
     """
     Get info from Spotify API using the default Spotify account configured in main.json
     
     Args:
         spotify_id: The Spotify ID of the entity
         spotify_type: The type of entity (track, album, playlist, artist)
+        limit (int, optional): The maximum number of items to return. Only used if spotify_type is "artist".
+        offset (int, optional): The index of the first item to return. Only used if spotify_type is "artist".
         
     Returns:
         Dictionary with the entity information
@@ -51,7 +53,14 @@ def get_spotify_info(spotify_id, spotify_type):
     elif spotify_type == "playlist":
         return Spo.get_playlist(spotify_id)
     elif spotify_type == "artist":
-        return Spo.get_artist(spotify_id)
+        if limit is not None and offset is not None:
+            return Spo.get_artist(spotify_id, limit=limit, offset=offset)
+        elif limit is not None:
+            return Spo.get_artist(spotify_id, limit=limit)
+        elif offset is not None:
+            return Spo.get_artist(spotify_id, offset=offset)
+        else:
+            return Spo.get_artist(spotify_id)
     elif spotify_type == "episode":
         return Spo.get_episode(spotify_id)
     else:

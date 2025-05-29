@@ -38,6 +38,10 @@ def setup_logging():
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     
+    # Clear any existing handlers from the root logger
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
+    
     # Log formatting
     log_format = logging.Formatter(
         '%(asctime)s [%(processName)s:%(threadName)s] [%(name)s] [%(levelname)s] - %(message)s',
@@ -141,10 +145,10 @@ def create_app():
     app.register_blueprint(search_bp, url_prefix='/api')
     app.register_blueprint(credentials_bp, url_prefix='/api/credentials')
     app.register_blueprint(album_bp, url_prefix='/api/album')
-    app.register_blueprint(track_bp, url_prefix='/api/track') 
+    app.register_blueprint(track_bp, url_prefix='/api/track')
     app.register_blueprint(playlist_bp, url_prefix='/api/playlist')
     app.register_blueprint(artist_bp, url_prefix='/api/artist')
-    app.register_blueprint(prgs_bp, url_prefix='/api/prgs')  
+    app.register_blueprint(prgs_bp, url_prefix='/api/prgs')
     
     # Serve frontend
     @app.route('/')
@@ -230,6 +234,10 @@ if __name__ == '__main__':
     
     # Check Redis connection before starting workers
     if check_redis_connection():
+        # Start Watch Manager
+        from routes.utils.watch.manager import start_watch_manager
+        start_watch_manager()
+
         # Start Celery workers
         start_celery_workers()
         

@@ -28,6 +28,11 @@
             <img src="{{ url_for('static', filename='images/download.svg') }}" alt="Download">
             Download All Discography
           </button>
+          <button id="watchArtistBtn" class="watch-btn btn-secondary"> <img src="{{ url_for('static', filename='images/eye.svg') }}" alt="Watch"> Watch Artist </button>
+          <button id="syncArtistBtn" class="download-btn sync-btn hidden">
+            <img src="{{ url_for('static', filename='images/refresh.svg') }}" alt="Sync">
+            Sync Watched Artist
+          </button>
         </div>
       </div>
     </div>

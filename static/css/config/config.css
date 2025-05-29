@@ -800,7 +800,7 @@ input:checked + .slider:before {
     width: 28px;
     height: 28px;
   }
-
+}
 
 /* Format help styles */
 .format-help {
@@ -935,4 +935,54 @@ input:checked + .slider:before {
   background-color: #e74c3c !important; /* Lighter red on hover */
   transform: translateY(-2px) scale(1.05);
 }
+
+/* Watch Options Config Section */
+.watch-options-config {
+  background: #181818;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  transition: transform 0.3s ease;
+}
+
+.watch-options-config:hover {
+  transform: translateY(-2px);
+}
+
+/* New Checklist Styles */
+.checklist-container {
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  padding: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0.3rem 0;
+}
+
+.checklist-item:last-child {
+  margin-bottom: 0;
+}
+
+.checklist-item input[type="checkbox"] {
+  margin-right: 0.8rem;
+  width: 18px; /* Custom size */
+  height: 18px; /* Custom size */
+  cursor: pointer;
+  accent-color: #1db954; /* Modern way to color checkboxes */
+}
+
+.checklist-item label {
+  color: #ffffff; /* Ensure label text is white */
+  font-size: 0.95rem;
+  cursor: pointer;
+  /* Reset some global label styles if they interfere */
+  display: inline; 
+  margin-bottom: 0; 
 }

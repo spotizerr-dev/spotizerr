@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Setup Redis and Celery
 from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, REDIS_PASSWORD, get_config_params
+# Import for playlist watch DB update
+from routes.utils.watch.db import add_single_track_to_playlist_db
 
 # Initialize Celery app
 celery_app = Celery('download_tasks',
@@ -826,6 +828,22 @@ def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args
                 "message": "Download completed successfully."
             })
             logger.info(f"Task {task_id} completed successfully: {task_info.get('name', 'Unknown')}")
+
+            # If from playlist_watch and successful, add track to DB
+            original_request = task_info.get("original_request", {})
+            if original_request.get("source") == "playlist_watch":
+                playlist_id = original_request.get("playlist_id")
+                track_item_for_db = original_request.get("track_item_for_db")
+                
+                if playlist_id and track_item_for_db and track_item_for_db.get('track'):
+                    logger.info(f"Task {task_id} was from playlist watch for playlist {playlist_id}. Adding track to DB.")
+                    try:
+                        add_single_track_to_playlist_db(playlist_id, track_item_for_db)
+                    except Exception as db_add_err:
+                        logger.error(f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from playlist_watch but missing playlist_id or track_item_for_db for DB update. Original Request: {original_request}")
+
     except Exception as e:
         logger.error(f"Error in task_postrun_handler: {e}")
 

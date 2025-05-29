@@ -325,6 +325,53 @@ body {
   transform: scale(0.98);
 }
 
+/* Watch Artist Button Styling */
+.watch-btn {
+  background-color: transparent;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.5rem;
+}
+
+.watch-btn:hover {
+  background-color: #ffffff;
+  color: #121212;
+  border-color: #ffffff;
+}
+
+.watch-btn.watching {
+  background-color: #1db954; /* Spotify green for "watching" state */
+  color: #ffffff;
+  border-color: #1db954;
+}
+
+.watch-btn.watching:hover {
+  background-color: #17a44b; /* Darker green on hover */
+  border-color: #17a44b;
+  color: #ffffff;
+}
+
+.watch-btn:active {
+  transform: scale(0.98);
+}
+
+/* Styling for icons within watch and sync buttons */
+.watch-btn img,
+.sync-btn img {
+  width: 16px; /* Adjust size as needed */
+  height: 16px; /* Adjust size as needed */
+  margin-right: 8px; /* Space between icon and text */
+  filter: brightness(0) invert(1); /* Make icons white */
+}
+
 /* Responsive Styles */
 
 /* Medium Devices (Tablets) */
@@ -433,4 +480,53 @@ a:hover,
 a:focus {
   color: #1db954;
   text-decoration: underline;
+}
+
+/* Toggle Known Status Button for Tracks/Albums */
+.toggle-known-status-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  margin-left: 0.5rem; /* Spacing from other buttons if any */
+}
+
+.toggle-known-status-btn img {
+  width: 18px; /* Adjust icon size as needed */
+  height: 18px;
+  filter: brightness(0) invert(1); /* White icon */
+}
+
+.toggle-known-status-btn[data-status="known"] {
+  background-color: #28a745; /* Green for known/available */
+}
+
+.toggle-known-status-btn[data-status="known"]:hover {
+  background-color: #218838; /* Darker green on hover */
+}
+
+.toggle-known-status-btn[data-status="missing"] {
+  background-color: #dc3545; /* Red for missing */
+}
+
+.toggle-known-status-btn[data-status="missing"]:hover {
+  background-color: #c82333; /* Darker red on hover */
+}
+
+.toggle-known-status-btn:active {
+  transform: scale(0.95);
+}
+
+.album-actions-container {
+    display: flex;
+    align-items: center;
+    /* If you want buttons at the bottom of the card or specific positioning, adjust here */
+    /* For now, they will flow naturally. Adding padding if needed. */
+    padding-top: 0.5rem; 
 }

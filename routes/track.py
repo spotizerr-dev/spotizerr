@@ -10,14 +10,16 @@ from urllib.parse import urlparse  # for URL validation
 
 track_bp = Blueprint('track', __name__)
 
-@track_bp.route('/download', methods=['GET'])
-def handle_download():
+@track_bp.route('/download/<track_id>', methods=['GET'])
+def handle_download(track_id):
     # Retrieve essential parameters from the request.
-    url = request.args.get('url')
     name = request.args.get('name')
     artist = request.args.get('artist')
     orig_params = request.args.to_dict()
-    orig_params["original_url"] = request.url
+    
+    # Construct the URL from track_id
+    url = f"https://open.spotify.com/track/{track_id}"
+    orig_params["original_url"] = url # Update original_url to the constructed one
     
     # Validate required parameters
     if not url:

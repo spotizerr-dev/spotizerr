@@ -124,6 +124,9 @@ async function loadConfig() {
     
     // Update explicit filter status
     updateExplicitFilterStatus(savedConfig.explicitFilter);
+
+    // Load watch config
+    await loadWatchConfig();
   } catch (error: any) {
     showConfigError('Error loading config: ' + error.message);
   }
@@ -230,6 +233,12 @@ function setupEventListeners() {
 
   // Max concurrent downloads change listener
   (document.getElementById('maxConcurrentDownloads') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
+
+  // Watch options listeners
+  document.querySelectorAll('#watchedArtistAlbumGroupChecklist input[type="checkbox"]').forEach(checkbox => {
+    checkbox.addEventListener('change', saveWatchConfig);
+  });
+  (document.getElementById('watchPollIntervalSeconds') as HTMLInputElement | null)?.addEventListener('change', saveWatchConfig);
 }
 
 function updateServiceSpecificOptions() {
@@ -834,6 +843,9 @@ async function saveConfig() {
     
     // Update explicit filter status
     updateExplicitFilterStatus(savedConfig.explicitFilter);
+
+    // Load watch config
+    await loadWatchConfig();
   } catch (error: any) {
     showConfigError('Error loading config: ' + error.message);
   }
@@ -920,4 +932,56 @@ function showCopyNotification(message: string) {
       notificationContainer.removeChild(notification);
     }, 300);
   }, 2000);
+}
+
+async function loadWatchConfig() {
+  try {
+    const response = await fetch('/api/config/watch');
+    if (!response.ok) throw new Error('Failed to load watch config');
+    const watchConfig = await response.json();
+
+    const checklistContainer = document.getElementById('watchedArtistAlbumGroupChecklist');
+    if (checklistContainer && watchConfig.watchedArtistAlbumGroup) {
+      const checkboxes = checklistContainer.querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+      checkboxes.forEach(checkbox => {
+        checkbox.checked = watchConfig.watchedArtistAlbumGroup.includes(checkbox.value);
+      });
+    }
+
+    const watchPollIntervalSecondsInput = document.getElementById('watchPollIntervalSeconds') as HTMLInputElement | null;
+    if (watchPollIntervalSecondsInput) watchPollIntervalSecondsInput.value = watchConfig.watchPollIntervalSeconds || '3600';
+
+  } catch (error: any) {
+    showConfigError('Error loading watch config: ' + error.message);
+  }
+}
+
+async function saveWatchConfig() {
+  const checklistContainer = document.getElementById('watchedArtistAlbumGroupChecklist');
+  const selectedGroups: string[] = [];
+  if (checklistContainer) {
+    const checkedBoxes = checklistContainer.querySelectorAll('input[type="checkbox"]:checked') as NodeListOf<HTMLInputElement>;
+    checkedBoxes.forEach(checkbox => selectedGroups.push(checkbox.value));
+  }
+
+  const watchConfig = {
+    watchedArtistAlbumGroup: selectedGroups,
+    watchPollIntervalSeconds: parseInt((document.getElementById('watchPollIntervalSeconds') as HTMLInputElement | null)?.value || '3600', 10) || 3600,
+  };
+
+  try {
+    const response = await fetch('/api/config/watch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(watchConfig)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to save watch config');
+    }
+    showConfigSuccess('Watch settings saved successfully.');
+  } catch (error: any) {
+    showConfigError('Error saving watch config: ' + error.message);
+  }
 }

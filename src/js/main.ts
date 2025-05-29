@@ -318,15 +318,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!item) return;
                 
                 const currentSearchType = searchType?.value || 'track';
-                let url;
+                let itemId = item.id || ''; // Use item.id directly
                 
-                // Determine the URL based on item type
-                if (item.external_urls && item.external_urls.spotify) {
-                    url = item.external_urls.spotify;
-                } else if (item.href) {
-                    url = item.href;
-                } else {
-                    showError('Could not determine download URL');
+                if (!itemId) { // Check if ID was found
+                    showError('Could not determine download ID');
                     return;
                 }
                 
@@ -374,7 +369,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 // Start the download
-                startDownload(url, currentSearchType, metadata, 
+                startDownload(itemId, currentSearchType, metadata, 
                     (item as AlbumResultItem).album_type || ((item as TrackResultItem).album ? (item as TrackResultItem).album.album_type : null))
                     .then(() => {
                         // For artists, show how many albums were queued
@@ -398,15 +393,15 @@ document.addEventListener('DOMContentLoaded', function() {
     /**
      * Starts the download process via API
      */
-    async function startDownload(url: string, type: string, item: DownloadQueueItem, albumType: string | null | undefined) {
-        if (!url || !type) {
-            showError('Missing URL or type for download');
+    async function startDownload(itemId: string, type: string, item: DownloadQueueItem, albumType: string | null | undefined) {
+        if (!itemId || !type) {
+            showError('Missing ID or type for download');
             return;
         }
         
         try {
             // Use the centralized downloadQueue.download method
-            await downloadQueue.download(url, type, item, albumType);
+            await downloadQueue.download(itemId, type, item, albumType);
             
             // Make the queue visible after queueing
             downloadQueue.toggleVisibility(true);
