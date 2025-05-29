@@ -27,6 +27,7 @@ CONFIG_PATH = Path('./data/config/watch.json')
 STOP_EVENT = threading.Event()
 
 DEFAULT_WATCH_CONFIG = {
+    "enabled": False,
     "watchPollIntervalSeconds": 3600,
     "max_tracks_per_run": 50, # For playlists
     "watchedArtistAlbumGroup": ["album", "single"], # Default for artists
@@ -356,6 +357,12 @@ def playlist_watch_scheduler():
     while not STOP_EVENT.is_set():
         current_config = get_watch_config() # Get latest config for this run
         interval = current_config.get("watchPollIntervalSeconds", 3600)
+        watch_enabled = current_config.get("enabled", False) # Get enabled status
+
+        if not watch_enabled:
+            logger.info("Watch Scheduler: Watch feature is disabled in config. Skipping checks.")
+            STOP_EVENT.wait(interval) # Still respect poll interval for checking config again
+            continue # Skip to next iteration
         
         try:
             logger.info("Watch Scheduler: Starting playlist check run.")

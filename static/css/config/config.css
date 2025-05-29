@@ -986,3 +986,41 @@ input:checked + .slider:before {
   display: inline; 
   margin-bottom: 0; 
 }
+
+/* Urgent Warning Message Style */
+.urgent-warning-message {
+  background-color: rgba(255, 165, 0, 0.1); /* Orange/Amber background */
+  border: 1px solid #FFA500; /* Orange/Amber border */
+  color: #FFA500; /* Orange/Amber text */
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex; /* Use flex to align icon and text */
+  align-items: center; /* Vertically align icon and text */
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.urgent-warning-message .warning-icon {
+  margin-right: 0.75rem; /* Space between icon and text */
+  min-width: 24px; /* Ensure icon doesn't shrink too much */
+  color: #FFA500; /* Match icon color to text/border */
+}
+
+/* Existing info-message style - ensure it doesn't conflict or adjust if needed */
+.info-message {
+  background-color: rgba(0, 123, 255, 0.1);
+  border: 1px solid #007bff;
+  color: #007bff;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Version text styling */
+.version-text {
+  font-size: 0.9rem;
+  color: #888; /* Light grey color */
+  margin-left: auto; /* Push it to the right */
+  padding-top: 0.5rem; /* Align with title better */
+}

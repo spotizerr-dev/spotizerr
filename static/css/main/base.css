@@ -27,6 +27,9 @@
   --color-primary-hover: #17a44b;
   --color-error: #c0392b;
   --color-success: #2ecc71;
+  /* Adding accent green if not present, or ensuring it is */
+  --color-accent-green: #22c55e; /* Example: A Tailwind-like green */
+  --color-accent-green-dark: #16a34a; /* Darker shade for hover */
   
   /* Spacing */
   --space-xs: 0.25rem;
@@ -499,4 +502,40 @@ a:hover, a:focus {
   font-style: italic;
   font-size: 0.9rem;
   margin-top: 0.5rem;
+}
+
+.watchlist-icon {
+  position: fixed;
+  right: 20px;
+  bottom: 90px; /* Positioned above the queue icon */
+  z-index: 1000;
+}
+
+/* Responsive adjustments for floating icons */
+@media (max-width: 768px) {
+  .floating-icon {
+    width: 48px;
+    height: 48px;
+    right: 15px;
+  }
+  .settings-icon {
+    bottom: 15px; /* Adjust for smaller screens */
+  }
+  .queue-icon {
+    bottom: 15px; /* Adjust for smaller screens */
+  }
+  .watchlist-icon {
+    bottom: 75px; /* Adjust for smaller screens, above queue icon */
+  }
+  .home-btn.floating-icon { /* Specific for home button if it's also floating */
+    left: 15px;
+    bottom: 15px;
+  }
+}
+
+/* Ensure images inside btn-icon are sized correctly */
+.btn-icon img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(1);
 } 

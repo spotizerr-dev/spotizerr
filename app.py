@@ -160,12 +160,17 @@ def create_app():
     def serve_config():
         return render_template('config.html')
 
+    # New route: Serve watch.html under /watchlist
+    @app.route('/watchlist')
+    def serve_watchlist():
+        return render_template('watch.html')
+
     # New route: Serve playlist.html under /playlist/<id>
     @app.route('/playlist/<id>')
     def serve_playlist(id):
         # The id parameter is captured, but you can use it as needed.
         return render_template('playlist.html')
-        # New route: Serve playlist.html under /playlist/<id>
+
     @app.route('/album/<id>')
     def serve_album(id):
         # The id parameter is captured, but you can use it as needed.

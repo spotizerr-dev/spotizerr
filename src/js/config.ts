@@ -239,32 +239,52 @@ function setupEventListeners() {
     checkbox.addEventListener('change', saveWatchConfig);
   });
   (document.getElementById('watchPollIntervalSeconds') as HTMLInputElement | null)?.addEventListener('change', saveWatchConfig);
+  (document.getElementById('watchEnabledToggle') as HTMLInputElement | null)?.addEventListener('change', () => {
+    const isEnabling = (document.getElementById('watchEnabledToggle') as HTMLInputElement)?.checked;
+    const alreadyShownFirstEnableNotice = localStorage.getItem('watchFeatureFirstEnableNoticeShown');
+
+    if (isEnabling && !alreadyShownFirstEnableNotice) {
+        const noticeDiv = document.getElementById('watchFeatureFirstEnableNotice');
+        if (noticeDiv) noticeDiv.style.display = 'block';
+        localStorage.setItem('watchFeatureFirstEnableNoticeShown', 'true');
+        // Hide notice after a delay or on click if preferred
+        setTimeout(() => {
+            if (noticeDiv) noticeDiv.style.display = 'none';
+        }, 15000); // Hide after 15 seconds
+    } else {
+        // If disabling, or if notice was already shown, ensure it's hidden
+        const noticeDiv = document.getElementById('watchFeatureFirstEnableNotice');
+        if (noticeDiv) noticeDiv.style.display = 'none';
+    }
+    saveWatchConfig();
+    updateWatchWarningDisplay(); // Call this also when the watch enable toggle changes
+  });
+  (document.getElementById('realTimeToggle') as HTMLInputElement | null)?.addEventListener('change', () => {
+    saveConfig();
+    updateWatchWarningDisplay(); // Call this when realTimeToggle changes
+  });
 }
 
 function updateServiceSpecificOptions() {
   // Get the selected service
   const selectedService = (document.getElementById('defaultServiceSelect') as HTMLSelectElement | null)?.value;
-  
-  // Get all service-specific sections
-  const spotifyOptions = document.querySelectorAll('.config-item.spotify-specific');
-  const deezerOptions = document.querySelectorAll('.config-item.deezer-specific');
-  
+
   // Handle Spotify specific options
   if (selectedService === 'spotify') {
     // Highlight Spotify section
     (document.getElementById('spotifyQualitySelect') as HTMLElement | null)?.closest('.config-item')?.classList.add('highlighted-option');
     (document.getElementById('spotifyAccountSelect') as HTMLElement | null)?.closest('.config-item')?.classList.add('highlighted-option');
-    
+
     // Remove highlight from Deezer
     (document.getElementById('deezerQualitySelect') as HTMLElement | null)?.closest('.config-item')?.classList.remove('highlighted-option');
     (document.getElementById('deezerAccountSelect') as HTMLElement | null)?.closest('.config-item')?.classList.remove('highlighted-option');
-  } 
-  // Handle Deezer specific options (for future use)
+  }
+  // Handle Deezer specific options
   else if (selectedService === 'deezer') {
     // Highlight Deezer section
     (document.getElementById('deezerQualitySelect') as HTMLElement | null)?.closest('.config-item')?.classList.add('highlighted-option');
     (document.getElementById('deezerAccountSelect') as HTMLElement | null)?.closest('.config-item')?.classList.add('highlighted-option');
-    
+
     // Remove highlight from Spotify
     (document.getElementById('spotifyQualitySelect') as HTMLElement | null)?.closest('.config-item')?.classList.remove('highlighted-option');
     (document.getElementById('spotifyAccountSelect') as HTMLElement | null)?.closest('.config-item')?.classList.remove('highlighted-option');
@@ -738,10 +758,14 @@ async function handleCredentialSubmit(e: Event) {
     await updateAccountSelectors();
     await saveConfig();
     loadCredentials(service!);
-    setFormVisibility(false); // Hide form and show add button on successful submission
     
     // Show success message
     showConfigSuccess(isEditingSearch ? 'API credentials saved successfully' : 'Account saved successfully');
+    
+    // Add a delay before hiding the form
+    setTimeout(() => {
+      setFormVisibility(false); // Hide form and show add button on successful submission
+    }, 2000); // 2 second delay
   } catch (error: any) {
     showConfigError(error.message);
   }
@@ -949,7 +973,17 @@ async function loadWatchConfig() {
     }
 
     const watchPollIntervalSecondsInput = document.getElementById('watchPollIntervalSeconds') as HTMLInputElement | null;
-    if (watchPollIntervalSecondsInput) watchPollIntervalSecondsInput.value = watchConfig.watchPollIntervalSeconds || '3600';
+    if (watchPollIntervalSecondsInput) {
+      watchPollIntervalSecondsInput.value = watchConfig.watchPollIntervalSeconds || '3600';
+    }
+
+    const watchEnabledToggle = document.getElementById('watchEnabledToggle') as HTMLInputElement | null;
+    if (watchEnabledToggle) {
+      watchEnabledToggle.checked = !!watchConfig.enabled;
+    }
+
+    // Call this after the state of the toggles has been set based on watchConfig
+    updateWatchWarningDisplay();
 
   } catch (error: any) {
     showConfigError('Error loading watch config: ' + error.message);
@@ -965,6 +999,7 @@ async function saveWatchConfig() {
   }
 
   const watchConfig = {
+    enabled: (document.getElementById('watchEnabledToggle') as HTMLInputElement | null)?.checked,
     watchedArtistAlbumGroup: selectedGroups,
     watchPollIntervalSeconds: parseInt((document.getElementById('watchPollIntervalSeconds') as HTMLInputElement | null)?.value || '3600', 10) || 3600,
   };
@@ -983,5 +1018,29 @@ async function saveWatchConfig() {
     showConfigSuccess('Watch settings saved successfully.');
   } catch (error: any) {
     showConfigError('Error saving watch config: ' + error.message);
+  }
+}
+
+// New function to manage the warning display
+function updateWatchWarningDisplay() {
+  const watchEnabledToggle = document.getElementById('watchEnabledToggle') as HTMLInputElement | null;
+  const realTimeToggle = document.getElementById('realTimeToggle') as HTMLInputElement | null;
+  const warningDiv = document.getElementById('watchEnabledWarning') as HTMLElement | null;
+
+  if (watchEnabledToggle && realTimeToggle && warningDiv) {
+    const isWatchEnabled = watchEnabledToggle.checked;
+    const isRealTimeEnabled = realTimeToggle.checked;
+
+    if (isWatchEnabled && !isRealTimeEnabled) {
+      warningDiv.style.display = 'block';
+    } else {
+      warningDiv.style.display = 'none';
+    }
+  }
+  // Hide the first-enable notice if watch is disabled or if it was already dismissed by timeout/interaction
+  // The primary logic for showing first-enable notice is in the event listener for watchEnabledToggle
+  const firstEnableNoticeDiv = document.getElementById('watchFeatureFirstEnableNotice');
+  if (firstEnableNoticeDiv && watchEnabledToggle && !watchEnabledToggle.checked) {
+    firstEnableNoticeDiv.style.display = 'none';
   }
 }

@@ -71,6 +71,7 @@ def get_watch_config():
             CONFIG_PATH_WATCH.parent.mkdir(parents=True, exist_ok=True)
             # Default watch config
             defaults = {
+                'enabled': False,
                 'watchedArtistAlbumGroup': ["album", "single"],
                 'watchPollIntervalSeconds': 3600
             }
@@ -82,6 +83,7 @@ def get_watch_config():
         logging.error(f"Error reading watch config: {str(e)}")
         # Return defaults on error to prevent crashes
         return {
+            'enabled': False,
             'watchedArtistAlbumGroup': ["album", "single"],
             'watchPollIntervalSeconds': 3600
         }
@@ -189,6 +191,7 @@ def handle_watch_config():
     watch_config = get_watch_config()
     # Ensure defaults are applied if file was corrupted or missing fields
     defaults = {
+        'enabled': False,
         'watchedArtistAlbumGroup': ["album", "single"],
         'watchPollIntervalSeconds': 3600
     }
