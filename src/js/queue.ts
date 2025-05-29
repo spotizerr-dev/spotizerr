@@ -162,6 +162,7 @@ export class DownloadQueue {
   
   // Load the saved visible count (or default to 10)
   visibleCount: number;
+  globalSyncIntervalId: number | null = null; // For the new global sync
   
   constructor() {
     const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
@@ -202,7 +203,10 @@ export class DownloadQueue {
     // Wait for initDOM to complete before setting up event listeners and loading existing PRG files.
     this.initDOM().then(() => {
       this.initEventListeners();
-      this.loadExistingPrgFiles();
+      this.loadExistingPrgFiles().then(() => { // Ensure loadExistingPrgFiles completes
+        // Start global task list synchronization after initial load
+        this.startGlobalTaskSync();
+      });
     });
   }
 
@@ -387,6 +391,18 @@ export class DownloadQueue {
    * Adds a new download entry.
    */
   addDownload(item: QueueItem, type: string, prgFile: string, requestUrl: string | null = null, startMonitoring: boolean = false): string {
+    // Check if an entry with this prgFile already exists
+    const existingQueueId = this.findQueueIdByPrgFile(prgFile);
+    if (existingQueueId) {
+      console.log(`addDownload: Entry for prgFile ${prgFile} already exists with queueId ${existingQueueId}. Ensuring monitoring.`);
+      const existingEntry = this.queueEntries[existingQueueId];
+      if (existingEntry && !existingEntry.hasEnded && startMonitoring && !this.pollingIntervals[existingQueueId]) {
+        // If it exists, is not ended, needs monitoring, and isn't currently polled, start its individual polling.
+        this.startDownloadStatusMonitoring(existingQueueId);
+      }
+      return existingQueueId; // Return existing ID
+    }
+
     const queueId = this.generateQueueId();
     const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
     this.queueEntries[queueId] = entry;
@@ -972,7 +988,16 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     return index >= 0 && index < this.visibleCount;
   }
 
-  async cleanupEntry(queueId: string) {
+  findQueueIdByPrgFile(prgFile: string): string | undefined {
+    for (const queueId in this.queueEntries) {
+      if (this.queueEntries[queueId].prgFile === prgFile) {
+        return queueId;
+      }
+    }
+    return undefined;
+  }
+
+  async cleanupEntry(queueId: string /* Parameter deleteFromServer removed */) {
     const entry = this.queueEntries[queueId];
     if (entry) {
       // Close any polling interval
@@ -998,17 +1023,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
       }
       
-      // Delete the entry from the server
-      try {
-        const response = await fetch(`/api/prgs/delete/${entry.prgFile}`, { method: 'DELETE' });
-        if (response.ok) {
-          console.log(`Successfully deleted task ${entry.prgFile} from server`);
-        } else {
-          console.warn(`Failed to delete task ${entry.prgFile}: ${response.status} ${response.statusText}`);
-        }
-      } catch (error) {
-        console.error(`Error deleting task ${entry.prgFile}:`, error);
-      }
+      // The block for deleting from server has been removed.
+      // console.log(`Entry ${queueId} (${entry.prgFile}) cleaned up from UI and local cache.`);
       
       // Update the queue display
       this.updateQueueOrder();
@@ -1303,14 +1319,22 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     
     // Stop polling
     this.clearPollingInterval(queueId);
-    
-    // Use 10 seconds cleanup delay for all states including errors
-    const cleanupDelay = 10000;
-    
-    // Clean up after the appropriate delay
-    setTimeout(() => {
-      this.cleanupEntry(queueId);
-    }, cleanupDelay);
+
+    const statusData = typeof progress === 'object' ? progress : entry.lastStatus;
+
+    if (statusData && (statusData.status === 'complete' || statusData.status === 'done')) {
+      // For completed tasks, show for 2 seconds then remove from UI only
+      setTimeout(() => {
+        this.cleanupEntry(queueId); // Pass only queueId
+      }, 2000);
+    } else {
+      // For other terminal states (error, cancelled), use existing cleanup logic (default 10s)
+      // The server-side delete for these will be handled by backend mechanisms or specific cancel actions
+      const cleanupDelay = 10000;
+      setTimeout(() => {
+        this.cleanupEntry(queueId); // Pass only queueId
+      }, cleanupDelay);
+    }
   }
 
   handleInactivity(entry: QueueEntry, queueId: string, logElement: HTMLElement | null) { // Add types
@@ -2004,27 +2028,32 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         if (data.last_line.status === 'cancelled' || data.last_line.status === 'cancel') {
           console.log('Cleaning up cancelled download immediately');
           this.clearPollingInterval(queueId);
-          this.cleanupEntry(queueId);
+          this.cleanupEntry(queueId); // Pass only queueId
           return; // No need to process further
         }
         
-        // Only set up cleanup if this is not an error that we're in the process of retrying
-        // If status is 'error' but the status message contains 'Retrying', don't clean up
-        const isRetrying = entry.isRetrying || 
-                          (data.last_line.status === 'error' && 
-                           entry.element.querySelector('.log')?.textContent?.includes('Retry'));
-        
-        if (!isRetrying) {
+        // For completed tasks, start 2s UI timer
+        if (data.last_line.status === 'complete' || data.last_line.status === 'done') {
+          this.clearPollingInterval(queueId);
           setTimeout(() => {
-            // Double-check the entry still exists and has not been retried before cleaning up
-            const currentEntry = this.queueEntries[queueId]; // Get current entry
-            if (currentEntry &&  // Check if currentEntry exists
-                !currentEntry.isRetrying &&
-                currentEntry.hasEnded) {
-              this.clearPollingInterval(queueId);
-              this.cleanupEntry(queueId);
-            }
-          }, 5000);
+            this.cleanupEntry(queueId); // Pass only queueId
+          }, 2000);
+          // Do not return here, allow UI to update to complete state first
+        } else {
+          // For other terminal states like 'error'
+          // Only set up cleanup if this is not an error that we're in the process of retrying
+          const isRetrying = entry.isRetrying || 
+                            (data.last_line.status === 'error' && 
+                             entry.element.querySelector('.log')?.textContent?.includes('Retry'));
+          
+          if (!isRetrying) {
+            // Errors will use the handleDownloadCompletion logic which has its own timeout
+            // this.handleDownloadCompletion(entry, queueId, data.last_line);
+            // No, we want to ensure polling stops here for errors too if not retrying
+            this.clearPollingInterval(queueId);
+            // Existing logic for error display and auto-cleanup (15s) is below
+            // and cleanupEntry for errors will be called from there or from handleDownloadCompletion
+          }
         }
       }
       
@@ -2218,7 +2247,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
           const closeErrorBtn = errorLogElement.querySelector('.close-error-btn') as HTMLButtonElement | null;
           if (closeErrorBtn) {
             closeErrorBtn.addEventListener('click', () => {
-          this.cleanupEntry(queueId);
+          this.cleanupEntry(queueId); // Pass only queueId
         });
           }
           
@@ -2257,7 +2286,21 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     // Handle terminal states for non-error cases
     if (['complete', 'cancel', 'cancelled', 'done', 'skipped'].includes(status)) {
       entry.hasEnded = true;
-      this.handleDownloadCompletion(entry, queueId, statusData);
+      // this.handleDownloadCompletion(entry, queueId, statusData); // Already called from fetchDownloadStatus for terminal states
+      // We need to ensure the 2-second rule for 'complete'/'done' is applied here too, if not already handled
+      if (status === 'complete' || status === 'done') {
+        if (!this.pollingIntervals[queueId]) { // Check if polling was already cleared (meaning timeout started)
+            this.clearPollingInterval(queueId);
+            setTimeout(() => {
+                this.cleanupEntry(queueId); // Pass only queueId
+            }, 2000);
+        }
+      } else if (status === 'cancel' || status === 'cancelled' || status === 'skipped') {
+        // For cancelled or skipped, can cleanup sooner or use existing server delete logic
+        this.clearPollingInterval(queueId);
+        this.cleanupEntry(queueId); // Pass only queueId
+      }
+      // Errors are handled by their specific block below
     }
     
     // Cache the status for potential page reloads
@@ -2731,6 +2774,78 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     for (const queueId in this.pollingIntervals) {
       this.clearPollingInterval(queueId);
     }
+    if (this.globalSyncIntervalId !== null) {
+      clearInterval(this.globalSyncIntervalId as number);
+      this.globalSyncIntervalId = null;
+      console.log('Stopped global task sync polling.');
+    }
+  }
+
+  async syncWithBackendTaskList() {
+    try {
+      const response = await fetch('/api/prgs/list');
+      if (!response.ok) {
+        console.error('Failed to fetch backend task list:', response.status);
+        return;
+      }
+      const backendTaskIds: string[] = await response.json();
+      const backendTaskIdSet = new Set(backendTaskIds);
+
+      // console.log('Backend task IDs:', backendTaskIds);
+      // console.log('Frontend task IDs (prgFiles):', Object.values(this.queueEntries).map(e => e.prgFile));
+
+      // 1. Add new tasks from backend that are not in frontend
+      for (const taskId of backendTaskIds) {
+        if (!this.findQueueIdByPrgFile(taskId)) {
+          console.log(`Sync: Task ${taskId} found in backend but not frontend. Fetching details.`);
+          try {
+            const taskDetailsResponse = await fetch(`/api/prgs/${taskId}`);
+            if (taskDetailsResponse.ok) {
+              const taskDetails: StatusData = await taskDetailsResponse.json();
+              // Construct a minimal item for addDownload. The actual details will be filled by status updates.
+              const item: QueueItem = {
+                name: taskDetails.last_line?.name || taskDetails.last_line?.song || taskDetails.last_line?.title || taskDetails.original_request?.name || taskId,
+                artist: taskDetails.last_line?.artist || taskDetails.original_request?.artist || '',
+                type: taskDetails.last_line?.type || taskDetails.original_request?.type || 'unknown'
+              };
+              const requestUrl = taskDetails.original_url || taskDetails.original_request?.url || null;
+              this.addDownload(item, item.type || 'unknown', taskId, requestUrl, true); // true to start monitoring
+            } else {
+              console.warn(`Sync: Failed to fetch details for new task ${taskId} from backend.`);
+            }
+          } catch (fetchError) {
+            console.error(`Sync: Error fetching details for task ${taskId}:`, fetchError);
+          }
+        }
+      }
+
+      // 2. Remove stale tasks from frontend that are not in backend active list
+      const frontendPrgFiles = Object.values(this.queueEntries).map(entry => entry.prgFile);
+      for (const prgFile of frontendPrgFiles) {
+        const queueId = this.findQueueIdByPrgFile(prgFile);
+        if (queueId && !backendTaskIdSet.has(prgFile)) {
+          const entry = this.queueEntries[queueId];
+          // Only remove if it's not already considered ended by frontend (e.g., completed and timer running)
+          if (entry && !entry.hasEnded) {
+            console.log(`Sync: Task ${prgFile} (queueId: ${queueId}) found in frontend but not in backend active list. Removing.`);
+            this.cleanupEntry(queueId);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error during global task sync:', error);
+    }
+  }
+
+  startGlobalTaskSync() {
+    if (this.globalSyncIntervalId !== null) {
+      clearInterval(this.globalSyncIntervalId as number);
+    }
+    this.syncWithBackendTaskList(); // Initial sync
+    this.globalSyncIntervalId = setInterval(() => {
+      this.syncWithBackendTaskList();
+    }, 5000) as unknown as number; // Poll every 5 seconds
+    console.log('Started global task sync polling every 5 seconds.');
   }
 }
 

@@ -440,6 +440,17 @@ class ProgressTrackingTask(Task):
         # Store the processed status update
         store_task_status(task_id, stored_data)
         
+        # Immediately delete task info from Redis after marking as complete
+        if stored_data.get("status") == ProgressState.COMPLETE:
+            logger.info(f"Task {task_id} completed. Deleting task data from Redis.")
+            try:
+                redis_client.delete(f"task:{task_id}:info")
+                redis_client.delete(f"task:{task_id}:status")
+                redis_client.delete(f"task:{task_id}:status:next_id") # Also delete the counter
+                logger.info(f"Successfully deleted Redis data for completed task {task_id}.")
+            except Exception as e:
+                logger.error(f"Error deleting Redis data for completed task {task_id}: {e}", exc_info=True)
+        
     def _handle_initializing(self, task_id, data, task_info):
         """Handle initializing status from deezspot"""
         # Extract relevant fields
@@ -784,6 +795,20 @@ class ProgressTrackingTask(Task):
             logger.info(f"Task {task_id} completed: {content_type.upper()}")
             data["status"] = ProgressState.COMPLETE
             data["message"] = "Download complete"
+
+        # Store the processed status update
+        store_task_status(task_id, data)
+        
+        # Immediately delete task info from Redis after marking as complete
+        if data.get("status") == ProgressState.COMPLETE:
+            logger.info(f"Task {task_id} ({task_info.get('name', 'Unknown')}) completed. Deleting task data from Redis.")
+            try:
+                redis_client.delete(f"task:{task_id}:info")
+                redis_client.delete(f"task:{task_id}:status")
+                redis_client.delete(f"task:{task_id}:status:next_id") # Also delete the counter
+                logger.info(f"Successfully deleted Redis data for completed task {task_id}.")
+            except Exception as e:
+                logger.error(f"Error deleting Redis data for completed task {task_id}: {e}", exc_info=True)
 
 # Celery signal handlers
 @task_prerun.connect
