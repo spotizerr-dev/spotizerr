@@ -53,7 +53,7 @@ mkdir spotizerr && cd spotizerr
 3. Copy `docker-compose.yml` from this repo.
 4. Create required directories:
 ```bash
-mkdir -p creds config downloads logs cache
+mkdir -p data/creds data/config data/watch data/history downloads logs/tasks .cache
 ```
 5. Launch containers:
 ```bash
@@ -263,9 +263,14 @@ SPOTIPY_CACHE_PATH=/app/cache/.cache  # Spotify token cache path
 - API errors: Ensure your Spotify client ID and client secret are correctly entered
 
 **Log Locations**:
-- Credentials: `./creds/` directory
-- Downloads: `./downloads/` directory
-- Application logs: `docker logs spotizerr`
+- Application Logs: `docker logs spotizerr` (for main app and Celery workers)
+- Individual Task Logs: `./logs/tasks/` (inside the container, maps to your volume)
+- Credentials: `./data/creds/`
+- Configuration Files: `./data/config/`
+- Downloaded Music: `./downloads/`
+- Watch Feature Database: `./data/watch/`
+- Download History Database: `./data/history/`
+- Spotify Token Cache: `./.cache/` (if `SPOTIPY_CACHE_PATH` is set to `/app/cache/.cache` and mapped)
 
 ## Notes
 
