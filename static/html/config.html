@@ -317,6 +317,9 @@
   </div>
 
   <!-- Fixed floating buttons for back and queue -->
+  <a href="/history" class="btn-icon history-nav-btn floating-icon settings-icon" aria-label="Download History" title="Go to Download History">
+    <img src="{{ url_for('static', filename='images/history.svg') }}" alt="History" onerror="handleImageError(this)"/>
+  </a>
   <a href="/" class="back-button floating-icon settings-icon" aria-label="Back to app">
     <img src="{{ url_for('static', filename='images/arrow-left.svg') }}" alt="Back" />
   </a>

@@ -8,6 +8,7 @@ from routes.playlist import playlist_bp
 from routes.prgs import prgs_bp
 from routes.config import config_bp
 from routes.artist import artist_bp
+from routes.history import history_bp
 import logging
 import logging.handlers
 import time
@@ -149,6 +150,7 @@ def create_app():
     app.register_blueprint(playlist_bp, url_prefix='/api/playlist')
     app.register_blueprint(artist_bp, url_prefix='/api/artist')
     app.register_blueprint(prgs_bp, url_prefix='/api/prgs')
+    app.register_blueprint(history_bp, url_prefix='/api/history')
     
     # Serve frontend
     @app.route('/')
@@ -185,6 +187,10 @@ def create_app():
     def serve_artist(id):
         # The id parameter is captured, but you can use it as needed.
         return render_template('artist.html')
+
+    @app.route('/history')
+    def serve_history_page():
+        return render_template('history.html')
 
     @app.route('/static/<path:path>')
     def serve_static(path):

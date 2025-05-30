@@ -124,7 +124,7 @@ def get_artist_info():
     
     try:
         from routes.utils.get_info import get_spotify_info
-        artist_info = get_spotify_info(spotify_id, "artist")
+        artist_info = get_spotify_info(spotify_id, "artist_discography")
 
         # If artist_info is successfully fetched (it contains album items),
         # check if the artist is watched and augment album items with is_locally_known status
@@ -166,11 +166,11 @@ def add_artist_to_watchlist(artist_spotify_id):
             return jsonify({"message": f"Artist {artist_spotify_id} is already being watched."}), 200
 
         # This call returns an album list-like structure based on logs
-        artist_album_list_data = get_spotify_info(artist_spotify_id, "artist")
+        artist_album_list_data = get_spotify_info(artist_spotify_id, "artist_discography")
         
         # Check if we got any data and if it has items
         if not artist_album_list_data or not isinstance(artist_album_list_data.get('items'), list):
-            logger.error(f"Could not fetch album list details for artist {artist_spotify_id} from Spotify using get_spotify_info('artist'). Data: {artist_album_list_data}")
+            logger.error(f"Could not fetch album list details for artist {artist_spotify_id} from Spotify using get_spotify_info('artist_discography'). Data: {artist_album_list_data}")
             return jsonify({"error": f"Could not fetch sufficient details for artist {artist_spotify_id} to initiate watch."}), 404
 
         # Attempt to extract artist name and verify ID

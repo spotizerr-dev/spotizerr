@@ -18,9 +18,12 @@ from .celery_tasks import (
     get_last_task_status,
     store_task_status,
     get_all_tasks as get_all_celery_tasks_info,
-    cleanup_stale_errors
+    cleanup_stale_errors,
+    delayed_delete_task_data
 )
 from .celery_config import get_config_params
+# Import history manager
+from .history_manager import init_history_db
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -91,11 +94,73 @@ class CeleryManager:
                         }
                         store_task_status(task_id, error_payload)
                         stale_tasks_count += 1
+
+                        # Schedule deletion for this interrupted task
+                        logger.info(f"Task {task_id} was interrupted. Data scheduled for deletion in 30s.")
+                        delayed_delete_task_data.apply_async(
+                            args=[task_id, "Task interrupted by application restart and auto-cleaned."],
+                            countdown=30
+                        )
             
             if stale_tasks_count > 0:
                 logger.info(f"Marked {stale_tasks_count} stale tasks as 'error'.")
             else:
-                logger.info("No stale tasks found that needed cleanup.")
+                logger.info("No stale tasks found that needed cleanup (active states).")
+
+            # NEW: Check for tasks that are already terminal but might have missed their cleanup
+            logger.info("Checking for terminal tasks (COMPLETE, CANCELLED, terminal ERROR) that might have missed cleanup...")
+            cleaned_during_this_pass = 0
+            # `tasks` variable is from `get_all_celery_tasks_info()` called at the beginning of the method
+            for task_summary in tasks:
+                task_id = task_summary.get("task_id")
+                if not task_id:
+                    continue
+
+                last_status_data = get_last_task_status(task_id)
+                if last_status_data:
+                    current_status_str = last_status_data.get("status")
+                    task_info_details = get_task_info(task_id) # Get full info for download_type etc.
+
+                    cleanup_reason = ""
+                    schedule_cleanup = False
+
+                    if current_status_str == ProgressState.COMPLETE:
+                        # If a task is COMPLETE (any download_type) and still here, its original scheduled deletion was missed.
+                        logger.warning(f"Task {task_id} ('{task_summary.get('name', 'Unknown')}', type: {task_info_details.get('download_type')}) is COMPLETE and still in Redis. Re-scheduling cleanup.")
+                        cleanup_reason = f"Task ({task_info_details.get('download_type')}) was COMPLETE; re-scheduling auto-cleanup."
+                        schedule_cleanup = True
+                    elif current_status_str == ProgressState.CANCELLED:
+                        logger.warning(f"Task {task_id} ('{task_summary.get('name', 'Unknown')}') is CANCELLED and still in Redis. Re-scheduling cleanup.")
+                        cleanup_reason = "Task was CANCELLED; re-scheduling auto-cleanup."
+                        schedule_cleanup = True
+                    elif current_status_str == ProgressState.ERROR:
+                        can_retry_flag = last_status_data.get("can_retry", False)
+                        # is_submission_error_task and is_duplicate_error_task are flags on task_info, not typically on last_status
+                        is_submission_error = task_info_details.get("is_submission_error_task", False)
+                        is_duplicate_error = task_info_details.get("is_duplicate_error_task", False)
+                        # Check if it's an error state that should have been cleaned up
+                        if not can_retry_flag or is_submission_error or is_duplicate_error or last_status_data.get("status") == ProgressState.ERROR_RETRIED:
+                             # ERROR_RETRIED means the original task is done and should be cleaned.
+                            logger.warning(f"Task {task_id} ('{task_summary.get('name', 'Unknown')}') is in a terminal ERROR state ('{last_status_data.get('error')}') and still in Redis. Re-scheduling cleanup.")
+                            cleanup_reason = f"Task was in terminal ERROR state ('{last_status_data.get('error', 'Unknown error')}'); re-scheduling auto-cleanup."
+                            schedule_cleanup = True
+                    elif current_status_str == ProgressState.ERROR_RETRIED:
+                        # This state itself implies the task is terminal and its data can be cleaned.
+                        logger.warning(f"Task {task_id} ('{task_summary.get('name', 'Unknown')}') is ERROR_RETRIED and still in Redis. Re-scheduling cleanup.")
+                        cleanup_reason = "Task was ERROR_RETRIED; re-scheduling auto-cleanup."
+                        schedule_cleanup = True
+                    
+                    if schedule_cleanup:
+                        delayed_delete_task_data.apply_async(
+                            args=[task_id, cleanup_reason],
+                            countdown=30 # Schedule with 30s delay
+                        )
+                        cleaned_during_this_pass +=1
+            
+            if cleaned_during_this_pass > 0:
+                logger.info(f"Re-scheduled cleanup for {cleaned_during_this_pass} terminal tasks that were still in Redis.")
+            else:
+                logger.info("No additional terminal tasks found in Redis needing cleanup re-scheduling.")
 
         except Exception as e:
             logger.error(f"Error during stale task cleanup: {e}", exc_info=True)
@@ -106,6 +171,9 @@ class CeleryManager:
             return
             
         self.running = True
+        
+        # Initialize history database
+        init_history_db()
         
         # Clean up stale tasks BEFORE starting/restarting workers
         self._cleanup_stale_tasks()
@@ -221,7 +289,7 @@ class CeleryManager:
                 'worker',
                 '--loglevel=info',
                 f'--concurrency={new_worker_count}',
-                '-Q', 'downloads',
+                '-Q', 'downloads,default',
                 '--logfile=-',  # Output logs to stdout
                 '--without-heartbeat',  # Reduce log noise
                 '--without-gossip',     # Reduce log noise

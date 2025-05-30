@@ -51,6 +51,9 @@
   </div>
 
   <!-- Fixed floating buttons for home and queue -->
+  <a href="/history" class="btn-icon history-nav-btn floating-icon home-btn" aria-label="Download History" title="Go to Download History">
+    <img src="{{ url_for('static', filename='images/history.svg') }}" alt="History" onerror="handleImageError(this)"/>
+  </a>
   <button id="homeButton" class="btn-icon home-btn floating-icon settings-icon" aria-label="Return to home">
     <img src="{{ url_for('static', filename='images/home.svg') }}" alt="Home">
   </button>

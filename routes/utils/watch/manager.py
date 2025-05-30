@@ -231,7 +231,7 @@ def check_watched_artists(specific_artist_id: str = None):
                 # The 'artist-albums' type for get_spotify_info needs to support pagination params.
                 # And return a list of album objects.
                 logger.debug(f"Artist Watch Manager: Fetching albums for {artist_spotify_id}. Limit: {limit}, Offset: {offset}")
-                artist_albums_page = get_spotify_info(artist_spotify_id, "artist", limit=limit, offset=offset)
+                artist_albums_page = get_spotify_info(artist_spotify_id, "artist_discography", limit=limit, offset=offset)
 
                 if not artist_albums_page or not isinstance(artist_albums_page.get('items'), list):
                     logger.warning(f"Artist Watch Manager: No album items found or invalid format for artist {artist_spotify_id} (name: '{artist_name}') at offset {offset}. Response: {artist_albums_page}")

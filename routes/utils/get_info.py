@@ -52,15 +52,17 @@ def get_spotify_info(spotify_id, spotify_type, limit=None, offset=None):
         return Spo.get_album(spotify_id)
     elif spotify_type == "playlist":
         return Spo.get_playlist(spotify_id)
-    elif spotify_type == "artist":
+    elif spotify_type == "artist_discography":
         if limit is not None and offset is not None:
-            return Spo.get_artist(spotify_id, limit=limit, offset=offset)
+            return Spo.get_artist_discography(spotify_id, limit=limit, offset=offset)
         elif limit is not None:
-            return Spo.get_artist(spotify_id, limit=limit)
+            return Spo.get_artist_discography(spotify_id, limit=limit)
         elif offset is not None:
-            return Spo.get_artist(spotify_id, offset=offset)
+            return Spo.get_artist_discography(spotify_id, offset=offset)
         else:
-            return Spo.get_artist(spotify_id)
+            return Spo.get_artist_discography(spotify_id)
+    elif spotify_type == "artist":
+        return Spo.get_artist(spotify_id)
     elif spotify_type == "episode":
         return Spo.get_episode(spotify_id)
     else:

@@ -28,13 +28,35 @@ playlist_bp = Blueprint('playlist', __name__, url_prefix='/api/playlist')
 @playlist_bp.route('/download/<playlist_id>', methods=['GET'])
 def handle_download(playlist_id):
     # Retrieve essential parameters from the request.
-    name = request.args.get('name')
-    artist = request.args.get('artist')
+    # name = request.args.get('name') # Removed
+    # artist = request.args.get('artist') # Removed
     orig_params = request.args.to_dict()
 
     # Construct the URL from playlist_id
     url = f"https://open.spotify.com/playlist/{playlist_id}"
-    orig_params["original_url"] = url # Update original_url to the constructed one
+    orig_params["original_url"] = request.url # Update original_url to the constructed one
+
+    # Fetch metadata from Spotify
+    try:
+        playlist_info = get_spotify_info(playlist_id, "playlist")
+        if not playlist_info or not playlist_info.get('name') or not playlist_info.get('owner'):
+            return Response(
+                json.dumps({"error": f"Could not retrieve metadata for playlist ID: {playlist_id}"}),
+                status=404,
+                mimetype='application/json'
+            )
+        
+        name_from_spotify = playlist_info.get('name')
+        # Use owner's display_name as the 'artist' for playlists
+        owner_info = playlist_info.get('owner', {})
+        artist_from_spotify = owner_info.get('display_name', "Unknown Owner")
+
+    except Exception as e:
+        return Response(
+            json.dumps({"error": f"Failed to fetch metadata for playlist {playlist_id}: {str(e)}"}),
+            status=500,
+            mimetype='application/json'
+        )
 
     # Validate required parameters
     if not url: # This check might be redundant now but kept for safety
@@ -48,8 +70,8 @@ def handle_download(playlist_id):
         task_id = download_queue_manager.add_task({
             "download_type": "playlist",
             "url": url,
-            "name": name,
-            "artist": artist,
+            "name": name_from_spotify, # Use fetched name
+            "artist": artist_from_spotify, # Use fetched owner name as artist
             "orig_request": orig_params
         })
     # Removed DuplicateDownloadError handling, add_task now manages this by creating an error task.
@@ -59,8 +81,8 @@ def handle_download(playlist_id):
         store_task_info(error_task_id, {
             "download_type": "playlist",
             "url": url,
-            "name": name,
-            "artist": artist,
+            "name": name_from_spotify, # Use fetched name
+            "artist": artist_from_spotify, # Use fetched owner name as artist
             "original_request": orig_params,
             "created_at": time.time(),
             "is_submission_error_task": True

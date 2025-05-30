@@ -65,36 +65,6 @@ body {
   font-weight: bold;
 }
 
-/* Back button as floating icon - keep this for our floating button */
-.back-button.floating-icon {
-  position: fixed;
-  width: 56px;
-  height: 56px;
-  bottom: 20px;
-  left: 20px;
-  background-color: var(--color-primary);
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, background-color 0.2s ease;
-  text-decoration: none !important;
-}
-
-.back-button.floating-icon:hover {
-  background-color: var(--color-primary-hover);
-  transform: scale(1.05);
-}
-
-.back-button.floating-icon img {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1);
-  margin: 0;
-}
-
 /* Queue Sidebar for Config Page */
 #downloadQueue {
   position: fixed;

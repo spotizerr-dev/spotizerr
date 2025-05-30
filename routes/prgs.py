@@ -1,4 +1,4 @@
-from flask import Blueprint, abort, jsonify, Response, stream_with_context
+from flask import Blueprint, abort, jsonify, Response, stream_with_context, request
 import os
 import json
 import logging
@@ -38,11 +38,38 @@ def get_prg_file(task_id):
     task_info = get_task_info(task_id)
     if not task_info:
         abort(404, "Task not found")
-    original_request = task_info.get("original_request", {})
+
+    # Dynamically construct original_url
+    dynamic_original_url = ""
+    download_type = task_info.get("download_type")
+    # The 'url' field in task_info stores the Spotify/Deezer URL of the item
+    # e.g., https://open.spotify.com/album/albumId or https://www.deezer.com/track/trackId
+    item_url = task_info.get("url")
+
+    if download_type and item_url:
+        try:
+            # Extract the ID from the item_url (last part of the path)
+            item_id = item_url.split('/')[-1]
+            if item_id:  # Ensure item_id is not empty
+                base_url = request.host_url.rstrip('/')
+                dynamic_original_url = f"{base_url}/api/{download_type}/download/{item_id}"
+            else:
+                logger.warning(f"Could not extract item ID from URL: {item_url} for task {task_id}. Falling back for original_url.")
+                original_request_obj = task_info.get("original_request", {})
+                dynamic_original_url = original_request_obj.get("original_url", "")
+        except Exception as e:
+            logger.error(f"Error constructing dynamic original_url for task {task_id}: {e}", exc_info=True)
+            original_request_obj = task_info.get("original_request", {})
+            dynamic_original_url = original_request_obj.get("original_url", "") # Fallback on any error
+    else:
+        logger.warning(f"Missing download_type ('{download_type}') or item_url ('{item_url}') in task_info for task {task_id}. Falling back for original_url.")
+        original_request_obj = task_info.get("original_request", {})
+        dynamic_original_url = original_request_obj.get("original_url", "")
+
     last_status = get_last_task_status(task_id)
     status_count = len(get_task_status(task_id))
     response = {
-        "original_url": original_request.get("original_url", ""),
+        "original_url": dynamic_original_url,
         "last_line": last_status,
         "timestamp": time.time(),
         "task_id": task_id,
@@ -75,12 +102,53 @@ def delete_prg_file(task_id):
 def list_prg_files():
     """
     Retrieve a list of all tasks in the system.
-    Combines results from both the old PRG file system and the new task ID based system.
+    Returns a detailed list of task objects including status and metadata.
     """
-    # List only new system tasks
-    tasks = get_all_tasks()
-    task_ids = [task["task_id"] for task in tasks]
-    return jsonify(task_ids)
+    try:
+        tasks = get_all_tasks() # This already gets summary data
+        detailed_tasks = []
+        for task_summary in tasks:
+            task_id = task_summary.get("task_id")
+            if not task_id:
+                continue
+            
+            task_info = get_task_info(task_id)
+            last_status = get_last_task_status(task_id)
+            
+            if task_info and last_status:
+                detailed_tasks.append({
+                    "task_id": task_id,
+                    "type": task_info.get("type", task_summary.get("type", "unknown")),
+                    "name": task_info.get("name", task_summary.get("name", "Unknown")),
+                    "artist": task_info.get("artist", task_summary.get("artist", "")),
+                    "download_type": task_info.get("download_type", task_summary.get("download_type", "unknown")),
+                    "status": last_status.get("status", "unknown"), # Keep summary status for quick access
+                    "last_status_obj": last_status, # Full last status object
+                    "original_request": task_info.get("original_request", {}),
+                    "created_at": task_info.get("created_at", 0),
+                    "timestamp": last_status.get("timestamp", task_info.get("created_at", 0))
+                })
+            elif task_info: # If last_status is somehow missing, still provide some info
+                 detailed_tasks.append({
+                    "task_id": task_id,
+                    "type": task_info.get("type", "unknown"),
+                    "name": task_info.get("name", "Unknown"),
+                    "artist": task_info.get("artist", ""),
+                    "download_type": task_info.get("download_type", "unknown"),
+                    "status": "unknown", 
+                    "last_status_obj": None,
+                    "original_request": task_info.get("original_request", {}),
+                    "created_at": task_info.get("created_at", 0),
+                    "timestamp": task_info.get("created_at", 0)
+                })
+
+        # Sort tasks by creation time (newest first, or by timestamp if creation time is missing)
+        detailed_tasks.sort(key=lambda x: x.get('timestamp', x.get('created_at', 0)), reverse=True)
+        
+        return jsonify(detailed_tasks)
+    except Exception as e:
+        logger.error(f"Error in /api/prgs/list: {e}", exc_info=True)
+        return jsonify({"error": "Failed to retrieve task list"}), 500
 
 
 @prgs_bp.route('/retry/<task_id>', methods=['POST'])

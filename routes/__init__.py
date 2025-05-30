@@ -3,7 +3,7 @@ import atexit
 
 # Configure basic logging for the application if not already configured
 # This is a good place for it if routes are a central part of your app structure.
-logging.basicConfig(level=logging.DEBUG, 
+logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)

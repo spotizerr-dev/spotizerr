@@ -6,17 +6,38 @@ import uuid
 import time
 from routes.utils.celery_queue_manager import download_queue_manager
 from routes.utils.celery_tasks import store_task_info, store_task_status, ProgressState
+from routes.utils.get_info import get_spotify_info
 
 album_bp = Blueprint('album', __name__)
 
 @album_bp.route('/download/<album_id>', methods=['GET'])
 def handle_download(album_id):
     # Retrieve essential parameters from the request.
-    name = request.args.get('name')
-    artist = request.args.get('artist')
+    # name = request.args.get('name')
+    # artist = request.args.get('artist')
     
     # Construct the URL from album_id
     url = f"https://open.spotify.com/album/{album_id}"
+    
+    # Fetch metadata from Spotify
+    try:
+        album_info = get_spotify_info(album_id, "album")
+        if not album_info or not album_info.get('name') or not album_info.get('artists'):
+            return Response(
+                json.dumps({"error": f"Could not retrieve metadata for album ID: {album_id}"}),
+                status=404,
+                mimetype='application/json'
+            )
+        
+        name_from_spotify = album_info.get('name')
+        artist_from_spotify = album_info['artists'][0].get('name') if album_info['artists'] else "Unknown Artist"
+
+    except Exception as e:
+        return Response(
+            json.dumps({"error": f"Failed to fetch metadata for album {album_id}: {str(e)}"}),
+            status=500,
+            mimetype='application/json'
+        )
     
     # Validate required parameters
     if not url:
@@ -35,8 +56,8 @@ def handle_download(album_id):
         task_id = download_queue_manager.add_task({
             "download_type": "album",
             "url": url,
-            "name": name,
-            "artist": artist,
+            "name": name_from_spotify,
+            "artist": artist_from_spotify,
             "orig_request": orig_params
         })
     except Exception as e:
@@ -47,8 +68,8 @@ def handle_download(album_id):
         store_task_info(error_task_id, {
             "download_type": "album",
             "url": url,
-            "name": name,
-            "artist": artist,
+            "name": name_from_spotify,
+            "artist": artist_from_spotify,
             "original_request": orig_params,
             "created_at": time.time(),
             "is_submission_error_task": True

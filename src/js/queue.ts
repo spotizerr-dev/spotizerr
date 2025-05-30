@@ -162,7 +162,6 @@ export class DownloadQueue {
   
   // Load the saved visible count (or default to 10)
   visibleCount: number;
-  globalSyncIntervalId: number | null = null; // For the new global sync
   
   constructor() {
     const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
@@ -203,10 +202,9 @@ export class DownloadQueue {
     // Wait for initDOM to complete before setting up event listeners and loading existing PRG files.
     this.initDOM().then(() => {
       this.initEventListeners();
-      this.loadExistingPrgFiles().then(() => { // Ensure loadExistingPrgFiles completes
-        // Start global task list synchronization after initial load
-        this.startGlobalTaskSync();
-      });
+      this.loadExistingPrgFiles();
+      // Start periodic sync
+      setInterval(() => this.periodicSyncWithServer(), 10000); // Sync every 10 seconds
     });
   }
 
@@ -391,18 +389,6 @@ export class DownloadQueue {
    * Adds a new download entry.
    */
   addDownload(item: QueueItem, type: string, prgFile: string, requestUrl: string | null = null, startMonitoring: boolean = false): string {
-    // Check if an entry with this prgFile already exists
-    const existingQueueId = this.findQueueIdByPrgFile(prgFile);
-    if (existingQueueId) {
-      console.log(`addDownload: Entry for prgFile ${prgFile} already exists with queueId ${existingQueueId}. Ensuring monitoring.`);
-      const existingEntry = this.queueEntries[existingQueueId];
-      if (existingEntry && !existingEntry.hasEnded && startMonitoring && !this.pollingIntervals[existingQueueId]) {
-        // If it exists, is not ended, needs monitoring, and isn't currently polled, start its individual polling.
-        this.startDownloadStatusMonitoring(existingQueueId);
-      }
-      return existingQueueId; // Return existing ID
-    }
-
     const queueId = this.generateQueueId();
     const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
     this.queueEntries[queueId] = entry;
@@ -988,16 +974,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     return index >= 0 && index < this.visibleCount;
   }
 
-  findQueueIdByPrgFile(prgFile: string): string | undefined {
-    for (const queueId in this.queueEntries) {
-      if (this.queueEntries[queueId].prgFile === prgFile) {
-        return queueId;
-      }
-    }
-    return undefined;
-  }
-
-  async cleanupEntry(queueId: string /* Parameter deleteFromServer removed */) {
+  async cleanupEntry(queueId: string) {
     const entry = this.queueEntries[queueId];
     if (entry) {
       // Close any polling interval
@@ -1022,9 +999,6 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         delete this.queueCache[entry.prgFile];
         localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
       }
-      
-      // The block for deleting from server has been removed.
-      // console.log(`Entry ${queueId} (${entry.prgFile}) cleaned up from UI and local cache.`);
       
       // Update the queue display
       this.updateQueueOrder();
@@ -1319,22 +1293,16 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     
     // Stop polling
     this.clearPollingInterval(queueId);
-
-    const statusData = typeof progress === 'object' ? progress : entry.lastStatus;
-
-    if (statusData && (statusData.status === 'complete' || statusData.status === 'done')) {
-      // For completed tasks, show for 2 seconds then remove from UI only
-      setTimeout(() => {
-        this.cleanupEntry(queueId); // Pass only queueId
-      }, 2000);
-    } else {
-      // For other terminal states (error, cancelled), use existing cleanup logic (default 10s)
-      // The server-side delete for these will be handled by backend mechanisms or specific cancel actions
-      const cleanupDelay = 10000;
-      setTimeout(() => {
-        this.cleanupEntry(queueId); // Pass only queueId
-      }, cleanupDelay);
-    }
+    
+    // Use 3 seconds cleanup delay for completed, 10 seconds for other terminal states like errors
+    const cleanupDelay = (progress && typeof progress !== 'number' && (progress.status === 'complete' || progress.status === 'done')) ? 3000 :
+                         (progress && typeof progress !== 'number' && (progress.status === 'cancelled' || progress.status === 'cancel' || progress.status === 'skipped')) ? 20000 :
+                         10000; // Default for other errors if not caught by the more specific error handler delay
+    
+    // Clean up after the appropriate delay
+    setTimeout(() => {
+      this.cleanupEntry(queueId);
+    }, cleanupDelay);
   }
 
   handleInactivity(entry: QueueEntry, queueId: string, logElement: HTMLElement | null) { // Add types
@@ -1519,9 +1487,9 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     
     // Prepare query parameters
     const queryParams = new URLSearchParams();
-    // Add item.name and item.artist only if they are not empty or undefined
-    if (item.name && item.name.trim() !== '') queryParams.append('name', item.name);
-    if (item.artist && item.artist.trim() !== '') queryParams.append('artist', item.artist);
+    // item.name and item.artist are no longer sent as query parameters
+    // if (item.name && item.name.trim() !== '') queryParams.append('name', item.name);
+    // if (item.artist && item.artist.trim() !== '') queryParams.append('artist', item.artist);
     
     // For artist downloads, include album_type as it may still be needed
     if (type === 'artist' && albumType) {
@@ -1663,202 +1631,107 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       // Clear existing queue entries first to avoid duplicates when refreshing
       for (const queueId in this.queueEntries) {
         const entry = this.queueEntries[queueId];
-        // Close any active connections
         this.clearPollingInterval(queueId);
-        
-        // Don't remove the entry from DOM - we'll rebuild it entirely
         delete this.queueEntries[queueId];
       }
       
+      // Fetch detailed task list from the new endpoint
       const response = await fetch('/api/prgs/list');
-      const prgFiles: string[] = await response.json(); // Add type
-      
-      // Sort filenames by the numeric portion (assumes format "type_number.prg").
-      prgFiles.sort((a, b) => {
-        const numA = parseInt(a.split('_')[1]);
-        const numB = parseInt(b.split('_')[1]);
-        return numA - numB;
-      });
+      if (!response.ok) {
+        console.error("Failed to load existing tasks:", response.status, await response.text());
+        return;
+      }
+      const existingTasks: any[] = await response.json(); // We expect an array of detailed task objects
 
-      // Iterate through each PRG file and add it as a dummy queue entry.
-      for (const prgFile of prgFiles) {
-        try {
-          const prgResponse = await fetch(`/api/prgs/${prgFile}`);
-          if (!prgResponse.ok) continue;
-          const prgData: StatusData = await prgResponse.json(); // Add type
-          
-          // Skip prg files that are marked as cancelled, completed, or interrupted
-          if (prgData.last_line && 
-              (prgData.last_line.status === "cancel" || 
-               prgData.last_line.status === "cancelled" ||
-               prgData.last_line.status === "interrupted" ||
-               prgData.last_line.status === "complete")) {
-            // Delete old completed or cancelled PRG files
-            try {
-              await fetch(`/api/prgs/delete/${prgFile}`, { method: 'DELETE' });
-              console.log(`Cleaned up old PRG file: ${prgFile}`);
-            } catch (error) {
-              console.error(`Failed to delete completed/cancelled PRG file ${prgFile}:`, error);
-            }
-            continue;
+      const terminalStates = ['complete', 'done', 'cancelled', 'ERROR_AUTO_CLEANED', 'ERROR_RETRIED', 'cancel', 'interrupted', 'error'];
+
+      for (const taskData of existingTasks) {
+        const prgFile = taskData.task_id; // Use task_id as prgFile identifier
+        const lastStatus = taskData.last_status_obj;
+        const originalRequest = taskData.original_request || {};
+
+        // Skip adding to UI if the task is already in a terminal state
+        if (lastStatus && terminalStates.includes(lastStatus.status)) {
+          console.log(`Skipping UI addition for terminal task ${prgFile}, status: ${lastStatus.status}`);
+          // Also ensure it's cleaned from local cache if it was there
+          if (this.queueCache[prgFile]) {
+            delete this.queueCache[prgFile];
           }
-          
-          // Check cached status - if we marked it cancelled locally, delete it and skip
-          const cachedStatus: StatusData | undefined = this.queueCache[prgFile]; // Add type
-          if (cachedStatus && 
-              (cachedStatus.status === 'cancelled' || 
-               cachedStatus.status === 'cancel' ||
-               cachedStatus.status === 'interrupted' ||
-               cachedStatus.status === 'complete')) {
-            try {
-              await fetch(`/api/prgs/delete/${prgFile}`, { method: 'DELETE' });
-              console.log(`Cleaned up cached cancelled PRG file: ${prgFile}`);
-            } catch (error) {
-              console.error(`Failed to delete cached cancelled PRG file ${prgFile}:`, error);
-            }
-            continue;
-          }
-          
-          // Use the enhanced original request info from the first line
-          const originalRequest = prgData.original_request || {};
-          let lastLineData: StatusData = prgData.last_line || {}; // Add type
-          
-          // First check if this is a track with a parent (part of an album/playlist)
-          let itemType = lastLineData.type || prgData.display_type || originalRequest.display_type || originalRequest.type || 'unknown';
-          let dummyItem: QueueItem = {}; // Add type
-          
-          // If this is a track with a parent, treat it as the parent type for UI purposes
-          if (lastLineData.type === 'track' && lastLineData.parent) {
-            const parent = lastLineData.parent;
-            
-            if (parent.type === 'album') {
-              itemType = 'album';
-              dummyItem = {
-                name: parent.title || 'Unknown Album',
-                artist: parent.artist || 'Unknown Artist',
-                type: 'album',
-                url: parent.url || '',
-                // Keep track of the current track info for progress display
-                current_track: lastLineData.current_track,
-                total_tracks: (typeof parent.total_tracks === 'string' ? parseInt(parent.total_tracks, 10) : parent.total_tracks) || (typeof lastLineData.total_tracks === 'string' ? parseInt(lastLineData.total_tracks, 10) : lastLineData.total_tracks) || 0,
-                // Store parent info directly in the item
-                parent: parent
-              };
-            } else if (parent.type === 'playlist') {
-              itemType = 'playlist';
-              dummyItem = {
-                name: parent.name || 'Unknown Playlist',
-                owner: parent.owner || 'Unknown Creator',
-                type: 'playlist',
-                url: parent.url || '',
-                // Keep track of the current track info for progress display
-                current_track: lastLineData.current_track,
-                total_tracks: (typeof parent.total_tracks === 'string' ? parseInt(parent.total_tracks, 10) : parent.total_tracks) || (typeof lastLineData.total_tracks === 'string' ? parseInt(lastLineData.total_tracks, 10) : lastLineData.total_tracks) || 0,
-                // Store parent info directly in the item
-                parent: parent
-              };
-            }
-          } else {
-            // Use the explicit display fields if available, or fall back to other fields
+          continue;
+        }
+
+        let itemType = taskData.type || originalRequest.type || 'unknown';
+        let dummyItem: QueueItem = {
+          name: taskData.name || originalRequest.name || prgFile,
+          artist: taskData.artist || originalRequest.artist || '',
+          type: itemType,
+          url: originalRequest.url || lastStatus?.url || '',
+          endpoint: originalRequest.endpoint || '',
+          download_type: taskData.download_type || originalRequest.download_type || '',
+          total_tracks: lastStatus?.total_tracks || originalRequest.total_tracks,
+          current_track: lastStatus?.current_track,
+        };
+
+        // If this is a track with a parent from the last_status, adjust item and type
+        if (lastStatus && lastStatus.type === 'track' && lastStatus.parent) {
+          const parent = lastStatus.parent;
+          if (parent.type === 'album') {
+            itemType = 'album';
             dummyItem = {
-              name: prgData.display_title || originalRequest.display_title || lastLineData.name || lastLineData.song || lastLineData.title || originalRequest.name || prgFile,
-              artist: prgData.display_artist || originalRequest.display_artist || lastLineData.artist || originalRequest.artist || '',
-              type: itemType,
-              url: originalRequest.url || lastLineData.url || '',
-              endpoint: originalRequest.endpoint || '',
-              download_type: originalRequest.download_type || '',
-              // Include any available track info
-              song: lastLineData.song,
-              title: lastLineData.title,
-              total_tracks: typeof lastLineData.total_tracks === 'string' ? parseInt(lastLineData.total_tracks, 10) : lastLineData.total_tracks,
-              current_track: lastLineData.current_track
+              name: parent.title || 'Unknown Album',
+              artist: parent.artist || 'Unknown Artist',
+              type: 'album',
+              url: parent.url || '',
+              total_tracks: parent.total_tracks || lastStatus.total_tracks,
+              parent: parent
             };
-          };
-          
-          // Check if this is a retry file and get the retry count
-          let retryCount = 0;
-          if (prgFile.includes('_retry')) {
+          } else if (parent.type === 'playlist') {
+            itemType = 'playlist';
+            dummyItem = {
+              name: parent.name || 'Unknown Playlist',
+              owner: parent.owner || 'Unknown Creator',
+              type: 'playlist',
+              url: parent.url || '',
+              total_tracks: parent.total_tracks || lastStatus.total_tracks,
+              parent: parent
+            };
+          }
+        }
+        
+        let retryCount = 0;
+        if (lastStatus && lastStatus.retry_count) {
+          retryCount = lastStatus.retry_count;
+        } else if (prgFile.includes('_retry')) {
             const retryMatch = prgFile.match(/_retry(\d+)/);
             if (retryMatch && retryMatch[1]) {
               retryCount = parseInt(retryMatch[1], 10);
-            } else if (prgData.last_line && prgData.last_line.retry_count) {
-              retryCount = prgData.last_line.retry_count;
             }
-          } else if (prgData.last_line && prgData.last_line.retry_count) {
-            retryCount = prgData.last_line.retry_count;
-          }
-          
-          // Build a potential requestUrl from the original information
-          let requestUrl: string | null = null; // Add type
-          if (dummyItem.endpoint && dummyItem.url) {
-            const params = new CustomURLSearchParams();
-            params.append('url', dummyItem.url);
-            
-            if (dummyItem.name) params.append('name', dummyItem.name);
-            if (dummyItem.artist) params.append('artist', dummyItem.artist);
-            
-            // Add any other parameters from the original request
-            for (const [key, value] of Object.entries(originalRequest)) {
-              if (!['url', 'name', 'artist', 'type', 'endpoint', 'download_type', 
-                   'display_title', 'display_type', 'display_artist', 'service'].includes(key)) {
-                params.append(key, value as string); // Cast value to string
-              }
-            }
-            
-            requestUrl = `${dummyItem.endpoint}?${params.toString()}`;
-          }
-          
-          // Add to download queue
-          const queueId = this.generateQueueId();
-          const entry = this.createQueueEntry(dummyItem, itemType, prgFile, queueId, requestUrl);
-          entry.retryCount = retryCount;
-          
-          // Set the entry's last status from the PRG file
-          if (prgData.last_line) {
-            entry.lastStatus = prgData.last_line;
-            
-            // If this is a track that's part of an album/playlist
-            if (prgData.last_line.parent) {
-              entry.parentInfo = prgData.last_line.parent;
-            }
-            
-            // Make sure to save the status to the cache for persistence
-            this.queueCache[prgFile] = prgData.last_line;
-            
-            // Apply proper status classes
-            this.applyStatusClasses(entry, prgData.last_line);
-            
-            // Update log display with current info
-            const logElement = entry.element.querySelector('.log') as HTMLElement | null;
-            if (logElement) {
-              if (prgData.last_line.song && prgData.last_line.artist && 
-                  ['progress', 'real-time', 'real_time', 'processing', 'downloading'].includes(prgData.last_line.status || '')) { // Add null check
-                logElement.textContent = `Currently downloading: ${prgData.last_line.song} by ${prgData.last_line.artist}`;
-              } else if (entry.parentInfo && !['done', 'complete', 'error', 'skipped'].includes(prgData.last_line.status || '')) {
-                // Show parent info for non-terminal states
-                if (entry.parentInfo.type === 'album') {
-                  logElement.textContent = `From album: "${entry.parentInfo.title}"`;
-                } else if (entry.parentInfo.type === 'playlist') {
-                  logElement.textContent = `From playlist: "${entry.parentInfo.name}" by ${entry.parentInfo.owner}`;
-                }
-              }
-            }
-          }
-          
-          this.queueEntries[queueId] = entry;
-        } catch (error) {
-          console.error("Error fetching details for", prgFile, error);
         }
+
+        const requestUrl = originalRequest.url ? `/api/${itemType}/download/${originalRequest.url.split('/').pop()}?name=${encodeURIComponent(dummyItem.name || '')}&artist=${encodeURIComponent(dummyItem.artist || '')}` : null;
+        
+        const queueId = this.generateQueueId();
+        const entry = this.createQueueEntry(dummyItem, itemType, prgFile, queueId, requestUrl);
+        entry.retryCount = retryCount;
+
+        if (lastStatus) {
+          entry.lastStatus = lastStatus;
+          if (lastStatus.parent) {
+            entry.parentInfo = lastStatus.parent;
+          }
+          this.queueCache[prgFile] = lastStatus; // Cache the last known status
+          this.applyStatusClasses(entry, lastStatus);
+
+          const logElement = entry.element.querySelector('.log') as HTMLElement | null;
+          if (logElement) {
+            logElement.textContent = this.getStatusMessage(lastStatus);
+          }
+        }
+        this.queueEntries[queueId] = entry;
       }
       
-      // Save updated cache to localStorage
       localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
-      
-      // After adding all entries, update the queue
       this.updateQueueOrder();
-      
-      // Start monitoring for all active entries that are visible
-      // This is the key change to ensure continued status updates after page refresh
       this.startMonitoringActiveEntries();
     } catch (error) {
       console.error("Error loading existing PRG files:", error);
@@ -2028,32 +1901,27 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         if (data.last_line.status === 'cancelled' || data.last_line.status === 'cancel') {
           console.log('Cleaning up cancelled download immediately');
           this.clearPollingInterval(queueId);
-          this.cleanupEntry(queueId); // Pass only queueId
+          this.cleanupEntry(queueId);
           return; // No need to process further
         }
         
-        // For completed tasks, start 2s UI timer
-        if (data.last_line.status === 'complete' || data.last_line.status === 'done') {
-          this.clearPollingInterval(queueId);
+        // Only set up cleanup if this is not an error that we're in the process of retrying
+        // If status is 'error' but the status message contains 'Retrying', don't clean up
+        const isRetrying = entry.isRetrying || 
+                          (data.last_line.status === 'error' && 
+                           entry.element.querySelector('.log')?.textContent?.includes('Retry'));
+        
+        if (!isRetrying) {
           setTimeout(() => {
-            this.cleanupEntry(queueId); // Pass only queueId
-          }, 2000);
-          // Do not return here, allow UI to update to complete state first
-        } else {
-          // For other terminal states like 'error'
-          // Only set up cleanup if this is not an error that we're in the process of retrying
-          const isRetrying = entry.isRetrying || 
-                            (data.last_line.status === 'error' && 
-                             entry.element.querySelector('.log')?.textContent?.includes('Retry'));
-          
-          if (!isRetrying) {
-            // Errors will use the handleDownloadCompletion logic which has its own timeout
-            // this.handleDownloadCompletion(entry, queueId, data.last_line);
-            // No, we want to ensure polling stops here for errors too if not retrying
-            this.clearPollingInterval(queueId);
-            // Existing logic for error display and auto-cleanup (15s) is below
-            // and cleanupEntry for errors will be called from there or from handleDownloadCompletion
-          }
+            // Double-check the entry still exists and has not been retried before cleaning up
+            const currentEntry = this.queueEntries[queueId]; // Get current entry
+            if (currentEntry &&  // Check if currentEntry exists
+                !currentEntry.isRetrying &&
+                currentEntry.hasEnded) {
+              this.clearPollingInterval(queueId);
+              this.cleanupEntry(queueId);
+            }
+          }, data.last_line.status === 'complete' || data.last_line.status === 'done' ? 3000 : 5000); // 3s for complete/done, 5s for others
         }
       }
       
@@ -2247,7 +2115,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
           const closeErrorBtn = errorLogElement.querySelector('.close-error-btn') as HTMLButtonElement | null;
           if (closeErrorBtn) {
             closeErrorBtn.addEventListener('click', () => {
-          this.cleanupEntry(queueId); // Pass only queueId
+          this.cleanupEntry(queueId);
         });
           }
           
@@ -2273,7 +2141,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
                 !currentEntryForCleanup.isRetrying) {
             this.cleanupEntry(queueId);
           }
-        }, 15000);
+        }, 20000); // Changed from 15000 to 20000
 
         } else { // Error UI already exists, just update the message text if it's different
           if (errorMessageElement.textContent !== errMsg) {
@@ -2286,21 +2154,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     // Handle terminal states for non-error cases
     if (['complete', 'cancel', 'cancelled', 'done', 'skipped'].includes(status)) {
       entry.hasEnded = true;
-      // this.handleDownloadCompletion(entry, queueId, statusData); // Already called from fetchDownloadStatus for terminal states
-      // We need to ensure the 2-second rule for 'complete'/'done' is applied here too, if not already handled
-      if (status === 'complete' || status === 'done') {
-        if (!this.pollingIntervals[queueId]) { // Check if polling was already cleared (meaning timeout started)
-            this.clearPollingInterval(queueId);
-            setTimeout(() => {
-                this.cleanupEntry(queueId); // Pass only queueId
-            }, 2000);
-        }
-      } else if (status === 'cancel' || status === 'cancelled' || status === 'skipped') {
-        // For cancelled or skipped, can cleanup sooner or use existing server delete logic
-        this.clearPollingInterval(queueId);
-        this.cleanupEntry(queueId); // Pass only queueId
-      }
-      // Errors are handled by their specific block below
+      this.handleDownloadCompletion(entry, queueId, statusData);
     }
     
     // Cache the status for potential page reloads
@@ -2774,78 +2628,126 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     for (const queueId in this.pollingIntervals) {
       this.clearPollingInterval(queueId);
     }
-    if (this.globalSyncIntervalId !== null) {
-      clearInterval(this.globalSyncIntervalId as number);
-      this.globalSyncIntervalId = null;
-      console.log('Stopped global task sync polling.');
-    }
   }
 
-  async syncWithBackendTaskList() {
+  /* New method for periodic server sync */
+  async periodicSyncWithServer() {
+    console.log("Performing periodic sync with server...");
     try {
       const response = await fetch('/api/prgs/list');
       if (!response.ok) {
-        console.error('Failed to fetch backend task list:', response.status);
+        console.error("Periodic sync: Failed to fetch task list from server", response.status);
         return;
       }
-      const backendTaskIds: string[] = await response.json();
-      const backendTaskIdSet = new Set(backendTaskIds);
+      const serverTasks: any[] = await response.json();
 
-      // console.log('Backend task IDs:', backendTaskIds);
-      // console.log('Frontend task IDs (prgFiles):', Object.values(this.queueEntries).map(e => e.prgFile));
+      const localTaskPrgFiles = new Set(Object.values(this.queueEntries).map(entry => entry.prgFile));
+      const serverTaskPrgFiles = new Set(serverTasks.map(task => task.task_id));
 
-      // 1. Add new tasks from backend that are not in frontend
-      for (const taskId of backendTaskIds) {
-        if (!this.findQueueIdByPrgFile(taskId)) {
-          console.log(`Sync: Task ${taskId} found in backend but not frontend. Fetching details.`);
-          try {
-            const taskDetailsResponse = await fetch(`/api/prgs/${taskId}`);
-            if (taskDetailsResponse.ok) {
-              const taskDetails: StatusData = await taskDetailsResponse.json();
-              // Construct a minimal item for addDownload. The actual details will be filled by status updates.
-              const item: QueueItem = {
-                name: taskDetails.last_line?.name || taskDetails.last_line?.song || taskDetails.last_line?.title || taskDetails.original_request?.name || taskId,
-                artist: taskDetails.last_line?.artist || taskDetails.original_request?.artist || '',
-                type: taskDetails.last_line?.type || taskDetails.original_request?.type || 'unknown'
-              };
-              const requestUrl = taskDetails.original_url || taskDetails.original_request?.url || null;
-              this.addDownload(item, item.type || 'unknown', taskId, requestUrl, true); // true to start monitoring
-            } else {
-              console.warn(`Sync: Failed to fetch details for new task ${taskId} from backend.`);
+      const terminalStates = ['complete', 'done', 'cancelled', 'ERROR_AUTO_CLEANED', 'ERROR_RETRIED', 'cancel', 'interrupted', 'error'];
+
+      // 1. Add new tasks from server not known locally or update existing ones
+      for (const serverTask of serverTasks) {
+        const taskId = serverTask.task_id; // This is the prgFile
+        const lastStatus = serverTask.last_status_obj;
+        const originalRequest = serverTask.original_request || {};
+
+        if (terminalStates.includes(lastStatus?.status)) {
+          // If server says it's terminal, and we have it locally, ensure it's cleaned up
+          const localEntry = Object.values(this.queueEntries).find(e => e.prgFile === taskId);
+          if (localEntry && !localEntry.hasEnded) {
+            console.log(`Periodic sync: Server task ${taskId} is terminal (${lastStatus.status}), cleaning up local entry.`);
+            // Use a status object for handleDownloadCompletion
+            this.handleDownloadCompletion(localEntry, localEntry.uniqueId, lastStatus);
+          }
+          continue; // Skip adding terminal tasks to UI if not already there
+        }
+
+        if (!localTaskPrgFiles.has(taskId)) {
+          console.log(`Periodic sync: Found new non-terminal task ${taskId} on server. Adding to queue.`);
+          let itemType = serverTask.type || originalRequest.type || 'unknown';
+          let dummyItem: QueueItem = {
+            name: serverTask.name || originalRequest.name || taskId,
+            artist: serverTask.artist || originalRequest.artist || '',
+            type: itemType,
+            url: originalRequest.url || lastStatus?.url || '',
+            endpoint: originalRequest.endpoint || '',
+            download_type: serverTask.download_type || originalRequest.download_type || '',
+            total_tracks: lastStatus?.total_tracks || originalRequest.total_tracks,
+            current_track: lastStatus?.current_track,
+          };
+
+           if (lastStatus && lastStatus.type === 'track' && lastStatus.parent) {
+            const parent = lastStatus.parent;
+            if (parent.type === 'album') {
+              itemType = 'album';
+              dummyItem = {
+                name: parent.title || 'Unknown Album',
+                artist: parent.artist || 'Unknown Artist',
+                type: 'album', url: parent.url || '',
+                total_tracks: parent.total_tracks || lastStatus.total_tracks,
+                parent: parent };
+            } else if (parent.type === 'playlist') {
+              itemType = 'playlist';
+              dummyItem = {
+                name: parent.name || 'Unknown Playlist',
+                owner: parent.owner || 'Unknown Creator',
+                type: 'playlist', url: parent.url || '',
+                total_tracks: parent.total_tracks || lastStatus.total_tracks,
+                parent: parent };
             }
-          } catch (fetchError) {
-            console.error(`Sync: Error fetching details for task ${taskId}:`, fetchError);
+          }
+          const requestUrl = originalRequest.url ? `/api/${itemType}/download/${originalRequest.url.split('/').pop()}?name=${encodeURIComponent(dummyItem.name || '')}&artist=${encodeURIComponent(dummyItem.artist || '')}` : null;
+          // Add with startMonitoring = true
+          const queueId = this.addDownload(dummyItem, itemType, taskId, requestUrl, true);
+          const newEntry = this.queueEntries[queueId];
+          if (newEntry && lastStatus) {
+            // Manually set lastStatus and update UI as addDownload might not have full server info yet
+            newEntry.lastStatus = lastStatus;
+            if(lastStatus.parent) newEntry.parentInfo = lastStatus.parent;
+            this.applyStatusClasses(newEntry, lastStatus);
+            const logEl = newEntry.element.querySelector('.log') as HTMLElement | null;
+            if(logEl) logEl.textContent = this.getStatusMessage(lastStatus);
+            // Ensure polling is active for this newly added item
+            this.setupPollingInterval(newEntry.uniqueId);
+          }
+        } else {
+          // Task exists locally, check if status needs update from server list
+          const localEntry = Object.values(this.queueEntries).find(e => e.prgFile === taskId);
+          if (localEntry && lastStatus && JSON.stringify(localEntry.lastStatus) !== JSON.stringify(lastStatus)) {
+            if (!localEntry.hasEnded) {
+              console.log(`Periodic sync: Updating status for existing task ${taskId} from ${localEntry.lastStatus?.status} to ${lastStatus.status}`);
+              // Create a data object that handleStatusUpdate expects
+              const updateData: StatusData = { ...serverTask, last_line: lastStatus };
+              this.handleStatusUpdate(localEntry.uniqueId, updateData);
+            }
           }
         }
       }
 
-      // 2. Remove stale tasks from frontend that are not in backend active list
-      const frontendPrgFiles = Object.values(this.queueEntries).map(entry => entry.prgFile);
-      for (const prgFile of frontendPrgFiles) {
-        const queueId = this.findQueueIdByPrgFile(prgFile);
-        if (queueId && !backendTaskIdSet.has(prgFile)) {
-          const entry = this.queueEntries[queueId];
-          // Only remove if it's not already considered ended by frontend (e.g., completed and timer running)
-          if (entry && !entry.hasEnded) {
-            console.log(`Sync: Task ${prgFile} (queueId: ${queueId}) found in frontend but not in backend active list. Removing.`);
-            this.cleanupEntry(queueId);
+      // 2. Remove local tasks that are no longer on the server or are now terminal on server
+      for (const localEntry of Object.values(this.queueEntries)) {
+        if (!serverTaskPrgFiles.has(localEntry.prgFile)) {
+          if (!localEntry.hasEnded) {
+             console.log(`Periodic sync: Local task ${localEntry.prgFile} not found on server. Assuming completed/cleaned. Removing.`);
+             this.cleanupEntry(localEntry.uniqueId);
+          }
+        } else {
+          const serverEquivalent = serverTasks.find(st => st.task_id === localEntry.prgFile);
+          if (serverEquivalent && serverEquivalent.last_status_obj && terminalStates.includes(serverEquivalent.last_status_obj.status)) {
+            if (!localEntry.hasEnded) {
+              console.log(`Periodic sync: Local task ${localEntry.prgFile} is now terminal on server (${serverEquivalent.last_status_obj.status}). Cleaning up.`);
+              this.handleDownloadCompletion(localEntry, localEntry.uniqueId, serverEquivalent.last_status_obj);
+            }
           }
         }
       }
+
+      this.updateQueueOrder();
+
     } catch (error) {
-      console.error('Error during global task sync:', error);
+      console.error("Error during periodic sync with server:", error);
     }
-  }
-
-  startGlobalTaskSync() {
-    if (this.globalSyncIntervalId !== null) {
-      clearInterval(this.globalSyncIntervalId as number);
-    }
-    this.syncWithBackendTaskList(); // Initial sync
-    this.globalSyncIntervalId = setInterval(() => {
-      this.syncWithBackendTaskList();
-    }, 5000) as unknown as number; // Poll every 5 seconds
-    console.log('Started global task sync polling every 5 seconds.');
   }
 }
 
