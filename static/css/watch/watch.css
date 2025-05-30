@@ -111,6 +111,7 @@ body {
   display: -webkit-box;
   -webkit-line-clamp: 2; /* Limit to 2 lines */
   -webkit-box-orient: vertical;
+  line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
   min-height: 2.4em; /* Reserve space for two lines */

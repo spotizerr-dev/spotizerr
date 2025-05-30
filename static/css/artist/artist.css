@@ -516,19 +516,9 @@ a:focus {
   border-color: var(--color-success); /* Green border for known items */
 }
 
-.toggle-known-status-btn[data-status="known"]:hover img {
-   /* REMOVE THE LINE BELOW THIS COMMENT */
-   /* filter: invert(20%) sepia(100%) saturate(500%) hue-rotate(330deg); Removed */ 
-}
-
 .toggle-known-status-btn[data-status="missing"] {
   /* Optional: specific styles if it's missing, e.g., a warning color */
   border-color: var(--color-warning); /* Orange border for missing items */
-}
-
-.toggle-known-status-btn[data-status="missing"]:hover img {
-  /* REMOVE THE LINE BELOW THIS COMMENT */
-  /* filter: invert(60%) sepia(100%) saturate(500%) hue-rotate(80deg); Removed */ 
 }
 
 .toggle-known-status-btn:active {
