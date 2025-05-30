@@ -7,12 +7,19 @@ from datetime import datetime
 from celery import Celery, Task, states
 from celery.signals import task_prerun, task_postrun, task_failure, worker_ready, worker_init, setup_logging
 from celery.exceptions import Retry
+import os # Added for path operations
+from pathlib import Path # Added for path operations
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # Setup Redis and Celery
 from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, REDIS_PASSWORD, get_config_params
+# Import for playlist watch DB update
+from routes.utils.watch.db import add_single_track_to_playlist_db, add_or_update_album_for_artist
+
+# Import history manager function
+from .history_manager import add_entry_to_history
 
 # Initialize Celery app
 celery_app = Celery('download_tasks',
@@ -44,6 +51,8 @@ class ProgressState:
     REAL_TIME = "real_time"
     SKIPPED = "skipped"
     DONE = "done"
+    ERROR_RETRIED = "ERROR_RETRIED" # Status for an error task that has been retried
+    ERROR_AUTO_CLEANED = "ERROR_AUTO_CLEANED" # Status for an error task that was auto-cleaned
 
 # Reuse the application's logging configuration for Celery workers
 @setup_logging.connect
@@ -140,20 +149,73 @@ def get_task_info(task_id):
         logger.error(f"Error getting task info: {e}")
         return {}
 
+# --- History Logging Helper ---
+def _log_task_to_history(task_id, final_status_str, error_msg=None):
+    """Helper function to gather task data and log it to the history database."""
+    try:
+        task_info = get_task_info(task_id)
+        last_status_obj = get_last_task_status(task_id)
+
+        if not task_info:
+            logger.warning(f"History: No task_info found for task_id {task_id}. Cannot log to history.")
+            return
+
+        # Extract Spotify ID from item URL if possible
+        spotify_id = None
+        item_url = task_info.get('url', '')
+        if item_url:
+            try:
+                spotify_id = item_url.split('/')[-1]
+                # Further validation if it looks like a Spotify ID (e.g., 22 chars, alphanumeric)
+                if not (spotify_id and len(spotify_id) == 22 and spotify_id.isalnum()):
+                    spotify_id = None # Reset if not a valid-looking ID
+            except Exception:
+                spotify_id = None # Ignore errors in parsing
+
+        history_entry = {
+            'task_id': task_id,
+            'download_type': task_info.get('download_type'),
+            'item_name': task_info.get('name'),
+            'item_artist': task_info.get('artist'),
+            'item_album': task_info.get('album', task_info.get('name') if task_info.get('download_type') == 'album' else None),
+            'item_url': item_url,
+            'spotify_id': spotify_id,
+            'status_final': final_status_str,
+            'error_message': error_msg if error_msg else (last_status_obj.get('error') if last_status_obj else None),
+            'timestamp_added': task_info.get('created_at', time.time()),
+            'timestamp_completed': last_status_obj.get('timestamp', time.time()) if last_status_obj else time.time(),
+            'original_request_json': json.dumps(task_info.get('original_request', {})),
+            'last_status_obj_json': json.dumps(last_status_obj if last_status_obj else {})
+        }
+        add_entry_to_history(history_entry)
+    except Exception as e:
+        logger.error(f"History: Error preparing or logging history for task {task_id}: {e}", exc_info=True)
+
+# --- End History Logging Helper ---
+
 def cancel_task(task_id):
     """Cancel a task by its ID"""
     try:
         # Mark the task as cancelled in Redis
         store_task_status(task_id, {
             "status": ProgressState.CANCELLED,
-            "message": "Task cancelled by user",
+            "error": "Task cancelled by user",
             "timestamp": time.time()
         })
         
         # Try to revoke the Celery task if it hasn't started yet
         celery_app.control.revoke(task_id, terminate=True, signal='SIGTERM')
         
-        logger.info(f"Task {task_id} cancelled by user")
+        # Log cancellation to history
+        _log_task_to_history(task_id, 'CANCELLED', "Task cancelled by user")
+
+        # Schedule deletion of task data after 30 seconds
+        delayed_delete_task_data.apply_async(
+            args=[task_id, "Task cancelled by user and auto-cleaned."],
+            countdown=30
+        )
+        logger.info(f"Task {task_id} cancelled by user. Data scheduled for deletion in 30s.")
+
         return {"status": "cancelled", "task_id": task_id}
     except Exception as e:
         logger.error(f"Error cancelling task {task_id}: {e}")
@@ -165,12 +227,12 @@ def retry_task(task_id):
         # Get task info
         task_info = get_task_info(task_id)
         if not task_info:
-            return {"status": "error", "message": f"Task {task_id} not found"}
+            return {"status": "error", "error": f"Task {task_id} not found"}
         
         # Check if task has error status
         last_status = get_last_task_status(task_id)
         if not last_status or last_status.get("status") != ProgressState.ERROR:
-            return {"status": "error", "message": "Task is not in a failed state"}
+            return {"status": "error", "error": "Task is not in a failed state"}
         
         # Get current retry count
         retry_count = last_status.get("retry_count", 0)
@@ -185,7 +247,7 @@ def retry_task(task_id):
         if retry_count >= max_retries:
             return {
                 "status": "error",
-                "message": f"Maximum retry attempts ({max_retries}) exceeded"
+                "error": f"Maximum retry attempts ({max_retries}) exceeded"
             }
         
         # Calculate retry delay
@@ -255,34 +317,51 @@ def retry_task(task_id):
         
         # Launch the appropriate task based on download_type
         download_type = task_info.get("download_type", "unknown")
-        task = None
+        new_celery_task_obj = None
         
         logger.info(f"Retrying task {task_id} as {new_task_id} (retry {retry_count + 1}/{max_retries})")
         
         if download_type == "track":
-            task = download_track.apply_async(
+            new_celery_task_obj = download_track.apply_async(
                 kwargs=task_info,
                 task_id=new_task_id,
                 queue='downloads'
             )
         elif download_type == "album":
-            task = download_album.apply_async(
+            new_celery_task_obj = download_album.apply_async(
                 kwargs=task_info,
                 task_id=new_task_id,
                 queue='downloads'
             )
         elif download_type == "playlist":
-            task = download_playlist.apply_async(
+            new_celery_task_obj = download_playlist.apply_async(
                 kwargs=task_info,
                 task_id=new_task_id,
                 queue='downloads'
             )
         else:
             logger.error(f"Unknown download type for retry: {download_type}")
+            store_task_status(new_task_id, {
+                 "status": ProgressState.ERROR,
+                 "error": f"Cannot retry: Unknown download type '{download_type}' for original task {task_id}",
+                 "timestamp": time.time()
+            })
             return {
                 "status": "error",
-                "message": f"Unknown download type: {download_type}"
+                "error": f"Unknown download type: {download_type}" 
             }
+
+        # If retry was successfully submitted, update the original task's status
+        if new_celery_task_obj:
+            store_task_status(task_id, { 
+                "status": "ERROR_RETRIED", 
+                "error": f"Task superseded by retry: {new_task_id}",
+                "retried_as_task_id": new_task_id,
+                "timestamp": time.time()
+            })
+            logger.info(f"Original task {task_id} status updated to ERROR_RETRIED, superseded by {new_task_id}")
+        else:
+            logger.error(f"Retry submission for task {task_id} (as {new_task_id}) did not return a Celery AsyncResult. Original task not marked as ERROR_RETRIED.")
         
         return {
             "status": "requeued",
@@ -292,9 +371,8 @@ def retry_task(task_id):
             "retry_delay": retry_delay
         }
     except Exception as e:
-        logger.error(f"Error retrying task {task_id}: {e}")
-        traceback.print_exc()
-        return {"status": "error", "message": str(e)}
+        logger.error(f"Error retrying task {task_id}: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
 
 def get_all_tasks():
     """Get all active task IDs"""
@@ -340,6 +418,27 @@ class ProgressTrackingTask(Task):
         """
         task_id = self.request.id
         
+        # Ensure ./logs/tasks directory exists
+        logs_tasks_dir = Path('./logs/tasks') # Using relative path as per your update
+        try:
+            logs_tasks_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error(f"Task {task_id}: Could not create log directory {logs_tasks_dir}: {e}")
+
+        # Define log file path
+        log_file_path = logs_tasks_dir / f"{task_id}.log"
+
+        # Log progress_data to the task-specific file
+        try:
+            with open(log_file_path, 'a') as log_file:
+                # Add a timestamp to the log entry if not present, for consistency in the file
+                log_entry = progress_data.copy()
+                if 'timestamp' not in log_entry:
+                    log_entry['timestamp'] = time.time()
+                print(json.dumps(log_entry), file=log_file) # Use print to file
+        except Exception as e:
+            logger.error(f"Task {task_id}: Could not write to task log file {log_file_path}: {e}")
+            
         # Add timestamp if not present
         if 'timestamp' not in progress_data:
             progress_data['timestamp'] = time.time()
@@ -657,8 +756,9 @@ class ProgressTrackingTask(Task):
         task_info['error_count'] = error_count
         store_task_info(task_id, task_info)
         
-        # Set status
+        # Set status and error message
         data['status'] = ProgressState.ERROR
+        data['error'] = message
         
     def _handle_done(self, task_id, data, task_info):
         """Handle done status from deezspot"""
@@ -734,7 +834,47 @@ class ProgressTrackingTask(Task):
             
             # Log summary
             logger.info(f"Task {task_id} summary: {completed_tracks} completed, {skipped_tracks} skipped, {error_count} errors")
+            # Schedule deletion for completed multi-track downloads
+            delayed_delete_task_data.apply_async(
+                args=[task_id, "Task completed successfully and auto-cleaned."],
+                countdown=30  # Delay in seconds
+            )
             
+            # If from playlist_watch and successful, add track to DB
+            original_request = task_info.get("original_request", {})
+            if original_request.get("source") == "playlist_watch" and task_info.get("download_type") == "track": # ensure it's a track for playlist
+                playlist_id = original_request.get("playlist_id")
+                track_item_for_db = original_request.get("track_item_for_db")
+                
+                if playlist_id and track_item_for_db and track_item_for_db.get('track'):
+                    logger.info(f"Task {task_id} was from playlist watch for playlist {playlist_id}. Adding track to DB.")
+                    try:
+                        add_single_track_to_playlist_db(playlist_id, track_item_for_db)
+                    except Exception as db_add_err:
+                        logger.error(f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from playlist_watch but missing playlist_id or track_item_for_db for DB update. Original Request: {original_request}")
+
+            # If from artist_watch and successful, update album in DB
+            if original_request.get("source") == "artist_watch" and task_info.get("download_type") == "album":
+                artist_spotify_id = original_request.get("artist_spotify_id")
+                album_data_for_db = original_request.get("album_data_for_db")
+
+                if artist_spotify_id and album_data_for_db and album_data_for_db.get("id"):
+                    album_spotify_id = album_data_for_db.get("id")
+                    logger.info(f"Task {task_id} was from artist watch for artist {artist_spotify_id}, album {album_spotify_id}. Updating album in DB as complete.")
+                    try:
+                        add_or_update_album_for_artist(
+                            artist_spotify_id=artist_spotify_id,
+                            album_data=album_data_for_db,
+                            task_id=task_id, 
+                            is_download_complete=True
+                        )
+                    except Exception as db_update_err:
+                        logger.error(f"Failed to update album {album_spotify_id} in DB for artist {artist_spotify_id} after successful download task {task_id}: {db_update_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from artist_watch (album) but missing key data (artist_spotify_id or album_data_for_db) for DB update. Original Request: {original_request}")
+
         else:
             # Generic done for other types
             logger.info(f"Task {task_id} completed: {content_type.upper()}")
@@ -765,27 +905,72 @@ def task_prerun_handler(task_id=None, task=None, *args, **kwargs):
 def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args, **kwargs):
     """Signal handler when a task finishes"""
     try:
-        # Skip if task is already marked as complete or error in Redis
-        last_status = get_last_task_status(task_id)
-        if last_status and last_status.get("status") in [ProgressState.COMPLETE, ProgressState.ERROR]:
-            return
-        
-        # Get task info
+        last_status_for_history = get_last_task_status(task_id)
+        if last_status_for_history and last_status_for_history.get("status") in [ProgressState.COMPLETE, ProgressState.ERROR, ProgressState.CANCELLED, "ERROR_RETRIED", "ERROR_AUTO_CLEANED"]:
+            if state == states.REVOKED and last_status_for_history.get("status") != ProgressState.CANCELLED:
+                 logger.info(f"Task {task_id} was REVOKED (likely cancelled), logging to history.")
+                 _log_task_to_history(task_id, 'CANCELLED', "Task was revoked/cancelled.")
+            # return # Let status update proceed if necessary
+
         task_info = get_task_info(task_id)
-        
-        # Update task status based on Celery task state
+        current_redis_status = last_status_for_history.get("status") if last_status_for_history else None
+
         if state == states.SUCCESS:
-            store_task_status(task_id, {
-                "status": ProgressState.COMPLETE,
-                "timestamp": time.time(),
-                "type": task_info.get("type", "unknown"),
-                "name": task_info.get("name", "Unknown"),
-                "artist": task_info.get("artist", ""),
-                "message": "Download completed successfully."
-            })
+            if current_redis_status != ProgressState.COMPLETE:
+                store_task_status(task_id, {
+                    "status": ProgressState.COMPLETE,
+                    "timestamp": time.time(),
+                    "type": task_info.get("type", "unknown"),
+                    "name": task_info.get("name", "Unknown"),
+                    "artist": task_info.get("artist", ""),
+                    "message": "Download completed successfully."
+                })
             logger.info(f"Task {task_id} completed successfully: {task_info.get('name', 'Unknown')}")
+            _log_task_to_history(task_id, 'COMPLETED')
+
+            if task_info.get("download_type") == "track": # Applies to single track downloads and tracks from playlists/albums
+                delayed_delete_task_data.apply_async(
+                    args=[task_id, "Task completed successfully and auto-cleaned."],
+                    countdown=30
+                )
+
+            original_request = task_info.get("original_request", {})
+            # Handle successful track from playlist watch
+            if original_request.get("source") == "playlist_watch" and task_info.get("download_type") == "track":
+                playlist_id = original_request.get("playlist_id")
+                track_item_for_db = original_request.get("track_item_for_db")
+                
+                if playlist_id and track_item_for_db and track_item_for_db.get('track'):
+                    logger.info(f"Task {task_id} was from playlist watch for playlist {playlist_id}. Adding track to DB.")
+                    try:
+                        add_single_track_to_playlist_db(playlist_id, track_item_for_db)
+                    except Exception as db_add_err:
+                        logger.error(f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from playlist_watch but missing playlist_id or track_item_for_db for DB update. Original Request: {original_request}")
+            
+            # Handle successful album from artist watch
+            if original_request.get("source") == "artist_watch" and task_info.get("download_type") == "album":
+                artist_spotify_id = original_request.get("artist_spotify_id")
+                album_data_for_db = original_request.get("album_data_for_db")
+
+                if artist_spotify_id and album_data_for_db and album_data_for_db.get("id"):
+                    album_spotify_id = album_data_for_db.get("id")
+                    logger.info(f"Task {task_id} was from artist watch for artist {artist_spotify_id}, album {album_spotify_id}. Updating album in DB as complete.")
+                    try:
+                        add_or_update_album_for_artist(
+                            artist_spotify_id=artist_spotify_id,
+                            album_data=album_data_for_db,
+                            task_id=task_id, 
+                            is_download_complete=True
+                        )
+                    except Exception as db_update_err:
+                        logger.error(f"Failed to update album {album_spotify_id} in DB for artist {artist_spotify_id} after successful download task {task_id}: {db_update_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from artist_watch (album) but missing key data (artist_spotify_id or album_data_for_db) for DB update. Original Request: {original_request}")
+
     except Exception as e:
-        logger.error(f"Error in task_postrun_handler: {e}")
+        logger.error(f"Error in task_postrun_handler: {e}", exc_info=True)
 
 @task_failure.connect
 def task_failure_handler(task_id=None, exception=None, traceback=None, *args, **kwargs):
@@ -811,25 +996,34 @@ def task_failure_handler(task_id=None, exception=None, traceback=None, *args, **
         # Check if we can retry
         can_retry = retry_count < max_retries
         
-        # Update task status to error
-        error_message = str(exception)
-        store_task_status(task_id, {
-            "status": ProgressState.ERROR,
-            "timestamp": time.time(),
-            "type": task_info.get("type", "unknown"),
-            "name": task_info.get("name", "Unknown"),
-            "artist": task_info.get("artist", ""),
-            "error": error_message,
-            "traceback": str(traceback),
-            "can_retry": can_retry,
-            "retry_count": retry_count,
-            "max_retries": max_retries,
-            "message": f"Error: {error_message}"
-        })
+        # Update task status to error in Redis if not already an error
+        if last_status and last_status.get("status") != ProgressState.ERROR:
+            store_task_status(task_id, {
+                "status": ProgressState.ERROR,
+                "timestamp": time.time(),
+                "type": task_info.get("type", "unknown"),
+                "name": task_info.get("name", "Unknown"),
+                "artist": task_info.get("artist", ""),
+                "error": str(exception),
+                "traceback": str(traceback),
+                "can_retry": can_retry,
+                "retry_count": retry_count,
+                "max_retries": max_retries
+            })
         
-        logger.error(f"Task {task_id} failed: {error_message}")
+        logger.error(f"Task {task_id} failed: {str(exception)}")
+        _log_task_to_history(task_id, 'ERROR', str(exception))
+
         if can_retry:
             logger.info(f"Task {task_id} can be retried ({retry_count}/{max_retries})")
+        else:
+            # If task cannot be retried, schedule its data for deletion
+            logger.info(f"Task {task_id} failed and cannot be retried. Data scheduled for deletion in 30s.")
+            delayed_delete_task_data.apply_async(
+                args=[task_id, f"Task failed ({str(exception)}) and max retries reached. Auto-cleaned."],
+                countdown=30
+            )
+
     except Exception as e:
         logger.error(f"Error in task_failure_handler: {e}")
 
@@ -1054,3 +1248,103 @@ def download_playlist(self, **task_data):
         logger.error(f"Error in download_playlist task: {e}")
         traceback.print_exc()
         raise 
+
+# Helper function to fully delete task data from Redis
+def delete_task_data_and_log(task_id, reason="Task data deleted"):
+    """
+    Marks a task as cancelled (if not already) and deletes all its data from Redis.
+    """
+    try:
+        task_info = get_task_info(task_id) # Get info before deleting
+        last_status = get_last_task_status(task_id)
+        current_status_val = last_status.get("status") if last_status else None
+
+        # Determine the final status for Redis before deletion
+        # The reason passed to this function indicates why it's being deleted.
+        final_redis_status = ProgressState.ERROR_AUTO_CLEANED # Default for most cleanup scenarios
+        error_message_for_status = reason
+
+        if reason == "Task completed successfully and auto-cleaned.":
+            final_redis_status = ProgressState.COMPLETE # It was already complete
+            error_message_for_status = "Task completed and auto-cleaned."
+        elif reason == "Task cancelled by user and auto-cleaned.":
+            final_redis_status = ProgressState.CANCELLED # It was already cancelled
+            error_message_for_status = "Task cancelled and auto-cleaned."
+        elif "Task failed" in reason and "max retries reached" in reason:
+            final_redis_status = ProgressState.ERROR # It was already an error (non-retryable)
+            error_message_for_status = reason
+        elif reason == "Task interrupted by application restart and auto-cleaned.":
+            final_redis_status = ProgressState.ERROR # It was marked as ERROR (interrupted)
+            error_message_for_status = reason
+        # Add more specific conditions if needed based on other reasons `delayed_delete_task_data` might be called with.
+
+        # Update Redis status one last time if it's not already reflecting the final intended state for this cleanup.
+        # This is mainly for cases where cleanup is initiated for tasks not yet in a fully terminal state by other handlers.
+        if current_status_val not in [ProgressState.COMPLETE, ProgressState.CANCELLED, ProgressState.ERROR_RETRIED, ProgressState.ERROR_AUTO_CLEANED, final_redis_status]:
+            store_task_status(task_id, {
+                "status": final_redis_status,
+                "error": error_message_for_status, # Use the reason as the error/message for this status
+                "timestamp": time.time()
+            })
+            # History logging for COMPLETION, CANCELLATION, or definitive ERROR should have occurred when those states were first reached.
+            # If this cleanup is for a task that *wasn't* in such a state (e.g. stale, still processing), log it now.
+            if final_redis_status == ProgressState.ERROR_AUTO_CLEANED:
+                 _log_task_to_history(task_id, 'ERROR', error_message_for_status) # Or a more specific status if desired
+
+        # Delete Redis keys associated with the task
+        redis_client.delete(f"task:{task_id}:info")
+        redis_client.delete(f"task:{task_id}:status")
+        redis_client.delete(f"task:{task_id}:status:next_id")
+        
+        logger.info(f"Data for task {task_id} ('{task_info.get('name', 'Unknown')}') deleted from Redis. Reason: {reason}")
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting task data for {task_id}: {e}", exc_info=True)
+        return False
+
+@celery_app.task(name="cleanup_stale_errors", queue="default") # Put on default queue, not downloads
+def cleanup_stale_errors():
+    """
+    Periodically checks for tasks in ERROR state for more than 1 minute and cleans them up.
+    """
+    logger.info("Running cleanup_stale_errors task...")
+    cleaned_count = 0
+    try:
+        task_keys = redis_client.keys("task:*:info")
+        if not task_keys:
+            logger.info("No task keys found for cleanup.")
+            return {"status": "complete", "message": "No tasks to check."}
+
+        current_time = time.time()
+        stale_threshold = 60  # 1 minute
+
+        for key_bytes in task_keys:
+            task_id = key_bytes.decode('utf-8').split(':')[1]
+            last_status = get_last_task_status(task_id)
+
+            if last_status and last_status.get("status") == ProgressState.ERROR:
+                error_timestamp = last_status.get("timestamp", 0)
+                if (current_time - error_timestamp) > stale_threshold:
+                    # Check again to ensure it wasn't retried just before cleanup
+                    current_last_status_before_delete = get_last_task_status(task_id)
+                    if current_last_status_before_delete and current_last_status_before_delete.get("status") == ProgressState.ERROR_RETRIED:
+                        logger.info(f"Task {task_id} was retried just before cleanup. Skipping delete.")
+                        continue
+                    
+                    logger.info(f"Task {task_id} is in ERROR state for more than {stale_threshold}s. Cleaning up.")
+                    if delete_task_data_and_log(task_id, reason=f"Auto-cleaned: Task was in ERROR state for over {stale_threshold} seconds without manual retry."):
+                        cleaned_count += 1
+        
+        logger.info(f"cleanup_stale_errors task finished. Cleaned up {cleaned_count} stale errored tasks.")
+        return {"status": "complete", "cleaned_count": cleaned_count}
+    except Exception as e:
+        logger.error(f"Error during cleanup_stale_errors: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+
+@celery_app.task(name="delayed_delete_task_data", queue="default") # Use default queue for utility tasks
+def delayed_delete_task_data(task_id, reason):
+    """
+    Celery task to delete task data after a delay.
+    """
+    logger.info(f"Executing delayed deletion for task {task_id}. Reason: {reason}")
+    delete_task_data_and_log(task_id, reason) 

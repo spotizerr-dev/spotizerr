@@ -185,6 +185,14 @@ body {
   margin: 0.5rem;
 }
 
+/* Style for icons within download buttons */
+.download-btn img {
+  margin-right: 0.5rem; /* Space between icon and text */
+  width: 20px;          /* Icon width */
+  height: 20px;         /* Icon height */
+  vertical-align: middle; /* Align icon with text */
+}
+
 .download-btn:hover {
   background-color: #17a44b;
 }
@@ -381,6 +389,7 @@ a:focus {
   height: 20px;
   filter: brightness(0) invert(1);  /* Ensure the icon appears white */
   display: block;
+  margin: 0; /* Explicitly remove any margin */
 }
 
 /* Hover and active states for the circular download button */
@@ -458,4 +467,96 @@ a:focus {
   .playlist-description {
     margin-bottom: 1rem;
   }
+}
+
+/* Notification Styling */
+.notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 1005; /* Ensure it's above most other elements */
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+  animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Watch and Sync Button Specific Styles */
+.watch-btn {
+  background-color: #535353; /* A neutral dark gray */
+}
+
+.watch-btn:hover {
+  background-color: #6f6f6f;
+}
+
+.sync-btn {
+  background-color: #28a745; /* A distinct green for sync */
+}
+
+.sync-btn:hover {
+  background-color: #218838;
+}
+
+.sync-btn.hidden {
+    display: none;
+}
+
+/* Toggle Known Status Button for Tracks/Albums */
+.toggle-known-status-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  margin-left: 0.5rem; /* Spacing from other buttons if any */
+}
+
+.toggle-known-status-btn img {
+  width: 18px; /* Adjust icon size as needed */
+  height: 18px;
+  filter: brightness(0) invert(1); /* White icon */
+}
+
+.toggle-known-status-btn[data-status="known"] {
+  background-color: #28a745; /* Green for known/available */
+}
+
+.toggle-known-status-btn[data-status="known"]:hover {
+  background-color: #218838; /* Darker green on hover */
+}
+
+.toggle-known-status-btn[data-status="missing"] {
+  background-color: #dc3545; /* Red for missing */
+}
+
+.toggle-known-status-btn[data-status="missing"]:hover {
+  background-color: #c82333; /* Darker red on hover */
+}
+
+.toggle-known-status-btn:active {
+  transform: scale(0.95);
+}
+
+.track-actions-container {
+    display: flex;
+    align-items: center;
+    margin-left: auto; /* Pushes action buttons to the right */
 }

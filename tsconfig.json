@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",                       // Specify ECMAScript target version
+    "module": "ES2020",                  // Specify module code generation
+    "strict": true,                        // Enable all strict type-checking options
+    "esModuleInterop": true,               // Enables emit interoperability between CommonJS and ES Modules
+    "skipLibCheck": true,                  // Skip type checking of declaration files
+    "forceConsistentCasingInFileNames": true, // Disallow inconsistently-cased references to the same file.
+    "outDir": "./static/js",
+    "rootDir": "./src/js"
+  },
+  "include": [
+    "src/js/**/*.ts",
+    "src/js/album.ts",
+    "src/js/artist.ts",
+    "src/js/config.ts",
+    "src/js/main.ts",
+    "src/js/playlist.ts",
+    "src/js/queue.ts",
+    "src/js/track.ts"
+  ],
+  "exclude": [
+    "node_modules"                     // Specifies an array of filenames or patterns that should be skipped when resolving include.
+  ]
+} 

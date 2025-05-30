@@ -47,11 +47,11 @@ def download_track(
         # Smartly determine where to look for Spotify search credentials
         if service == 'spotify' and fallback:
             # If fallback is enabled, use the fallback account for Spotify search credentials
-            search_creds_path = Path(f'./creds/spotify/{fallback}/search.json')
+            search_creds_path = Path(f'./data/creds/spotify/{fallback}/search.json')
             print(f"DEBUG: Using Spotify search credentials from fallback: {search_creds_path}")
         else:
             # Otherwise use the main account for Spotify search credentials
-            search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+            search_creds_path = Path(f'./data/creds/spotify/{main}/search.json')
             print(f"DEBUG: Using Spotify search credentials from main: {search_creds_path}")
             
         if search_creds_path.exists():
@@ -76,7 +76,7 @@ def download_track(
                 # First attempt: use Deezer's download_trackspo with 'main' (Deezer credentials)
                 deezer_error = None
                 try:
-                    deezer_creds_dir = os.path.join('./creds/deezer', main)
+                    deezer_creds_dir = os.path.join('./data/creds/deezer', main)
                     deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
                     
                     # DEBUG: Print Deezer credential paths being used
@@ -88,8 +88,8 @@ def download_track(
                     
                     # List available directories to compare
                     print(f"DEBUG: Available Deezer credential directories:")
-                    for dir_name in os.listdir('./creds/deezer'):
-                        print(f"DEBUG:   ./creds/deezer/{dir_name}")
+                    for dir_name in os.listdir('./data/creds/deezer'):
+                        print(f"DEBUG:   ./data/creds/deezer/{dir_name}")
                     
                     with open(deezer_creds_path, 'r') as f:
                         deezer_creds = json.load(f)
@@ -122,7 +122,7 @@ def download_track(
                     
                     # If the first attempt fails, use the fallback Spotify credentials
                     try:
-                        spo_creds_dir = os.path.join('./creds/spotify', fallback)
+                        spo_creds_dir = os.path.join('./data/creds/spotify', fallback)
                         spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
                         
                         # We've already loaded the Spotify client credentials above based on fallback
@@ -159,7 +159,7 @@ def download_track(
                 # Directly use Spotify main account
                 if quality is None:
                     quality = 'HIGH'
-                creds_dir = os.path.join('./creds/spotify', main)
+                creds_dir = os.path.join('./data/creds/spotify', main)
                 credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
                 spo = SpoLogin(
                     credentials_path=credentials_path,
@@ -188,7 +188,7 @@ def download_track(
             if quality is None:
                 quality = 'FLAC'
             # Deezer download logic remains unchanged, with the custom formatting parameters passed along.
-            creds_dir = os.path.join('./creds/deezer', main)
+            creds_dir = os.path.join('./data/creds/deezer', main)
             creds_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
             with open(creds_path, 'r') as f:
                 creds = json.load(f)

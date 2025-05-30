@@ -1,0 +1,359 @@
+/* static/css/watch/watch.css */
+
+/* General styles for the watch page, similar to main.css */
+body {
+  font-family: var(--font-family-sans-serif);
+  background-color: var(--background-color);
+  color: white;
+  margin: 0;
+  padding: 0;
+}
+
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.watch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border-color-soft);
+}
+
+.watch-header h1 {
+  color: white;
+  font-size: 2em;
+  margin: 0;
+}
+
+.check-all-btn {
+  padding: 10px 15px;
+  font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 8px; /* Space between icon and text */
+  background-color: var(--color-accent-green); /* Green background */
+  color: white; /* Ensure text is white for contrast */
+  border: none; /* Remove default border */
+}
+
+.check-all-btn:hover {
+  background-color: var(--color-accent-green-dark); /* Darker green on hover */
+}
+
+.check-all-btn img {
+  width: 18px; /* Slightly larger for header button */
+  height: 18px;
+  filter: brightness(0) invert(1); /* Ensure header icon is white */
+}
+
+.back-to-search-btn {
+  padding: 10px 20px;
+  font-size: 0.9em;
+}
+
+/* Styling for the grid of watched items, similar to results-grid */
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* Responsive grid */
+  gap: 20px;
+  padding: 0;
+}
+
+/* Individual watched item card styling, inspired by result-card from main.css */
+.watched-item-card {
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius-medium);
+  padding: 15px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.watched-item-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-medium);
+  border-top: 1px solid var(--border-color-soft);
+}
+
+.item-art-wrapper {
+  width: 100%;
+  padding-bottom: 100%; /* 1:1 Aspect Ratio */
+  position: relative;
+  margin-bottom: 15px;
+  border-radius: var(--border-radius-soft);
+  overflow: hidden;
+}
+
+.item-art {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Cover the area, cropping if necessary */
+}
+
+.item-name {
+  font-size: 1.1em;
+  font-weight: bold;
+  color: white;
+  margin-bottom: 5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2; /* Limit to 2 lines */
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 2.4em; /* Reserve space for two lines */
+}
+
+.item-details {
+  font-size: 0.9em;
+  color: white;
+  margin-bottom: 10px;
+  line-height: 1.4;
+  width: 100%; /* Ensure it takes full width for centering/alignment */
+}
+
+.item-details span {
+  display: block; /* Each detail on a new line */
+  margin-bottom: 3px;
+}
+
+.item-type-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 0.75em;
+  font-weight: bold;
+  border-radius: var(--border-radius-small);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.item-type-badge.artist {
+  background-color: var(--color-accent-blue-bg);
+  color: var(--color-accent-blue-text);
+}
+
+.item-type-badge.playlist {
+  background-color: var(--color-accent-green-bg);
+  color: var(--color-accent-green-text);
+}
+
+/* Action buttons (e.g., Go to item, Unwatch) */
+.item-actions {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color-soft);
+}
+
+.item-actions .btn-icon {
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+  border: none;
+}
+
+.item-actions .check-item-now-btn {
+  background-color: var(--color-accent-green);
+}
+
+.item-actions .check-item-now-btn:hover {
+  background-color: var(--color-accent-green-dark);
+}
+
+.item-actions .check-item-now-btn img,
+.item-actions .unwatch-item-btn img {
+  width: 16px;
+  height: 16px;
+  filter: brightness(0) invert(1);
+}
+
+.item-actions .unwatch-item-btn {
+  background-color: var(--color-error);
+  color: white;
+}
+
+.item-actions .unwatch-item-btn:hover {
+  background-color: #a52a2a;
+}
+
+/* Loading and Empty State - reuse from main.css if possible or define here */
+.loading,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-color-muted);
+  width: 100%;
+}
+
+.loading.hidden,
+.empty-state.hidden {
+  display: none;
+}
+
+.loading-indicator {
+  font-size: 1.2em;
+  margin-bottom: 10px;
+  color: white;
+}
+
+.empty-state-content {
+  max-width: 400px;
+}
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 20px;
+  opacity: 0.7;
+  filter: brightness(0) invert(1); /* Added to make icon white */
+}
+
+.empty-state h2 {
+  font-size: 1.5em;
+  color: white;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  font-size: 1em;
+  line-height: 1.5;
+  color: white;
+}
+
+/* Ensure floating icons from base.css are not obscured or mispositioned */
+/* No specific overrides needed if base.css handles them well */
+
+/* Responsive adjustments if needed */
+@media (max-width: 768px) {
+  .results-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+  .watch-header h1 {
+    font-size: 1.5em;
+  }
+  .watched-group-header {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .results-grid {
+    grid-template-columns: 1fr; /* Single column on very small screens */
+  }
+  .watched-item-card {
+    padding: 10px;
+  }
+  .item-name {
+    font-size: 1em;
+  }
+  .item-details {
+    font-size: 0.8em;
+  }
+}
+
+.watched-items-group {
+  margin-bottom: 2rem; /* Space between groups */
+}
+
+.watched-group-header {
+  font-size: 1.8rem;
+  color: var(--color-text-primary);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.empty-group-message {
+  color: var(--color-text-secondary);
+  padding: 1rem;
+  text-align: center;
+  font-style: italic;
+}
+
+/* Ensure the main watchedItemsContainer still behaves like a grid if there are few items */
+#watchedItemsContainer:not(:has(.watched-items-group)) {
+  display: grid;
+  /* Assuming results-grid styles are already defined elsewhere, 
+     or copy relevant grid styles here if needed */
+}
+
+/* Notification Toast Styles */
+#notificationArea {
+  position: fixed;
+  bottom: 20px;
+  left: 50%; /* Center horizontally */
+  transform: translateX(-50%); /* Adjust for exact centering */
+  z-index: 2000; 
+  display: flex;
+  flex-direction: column-reverse; 
+  gap: 10px;
+  width: auto; /* Allow width to be determined by content */
+  max-width: 90%; /* Prevent it from being too wide on large screens */
+}
+
+.notification-toast {
+  padding: 12px 20px;
+  border-radius: var(--border-radius-medium);
+  color: white; /* Default text color to white */
+  font-size: 0.9em;
+  box-shadow: var(--shadow-strong);
+  opacity: 1;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  transform: translateX(0); /* Keep this for the hide animation */
+  text-align: center; /* Center text within the toast */
+}
+
+.notification-toast.success {
+  background-color: var(--color-success); /* Use existing success color */
+  /* color: var(--color-accent-green-text); REMOVE - use white */
+  /* border: 1px solid var(--color-accent-green-text); REMOVE */
+}
+
+.notification-toast.error {
+  background-color: var(--color-error); /* Use existing error color */
+  /* color: var(--color-accent-red-text); REMOVE - use white */
+  /* border: 1px solid var(--color-accent-red-text); REMOVE */
+}
+
+.notification-toast.hide {
+  opacity: 0;
+  transform: translateY(100%); /* Slide down for exit, or could keep translateX if preferred */
+}
+
+@keyframes spin-counter-clockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.spin-counter-clockwise {
+  animation: spin-counter-clockwise 1s linear infinite;
+} 

@@ -7,7 +7,8 @@ import time
 import os
 
 config_bp = Blueprint('config_bp', __name__)
-CONFIG_PATH = Path('./config/main.json')
+CONFIG_PATH = Path('./data/config/main.json')
+CONFIG_PATH_WATCH = Path('./data/config/watch.json')
 
 # Flag for config change notifications
 config_changed = False
@@ -63,6 +64,41 @@ def save_config(config_data):
         logging.error(f"Error saving config: {str(e)}")
         return False
 
+def get_watch_config():
+    """Reads watch.json and returns its content or defaults."""
+    try:
+        if not CONFIG_PATH_WATCH.exists():
+            CONFIG_PATH_WATCH.parent.mkdir(parents=True, exist_ok=True)
+            # Default watch config
+            defaults = {
+                'enabled': False,
+                'watchedArtistAlbumGroup': ["album", "single"],
+                'watchPollIntervalSeconds': 3600
+            }
+            CONFIG_PATH_WATCH.write_text(json.dumps(defaults, indent=2))
+            return defaults
+        with open(CONFIG_PATH_WATCH, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logging.error(f"Error reading watch config: {str(e)}")
+        # Return defaults on error to prevent crashes
+        return {
+            'enabled': False,
+            'watchedArtistAlbumGroup': ["album", "single"],
+            'watchPollIntervalSeconds': 3600
+        }
+
+def save_watch_config(watch_config_data):
+    """Saves data to watch.json."""
+    try:
+        CONFIG_PATH_WATCH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_PATH_WATCH, 'w') as f:
+            json.dump(watch_config_data, f, indent=2)
+        return True
+    except Exception as e:
+        logging.error(f"Error saving watch config: {str(e)}")
+        return False
+
 @config_bp.route('/config', methods=['GET'])
 def handle_config():
     config = get_config()
@@ -70,7 +106,7 @@ def handle_config():
         return jsonify({"error": "Could not read config file"}), 500
         
     # Create config/state directory
-    Path('./config/state').mkdir(parents=True, exist_ok=True)
+    Path('./data/config/state').mkdir(parents=True, exist_ok=True)
         
     # Set default values for any missing config options
     defaults = {
@@ -116,7 +152,14 @@ def update_config():
         if not save_config(new_config):
             return jsonify({"error": "Failed to save config"}), 500
             
-        return jsonify({"message": "Config updated successfully"})
+        # Return the updated config
+        updated_config_values = get_config()
+        if updated_config_values is None:
+            # This case should ideally not be reached if save_config succeeded
+            # and get_config handles errors by returning a default or None.
+            return jsonify({"error": "Failed to retrieve configuration after saving"}), 500
+            
+        return jsonify(updated_config_values)
     except json.JSONDecodeError:
         return jsonify({"error": "Invalid JSON data"}), 400
     except Exception as e:
@@ -142,3 +185,39 @@ def check_config_changes():
         "changed": has_changed,
         "last_config": last_config
     })
+
+@config_bp.route('/config/watch', methods=['GET'])
+def handle_watch_config():
+    watch_config = get_watch_config()
+    # Ensure defaults are applied if file was corrupted or missing fields
+    defaults = {
+        'enabled': False,
+        'watchedArtistAlbumGroup': ["album", "single"],
+        'watchPollIntervalSeconds': 3600
+    }
+    for key, default_value in defaults.items():
+        if key not in watch_config:
+            watch_config[key] = default_value
+            
+    return jsonify(watch_config)
+
+@config_bp.route('/config/watch', methods=['POST', 'PUT'])
+def update_watch_config():
+    try:
+        new_watch_config = request.get_json()
+        if not isinstance(new_watch_config, dict):
+            return jsonify({"error": "Invalid watch config format"}), 400
+
+        if not save_watch_config(new_watch_config):
+            return jsonify({"error": "Failed to save watch config"}), 500
+            
+        updated_watch_config_values = get_watch_config()
+        if updated_watch_config_values is None:
+            return jsonify({"error": "Failed to retrieve watch configuration after saving"}), 500
+            
+        return jsonify(updated_watch_config_values)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON data for watch config"}), 400
+    except Exception as e:
+        logging.error(f"Error updating watch config: {str(e)}")
+        return jsonify({"error": "Failed to update watch config"}), 500

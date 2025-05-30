@@ -59,8 +59,15 @@
   </div>
   
   <!-- Fixed floating buttons for settings and queue -->
+  <a href="/history" class="btn-icon history-nav-btn floating-icon settings-icon" aria-label="Download History" title="Go to Download History">
+    <img src="{{ url_for('static', filename='images/history.svg') }}" alt="History" onerror="handleImageError(this)"/>
+  </a>
   <a href="/config" class="btn-icon settings-icon floating-icon" aria-label="Settings">
     <img src="{{ url_for('static', filename='images/settings.svg') }}" alt="Settings" onerror="handleImageError(this)"/>
+  </a>
+  
+  <a href="/watchlist" class="btn-icon watchlist-icon floating-icon" aria-label="Watchlist" title="Go to Watchlist">
+    <img src="{{ url_for('static', filename='images/binoculars.svg') }}" alt="Watchlist" onerror="handleImageError(this)"/>
   </a>
   
   <button

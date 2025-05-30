@@ -27,6 +27,9 @@
   --color-primary-hover: #17a44b;
   --color-error: #c0392b;
   --color-success: #2ecc71;
+  /* Adding accent green if not present, or ensuring it is */
+  --color-accent-green: #22c55e; /* Example: A Tailwind-like green */
+  --color-accent-green-dark: #16a34a; /* Darker shade for hover */
   
   /* Spacing */
   --space-xs: 0.25rem;
@@ -155,44 +158,36 @@ a:hover, a:focus {
   background-color: var(--color-surface-hover);
 }
 
-/* Floating icons (queue and settings) */
+/* General styles for floating action buttons (FABs) */
 .floating-icon {
-  position: fixed;
-  width: 56px;
-  height: 56px;
-  bottom: 20px;
-  background-color: var(--color-primary);
-  border-radius: var(--radius-round);
-  box-shadow: var(--shadow-lg);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, background-color 0.2s ease;
-  text-decoration: none !important;
+    position: fixed;
+    z-index: 1000; /* Base z-index, can be overridden */
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px; /* Standard size */
+    height: 48px; /* Standard size */
+    background-color: #282828; /* Dark background */
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    text-decoration: none !important; /* Ensure no underline for <a> tags */
 }
 
-.floating-icon:hover, 
+.floating-icon:hover {
+    background-color: #333; /* Slightly lighter on hover */
+    transform: scale(1.05);
+}
+
 .floating-icon:active {
-  background-color: var(--color-primary-hover);
-  transform: scale(1.05);
+    transform: scale(0.98);
 }
 
 .floating-icon img {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1);
-  margin: 0;
-}
-
-/* Settings icon - bottom left */
-.settings-icon {
-  left: 20px;
-}
-
-/* Queue icon - bottom right */
-.queue-icon {
-  right: 20px;
+    width: 24px;
+    height: 24px;
+    filter: invert(1); /* White icon */
+    margin: 0; /* Reset any margin if inherited */
 }
 
 /* Home button */
@@ -218,20 +213,17 @@ a:hover, a:focus {
   transform: scale(0.98);
 }
 
-/* When home button is used as a floating button */
-.floating-icon.home-btn {
-  background-color: var(--color-primary);
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.floating-icon.home-btn img {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1);
-  margin: 0;
+/* Styles for buttons that are specifically floating icons (like home button when it's a FAB) */
+/* This ensures that if a .home-btn also has .floating-icon, it gets the correct FAB styling. */
+.home-btn.floating-icon,
+.settings-icon.floating-icon, /* If settings button is an <a> or <button> with this class */
+.back-button.floating-icon, /* If back button is an <a> or <button> with this class */
+.history-nav-btn.floating-icon, /* If history button is an <a> or <button> with this class */
+.queue-icon.floating-icon, /* If queue button is an <a> or <button> with this class */
+.watch-nav-btn.floating-icon { /* If watch button is an <a> or <button> with this class */
+    /* Specific overrides if needed, but mostly inherits from .floating-icon */
+    /* For example, if a specific button needs a different background */
+    /* background-color: var(--color-primary); */ /* Example if some should use primary color */
 }
 
 /* Download button */
@@ -499,4 +491,40 @@ a:hover, a:focus {
   font-style: italic;
   font-size: 0.9rem;
   margin-top: 0.5rem;
+}
+
+.watchlist-icon {
+  position: fixed;
+  right: 20px;
+  bottom: 90px; /* Positioned above the queue icon */
+  z-index: 1000;
+}
+
+/* Responsive adjustments for floating icons */
+@media (max-width: 768px) {
+  .floating-icon {
+    width: 48px;
+    height: 48px;
+    right: 15px;
+  }
+  .settings-icon {
+    bottom: 15px; /* Adjust for smaller screens */
+  }
+  .queue-icon {
+    bottom: 15px; /* Adjust for smaller screens */
+  }
+  .watchlist-icon {
+    bottom: 75px; /* Adjust for smaller screens, above queue icon */
+  }
+  .home-btn.floating-icon { /* Specific for home button if it's also floating */
+    left: 15px;
+    bottom: 15px;
+  }
+}
+
+/* Ensure images inside btn-icon are sized correctly */
+.btn-icon img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(1);
 } 

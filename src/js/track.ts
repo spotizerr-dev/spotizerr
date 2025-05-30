@@ -35,15 +35,18 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Renders the track header information.
  */
-function renderTrack(track) {
+function renderTrack(track: any) {
   // Hide the loading and error messages.
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('error').classList.add('hidden');
+  const loadingEl = document.getElementById('loading');
+  if (loadingEl) loadingEl.classList.add('hidden');
+  const errorEl = document.getElementById('error');
+  if (errorEl) errorEl.classList.add('hidden');
 
   // Check if track is explicit and if explicit filter is enabled
   if (track.explicit && downloadQueue.isExplicitFilterEnabled()) {
     // Show placeholder for explicit content
-    document.getElementById('loading').classList.add('hidden');
+    const loadingElExplicit = document.getElementById('loading');
+    if (loadingElExplicit) loadingElExplicit.classList.add('hidden');
     
     const placeholderContent = `
       <div class="explicit-filter-placeholder">
@@ -63,30 +66,46 @@ function renderTrack(track) {
   }
 
   // Update track information fields.
-  document.getElementById('track-name').innerHTML =
-    `<a href="/track/${track.id || ''}" title="View track details">${track.name || 'Unknown Track'}</a>`;
+  const trackNameEl = document.getElementById('track-name');
+  if (trackNameEl) {
+    trackNameEl.innerHTML =
+      `<a href="/track/${track.id || ''}" title="View track details">${track.name || 'Unknown Track'}</a>`;
+  }
     
-  document.getElementById('track-artist').innerHTML =
-    `By ${track.artists?.map(a =>
-      `<a href="/artist/${a?.id || ''}" title="View artist details">${a?.name || 'Unknown Artist'}</a>`
-    ).join(', ') || 'Unknown Artist'}`;
+  const trackArtistEl = document.getElementById('track-artist');
+  if (trackArtistEl) {
+    trackArtistEl.innerHTML =
+      `By ${track.artists?.map((a: any) =>
+        `<a href="/artist/${a?.id || ''}" title="View artist details">${a?.name || 'Unknown Artist'}</a>`
+      ).join(', ') || 'Unknown Artist'}`;
+  }
     
-  document.getElementById('track-album').innerHTML =
-    `Album: <a href="/album/${track.album?.id || ''}" title="View album details">${track.album?.name || 'Unknown Album'}</a> (${track.album?.album_type || 'album'})`;
+  const trackAlbumEl = document.getElementById('track-album');
+  if (trackAlbumEl) {
+    trackAlbumEl.innerHTML =
+      `Album: <a href="/album/${track.album?.id || ''}" title="View album details">${track.album?.name || 'Unknown Album'}</a> (${track.album?.album_type || 'album'})`;
+  }
     
-  document.getElementById('track-duration').textContent =
-    `Duration: ${msToTime(track.duration_ms || 0)}`;
+  const trackDurationEl = document.getElementById('track-duration');
+  if (trackDurationEl) {
+    trackDurationEl.textContent =
+      `Duration: ${msToTime(track.duration_ms || 0)}`;
+  }
     
-  document.getElementById('track-explicit').textContent =
-    track.explicit ? 'Explicit' : 'Clean';
+  const trackExplicitEl = document.getElementById('track-explicit');
+  if (trackExplicitEl) {
+    trackExplicitEl.textContent =
+      track.explicit ? 'Explicit' : 'Clean';
+  }
 
   const imageUrl = (track.album?.images && track.album.images[0])
     ? track.album.images[0].url
     : '/static/images/placeholder.jpg';
-  document.getElementById('track-album-image').src = imageUrl;
+  const trackAlbumImageEl = document.getElementById('track-album-image') as HTMLImageElement;
+  if (trackAlbumImageEl) trackAlbumImageEl.src = imageUrl;
 
   // --- Insert Home Button (if not already present) ---
-  let homeButton = document.getElementById('homeButton');
+  let homeButton = document.getElementById('homeButton') as HTMLButtonElement;
   if (!homeButton) {
     homeButton = document.createElement('button');
     homeButton.id = 'homeButton';
@@ -103,7 +122,7 @@ function renderTrack(track) {
   });
 
   // --- Move the Download Button from #actions into #track-header ---
-  let downloadBtn = document.getElementById('downloadTrackBtn');
+  let downloadBtn = document.getElementById('downloadTrackBtn') as HTMLButtonElement;
   if (downloadBtn) {
     // Remove the parent container (#actions) if needed.
     const actionsContainer = document.getElementById('actions');
@@ -131,15 +150,22 @@ function renderTrack(track) {
         downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
         return;
       }
+      const trackIdToDownload = track.id || '';
+      if (!trackIdToDownload) {
+        showError('Missing track ID for download');
+        downloadBtn.disabled = false;
+        downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
+        return;
+      }
       
       // Use the centralized downloadQueue.download method
-      downloadQueue.download(trackUrl, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
+      downloadQueue.download(trackIdToDownload, 'track', { name: track.name || 'Unknown Track', artist: track.artists?.[0]?.name })
         .then(() => {
           downloadBtn.innerHTML = `<span>Queued!</span>`;
           // Make the queue visible to show the download
           downloadQueue.toggleVisibility(true);
         })
-        .catch(err => {
+        .catch((err: any) => {
           showError('Failed to queue track download: ' + (err?.message || 'Unknown error'));
           downloadBtn.disabled = false;
           downloadBtn.innerHTML = `<img src="/static/images/download.svg" alt="Download">`;
@@ -148,13 +174,14 @@ function renderTrack(track) {
   }
 
   // Reveal the header now that track info is loaded.
-  document.getElementById('track-header').classList.remove('hidden');
+  const trackHeaderEl = document.getElementById('track-header');
+  if (trackHeaderEl) trackHeaderEl.classList.remove('hidden');
 }
 
 /**
  * Converts milliseconds to minutes:seconds.
  */
-function msToTime(duration) {
+function msToTime(duration: number) {
   if (!duration || isNaN(duration)) return '0:00';
   
   const minutes = Math.floor(duration / 60000);
@@ -165,7 +192,7 @@ function msToTime(duration) {
 /**
  * Displays an error message in the UI.
  */
-function showError(message) {
+function showError(message: string) {
   const errorEl = document.getElementById('error');
   if (errorEl) {
     errorEl.textContent = message || 'An error occurred';
@@ -176,19 +203,19 @@ function showError(message) {
 /**
  * Starts the download process by calling the centralized downloadQueue method
  */
-async function startDownload(url, type, item) {
-  if (!url || !type) {
-    showError('Missing URL or type for download');
+async function startDownload(itemId: string, type: string, item: any) {
+  if (!itemId || !type) {
+    showError('Missing ID or type for download');
     return;
   }
   
   try {
     // Use the centralized downloadQueue.download method
-    await downloadQueue.download(url, type, item);
+    await downloadQueue.download(itemId, type, item);
     
     // Make the queue visible after queueing
     downloadQueue.toggleVisibility(true);
-  } catch (error) {
+  } catch (error: any) {
     showError('Download failed: ' + (error?.message || 'Unknown error'));
     throw error;
   }

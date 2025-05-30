@@ -69,7 +69,7 @@ def handle_search_credential(service, name):
                 return jsonify({"error": "Both client_id and client_secret are required"}), 400
                 
             # For POST, first check if the credentials directory exists
-            if request.method == 'POST' and not any(Path(f'./creds/{service}/{name}').glob('*.json')):
+            if request.method == 'POST' and not any(Path(f'./data/{service}/{name}').glob('*.json')):
                 return jsonify({"error": f"Account '{name}' doesn't exist. Create it first."}), 404
             
             # Create or update search credentials

@@ -6,6 +6,7 @@ import logging
 from flask import Blueprint, Response, request, url_for
 from routes.utils.celery_queue_manager import download_queue_manager, get_config_params
 from routes.utils.get_info import get_spotify_info
+from routes.utils.celery_tasks import get_last_task_status, ProgressState
 
 from deezspot.easy_spoty import Spo
 from deezspot.libutils.utils import get_ids, link_is_valid
@@ -32,7 +33,7 @@ def get_artist_discography(url, main, album_type='album,single,compilation,appea
     # Initialize Spotify API with credentials
     spotify_client_id = None
     spotify_client_secret = None
-    search_creds_path = Path(f'./creds/spotify/{main}/search.json')
+    search_creds_path = Path(f'./data/creds/spotify/{main}/search.json')
     if search_creds_path.exists():
         try:
             with open(search_creds_path, 'r') as f:
@@ -76,7 +77,7 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
         request_args (dict): Original request arguments for tracking
     
     Returns:
-        list: List of task IDs for the queued album downloads
+        tuple: (list of successfully queued albums, list of duplicate albums)
     """
     if not url:
         raise ValueError("Missing required parameter: url")
@@ -133,10 +134,12 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
     
     if not filtered_albums:
         logger.warning(f"No albums match the specified types: {album_type}")
-        return []
+        return [], []
     
     # Queue each album as a separate download task
     album_task_ids = []
+    successfully_queued_albums = []
+    duplicate_albums = [] # To store info about albums that were duplicates
     
     for album in filtered_albums:
         # Add detailed logging to inspect each album's structure and URLs
@@ -185,10 +188,38 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
         # Debug log the task data being sent to the queue
         logger.debug(f"Album task data: url={task_data['url']}, retry_url={task_data['retry_url']}")
         
-        # Add the task to the queue manager
-        task_id = download_queue_manager.add_task(task_data)
-        album_task_ids.append(task_id)
-        logger.info(f"Queued album download: {album_name} ({task_id})")
+        try:
+            task_id = download_queue_manager.add_task(task_data)
+            
+            # Check the status of the newly added task to see if it was marked as a duplicate error
+            last_status = get_last_task_status(task_id)
+            
+            if last_status and last_status.get("status") == ProgressState.ERROR and last_status.get("existing_task_id"):
+                logger.warning(f"Album {album_name} (URL: {album_url}) is a duplicate. Error task ID: {task_id}. Existing task ID: {last_status.get('existing_task_id')}")
+                duplicate_albums.append({
+                    "name": album_name,
+                    "artist": album_artist,
+                    "url": album_url,
+                    "error_task_id": task_id, # This is the ID of the task marked as a duplicate error
+                    "existing_task_id": last_status.get("existing_task_id"),
+                    "message": last_status.get("message", "Duplicate download attempt.")
+                })
+            else:
+                # If not a duplicate error, it was successfully queued (or failed for other reasons handled by add_task)
+                # We only add to successfully_queued_albums if it wasn't a duplicate error from add_task
+                # Other errors from add_task (like submission failure) would also result in an error status for task_id
+                # but won't have 'existing_task_id'. The client can check the status of this task_id.
+                album_task_ids.append(task_id) # Keep track of all task_ids returned by add_task
+                successfully_queued_albums.append({
+                    "name": album_name,
+                    "artist": album_artist,
+                    "url": album_url,
+                    "task_id": task_id
+                })
+                logger.info(f"Queued album download: {album_name} ({task_id})")
+        except Exception as e: # Catch any other unexpected error from add_task itself (though it should be rare now)
+            logger.error(f"Failed to queue album {album_name} due to an unexpected error in add_task: {str(e)}")
+            # Optionally, collect these errors. For now, just logging and continuing.
     
-    logger.info(f"Queued {len(album_task_ids)} album downloads for artist: {artist_name}")
-    return album_task_ids
+    logger.info(f"Artist album processing: {len(successfully_queued_albums)} queued, {len(duplicate_albums)} duplicates found.")
+    return successfully_queued_albums, duplicate_albums

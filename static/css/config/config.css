@@ -65,85 +65,6 @@ body {
   font-weight: bold;
 }
 
-/* Back button as floating icon - keep this for our floating button */
-.back-button.floating-icon {
-  position: fixed;
-  width: 56px;
-  height: 56px;
-  bottom: 20px;
-  left: 20px;
-  background-color: var(--color-primary);
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, background-color 0.2s ease;
-  text-decoration: none !important;
-}
-
-.back-button.floating-icon:hover {
-  background-color: var(--color-primary-hover);
-  transform: scale(1.05);
-}
-
-.back-button.floating-icon img {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1);
-  margin: 0;
-}
-
-/* Queue button as floating icon */
-.queue-icon.floating-icon {
-  position: fixed;
-  width: 56px;
-  height: 56px;
-  bottom: 20px;
-  right: 20px;
-  background-color: var(--color-primary);
-  border-radius: 50%;
-  box-shadow: var(--shadow-lg);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease, background-color 0.2s ease;
-  text-decoration: none !important;
-}
-
-.queue-icon.floating-icon:hover {
-  background-color: var(--color-primary-hover);
-  transform: scale(1.05);
-}
-
-.queue-icon.floating-icon img {
-  width: 24px;
-  height: 24px;
-  filter: brightness(0) invert(1);
-  margin: 0;
-}
-
-/* Queue Icon Active State */
-.queue-icon.queue-icon-active {
-  background-color: #d13838 !important;
-  transition: background-color 0.3s ease;
-}
-
-.queue-icon.queue-icon-active:hover {
-  background-color: #e04c4c !important;
-}
-
-.queue-icon .queue-x {
-  font-size: 28px;
-  font-weight: bold;
-  color: white;
-  line-height: 24px;
-  display: inline-block;
-  transform: translateY(-2px);
-}
-
 /* Queue Sidebar for Config Page */
 #downloadQueue {
   position: fixed;
@@ -849,24 +770,6 @@ input:checked + .slider:before {
     width: 28px;
     height: 28px;
   }
-  
-  /* Queue icon mobile styles */
-  .queue-icon.floating-icon {
-    width: 50px;
-    height: 50px;
-    right: 16px;
-    bottom: 16px;
-  }
-  
-  .queue-icon.floating-icon img {
-    width: 22px;
-    height: 22px;
-  }
-  
-  .queue-icon .queue-x {
-    font-size: 24px;
-    line-height: 20px;
-  }
 }
 
 /* Format help styles */
@@ -927,4 +830,167 @@ input:checked + .slider:before {
 .copy-notification.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Credentials List Wrapper */
+.credentials-list-wrapper {
+  background: #181818; /* Same as original .credentials-list.card */
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  padding: 1.5rem; /* Add padding here if you want it around the whole block */
+  margin-bottom: 2rem;
+}
+
+/* Where individual credential items will be rendered */
+.credentials-list-items {
+  /* No specific styles needed here unless items need separation from the add button */
+}
+
+/* Styling for the Add New Account button to make it look like a list item */
+.add-account-item {
+  margin-top: 0.75rem; /* Space above the add button if there are items */
+}
+
+.btn-add-account-styled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 1.25rem;
+  background-color: #1db954; /* Green background */
+  color: #ffffff;
+  border: none;
+  border-radius: 8px; /* Same as credential-item */
+  font-size: 1.1rem; /* Similar to credential-name */
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  text-align: center;
+  opacity: 1; /* Ensure it's not transparent by default */
+}
+
+.btn-add-account-styled img {
+  width: 20px; /* Adjust as needed */
+  height: 20px; /* Adjust as needed */
+  margin-right: 10px;
+  filter: brightness(0) invert(1); /* Make icon white if it's not already */
+}
+
+.btn-add-account-styled:hover {
+  background-color: #1aa34a; /* Darker green on hover */
+  transform: translateY(-1px);
+}
+
+/* New styles for the icon-based cancel button */
+.btn-cancel-icon {
+  background-color: #c0392b !important; /* Red background */
+  padding: 0.6rem !important; /* Adjust padding for icon */
+  width: auto; /* Allow button to size to icon */
+  min-width: 40px; /* Ensure a minimum touch target size */
+  height: 40px; /* Ensure a minimum touch target size */
+  align-items: center;
+  justify-content: center;
+  border-radius: 50% !important; /* Make it circular */
+  opacity: 1 !important; /* Ensure it's always visible when its container is */
+  visibility: visible !important; /* Ensure it's not hidden by visibility property */
+}
+
+.btn-cancel-icon img {
+  width: 16px; /* Adjust icon size as needed */
+  height: 16px;
+  filter: brightness(0) invert(1); /* Make icon white */
+}
+
+.btn-cancel-icon:hover {
+  background-color: #e74c3c !important; /* Lighter red on hover */
+  transform: translateY(-2px) scale(1.05);
+}
+
+/* Watch Options Config Section */
+.watch-options-config {
+  background: #181818;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  transition: transform 0.3s ease;
+}
+
+.watch-options-config:hover {
+  transform: translateY(-2px);
+}
+
+/* New Checklist Styles */
+.checklist-container {
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  padding: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0.3rem 0;
+}
+
+.checklist-item:last-child {
+  margin-bottom: 0;
+}
+
+.checklist-item input[type="checkbox"] {
+  margin-right: 0.8rem;
+  width: 18px; /* Custom size */
+  height: 18px; /* Custom size */
+  cursor: pointer;
+  accent-color: #1db954; /* Modern way to color checkboxes */
+}
+
+.checklist-item label {
+  color: #ffffff; /* Ensure label text is white */
+  font-size: 0.95rem;
+  cursor: pointer;
+  /* Reset some global label styles if they interfere */
+  display: inline; 
+  margin-bottom: 0; 
+}
+
+/* Urgent Warning Message Style */
+.urgent-warning-message {
+  background-color: rgba(255, 165, 0, 0.1); /* Orange/Amber background */
+  border: 1px solid #FFA500; /* Orange/Amber border */
+  color: #FFA500; /* Orange/Amber text */
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex; /* Use flex to align icon and text */
+  align-items: center; /* Vertically align icon and text */
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.urgent-warning-message .warning-icon {
+  margin-right: 0.75rem; /* Space between icon and text */
+  min-width: 24px; /* Ensure icon doesn't shrink too much */
+  color: #FFA500; /* Match icon color to text/border */
+}
+
+/* Existing info-message style - ensure it doesn't conflict or adjust if needed */
+.info-message {
+  background-color: rgba(0, 123, 255, 0.1);
+  border: 1px solid #007bff;
+  color: #007bff;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Version text styling */
+.version-text {
+  font-size: 0.9rem;
+  color: #888; /* Light grey color */
+  margin-left: auto; /* Push it to the right */
+  padding-top: 0.5rem; /* Align with title better */
 }

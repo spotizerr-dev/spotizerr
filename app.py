@@ -8,6 +8,7 @@ from routes.playlist import playlist_bp
 from routes.prgs import prgs_bp
 from routes.config import config_bp
 from routes.artist import artist_bp
+from routes.history import history_bp
 import logging
 import logging.handlers
 import time
@@ -37,6 +38,10 @@ def setup_logging():
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
+    
+    # Clear any existing handlers from the root logger
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
     
     # Log formatting
     log_format = logging.Formatter(
@@ -131,7 +136,7 @@ def check_redis_connection():
     return False
 
 def create_app():
-    app = Flask(__name__)
+    app = Flask(__name__, template_folder='static/html')
     
     # Set up CORS
     CORS(app)
@@ -141,10 +146,11 @@ def create_app():
     app.register_blueprint(search_bp, url_prefix='/api')
     app.register_blueprint(credentials_bp, url_prefix='/api/credentials')
     app.register_blueprint(album_bp, url_prefix='/api/album')
-    app.register_blueprint(track_bp, url_prefix='/api/track') 
+    app.register_blueprint(track_bp, url_prefix='/api/track')
     app.register_blueprint(playlist_bp, url_prefix='/api/playlist')
     app.register_blueprint(artist_bp, url_prefix='/api/artist')
-    app.register_blueprint(prgs_bp, url_prefix='/api/prgs')  
+    app.register_blueprint(prgs_bp, url_prefix='/api/prgs')
+    app.register_blueprint(history_bp, url_prefix='/api/history')
     
     # Serve frontend
     @app.route('/')
@@ -156,12 +162,17 @@ def create_app():
     def serve_config():
         return render_template('config.html')
 
+    # New route: Serve watch.html under /watchlist
+    @app.route('/watchlist')
+    def serve_watchlist():
+        return render_template('watch.html')
+
     # New route: Serve playlist.html under /playlist/<id>
     @app.route('/playlist/<id>')
     def serve_playlist(id):
         # The id parameter is captured, but you can use it as needed.
         return render_template('playlist.html')
-        # New route: Serve playlist.html under /playlist/<id>
+
     @app.route('/album/<id>')
     def serve_album(id):
         # The id parameter is captured, but you can use it as needed.
@@ -177,6 +188,10 @@ def create_app():
         # The id parameter is captured, but you can use it as needed.
         return render_template('artist.html')
 
+    @app.route('/history')
+    def serve_history_page():
+        return render_template('history.html')
+
     @app.route('/static/<path:path>')
     def serve_static(path):
         return send_from_directory('static', path)
@@ -184,7 +199,7 @@ def create_app():
     # Serve favicon.ico from the same directory as index.html (templates)
     @app.route('/favicon.ico')
     def serve_favicon():
-        return send_from_directory('templates', 'favicon.ico')
+        return send_from_directory('static/html', 'favicon.ico')
 
     # Add request logging middleware
     @app.before_request
@@ -230,6 +245,10 @@ if __name__ == '__main__':
     
     # Check Redis connection before starting workers
     if check_redis_connection():
+        # Start Watch Manager
+        from routes.utils.watch.manager import start_watch_manager
+        start_watch_manager()
+
         # Start Celery workers
         start_celery_workers()
         

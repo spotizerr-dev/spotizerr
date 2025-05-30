@@ -162,3 +162,44 @@
         margin: 4px;         /* Reduce margins to better fit mobile layouts */
     }
 }
+
+/* Positioning for floating action buttons */
+/* Base .floating-icon style is now in base.css */
+
+/* Left-aligned buttons (Home, Settings, Back, History) */
+.home-btn, .settings-icon, .back-button, .history-nav-btn {
+    left: 20px;
+}
+
+.settings-icon { /* Covers config, main */
+    bottom: 20px;
+}
+
+.home-btn { /* Covers album, artist, playlist, track, watch, history */
+    bottom: 20px;
+}
+
+.back-button { /* Specific to config page */
+    bottom: 20px; 
+}
+
+/* New History button specific positioning - above other left buttons */
+.history-nav-btn {
+    bottom: 80px; /* Positioned 60px above the buttons at 20px (48px button height + 12px margin) */
+}
+
+
+/* Right-aligned buttons (Queue, Watch) */
+.queue-icon, .watch-nav-btn {
+    right: 20px;
+    z-index: 1002; /* Ensure these are above the sidebar (z-index: 1001) and other FABs (z-index: 1000) */
+}
+
+.queue-icon {
+    bottom: 20px;
+}
+
+/* Watch button specific positioning - above Queue */
+.watch-nav-btn {
+    bottom: 80px; /* Positioned 60px above the queue button (48px button height + 12px margin) */
+}

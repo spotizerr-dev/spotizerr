@@ -25,7 +25,7 @@ from routes.utils.celery_tasks import (
 logger = logging.getLogger(__name__)
 
 # Load configuration
-CONFIG_PATH = './config/main.json'
+CONFIG_PATH = './data/config/main.json'
 try:
     with open(CONFIG_PATH, 'r') as f:
         config_data = json.load(f)
@@ -94,77 +94,120 @@ class CeleryDownloadQueueManager:
         self.paused = False
         print(f"Celery Download Queue Manager initialized with max_concurrent={self.max_concurrent}")
     
-    def add_task(self, task):
+    def add_task(self, task: dict, from_watch_job: bool = False):
         """
-        Add a new download task to the Celery queue
+        Add a new download task to the Celery queue.
+        - If from_watch_job is True and an active duplicate is found, the task is not queued and None is returned.
+        - If from_watch_job is False and an active duplicate is found, a new task ID is created,
+          set to an ERROR state indicating the duplicate, and this new error task's ID is returned.
         
         Args:
             task (dict): Task parameters including download_type, url, etc.
+            from_watch_job (bool): If True, duplicate active tasks are skipped. Defaults to False.
             
         Returns:
-            str: Task ID
+            str | None: Task ID if successfully queued or an error task ID for non-watch duplicates.
+                        None if from_watch_job is True and an active duplicate was found.
         """
         try:
-            # Extract essential parameters
-            download_type = task.get("download_type", "unknown")
+            # Extract essential parameters for duplicate check
+            incoming_url = task.get("url")
+            incoming_type = task.get("download_type", "unknown")
+
+            if not incoming_url:
+                logger.warning("Task being added with no URL. Duplicate check might be unreliable.")
+
+            NON_BLOCKING_STATES = [
+                ProgressState.COMPLETE,
+                ProgressState.CANCELLED,
+                ProgressState.ERROR, 
+                ProgressState.ERROR_RETRIED,
+                ProgressState.ERROR_AUTO_CLEANED
+            ]
             
-            # Debug existing task data
-            logger.debug(f"Adding {download_type} task with data: {json.dumps({k: v for k, v in task.items() if k != 'orig_request'})}")
-            
-            # Create a unique task ID
+            all_existing_tasks_summary = get_all_tasks()
+            if incoming_url:
+                for task_summary in all_existing_tasks_summary:
+                    existing_task_id = task_summary.get("task_id")
+                    if not existing_task_id:
+                        continue
+
+                    existing_task_info = get_task_info(existing_task_id)
+                    existing_last_status_obj = get_last_task_status(existing_task_id)
+
+                    if not existing_task_info or not existing_last_status_obj:
+                        continue
+                    
+                    existing_url = existing_task_info.get("url")
+                    existing_type = existing_task_info.get("download_type")
+                    existing_status = existing_last_status_obj.get("status")
+
+                    if (existing_url == incoming_url and
+                        existing_type == incoming_type and
+                        existing_status not in NON_BLOCKING_STATES):
+                        
+                        message = f"Duplicate download: URL '{incoming_url}' (type: {incoming_type}) is already being processed by task {existing_task_id} (status: {existing_status})."
+                        logger.warning(message)
+                        
+                        if from_watch_job:
+                            logger.info(f"Task from watch job for {incoming_url} not queued due to active duplicate {existing_task_id}.")
+                            return None # Skip execution for watch jobs
+                        else:
+                            # Create a new task_id for this duplicate request and mark it as an error
+                            error_task_id = str(uuid.uuid4())
+                            error_task_info_payload = {
+                                "download_type": incoming_type,
+                                "type": task.get("type", incoming_type),
+                                "name": task.get("name", "Duplicate Task"),
+                                "artist": task.get("artist", ""),
+                                "url": incoming_url,
+                                "original_request": task.get("orig_request", task.get("original_request", {})),
+                                "created_at": time.time(),
+                                "is_duplicate_error_task": True
+                            }
+                            store_task_info(error_task_id, error_task_info_payload)
+                            error_status_payload = {
+                                "status": ProgressState.ERROR,
+                                "error": message,
+                                "existing_task_id": existing_task_id, 
+                                "timestamp": time.time(),
+                                "type": error_task_info_payload["type"],
+                                "name": error_task_info_payload["name"],
+                                "artist": error_task_info_payload["artist"]
+                            }
+                            store_task_status(error_task_id, error_status_payload)
+                            return error_task_id # Return the ID of this new error-state task
+
             task_id = str(uuid.uuid4())
-            
-            # Get config parameters and process original request
             config_params = get_config_params()
-            
-            # Extract original request or use empty dict
             original_request = task.get("orig_request", task.get("original_request", {}))
             
-            # Debug retry_url if present
-            if "retry_url" in task:
-                logger.debug(f"Task has retry_url: {task['retry_url']}")
-            
-            # Build the complete task with config parameters
             complete_task = {
-                "download_type": download_type,
-                "type": task.get("type", download_type),
+                "download_type": incoming_type,
+                "type": task.get("type", incoming_type),
                 "name": task.get("name", ""),
                 "artist": task.get("artist", ""),
                 "url": task.get("url", ""),
-                
-                # Preserve retry_url if present
                 "retry_url": task.get("retry_url", ""),
-                
-                # Use main account from config
                 "main": original_request.get("main", config_params['deezer']),
-                
-                # Set fallback if enabled in config
                 "fallback": original_request.get("fallback", 
                     config_params['spotify'] if config_params['fallback'] else None),
-                
-                # Use default quality settings
                 "quality": original_request.get("quality", config_params['deezerQuality']),
-                
                 "fall_quality": original_request.get("fall_quality", config_params['spotifyQuality']),
-                
-                # Parse boolean parameters from string values
                 "real_time": self._parse_bool_param(original_request.get("real_time"), config_params['realTime']),
-                
                 "custom_dir_format": original_request.get("custom_dir_format", config_params['customDirFormat']),
                 "custom_track_format": original_request.get("custom_track_format", config_params['customTrackFormat']),
-                
-                # Parse boolean parameters from string values
                 "pad_tracks": self._parse_bool_param(original_request.get("tracknum_padding"), config_params['tracknum_padding']),
-                
                 "retry_count": 0,
                 "original_request": original_request,
                 "created_at": time.time()
             }
+
+            # If from_watch_job is True, ensure track_details_for_db is passed through
+            if from_watch_job and "track_details_for_db" in task:
+                complete_task["track_details_for_db"] = task["track_details_for_db"]
             
-            # Store the task info in Redis for later retrieval
             store_task_info(task_id, complete_task)
-            
-            # Store initial queued status
             store_task_status(task_id, {
                 "status": ProgressState.QUEUED,
                 "timestamp": time.time(),
@@ -172,46 +215,35 @@ class CeleryDownloadQueueManager:
                 "name": complete_task["name"],
                 "artist": complete_task["artist"],
                 "retry_count": 0,
-                "queue_position": len(get_all_tasks()) + 1  # Approximate queue position
+                "queue_position": len(get_all_tasks()) + 1
             })
             
-            # Launch the appropriate Celery task based on download_type
-            celery_task = None
+            celery_task_map = {
+                "track": download_track,
+                "album": download_album,
+                "playlist": download_playlist
+            }
             
-            if download_type == "track":
-                celery_task = download_track.apply_async(
-                    kwargs=complete_task,
-                    task_id=task_id,
-                    countdown=0 if not self.paused else 3600  # Delay task if paused
-                )
-            elif download_type == "album":
-                celery_task = download_album.apply_async(
+            task_func = celery_task_map.get(incoming_type)
+            if task_func:
+                task_func.apply_async(
                     kwargs=complete_task,
                     task_id=task_id,
                     countdown=0 if not self.paused else 3600
                 )
-            elif download_type == "playlist":
-                celery_task = download_playlist.apply_async(
-                    kwargs=complete_task,
-                    task_id=task_id,
-                    countdown=0 if not self.paused else 3600
-                )
+                logger.info(f"Added {incoming_type} download task {task_id} to Celery queue.")
+                return task_id
             else:
-                # Store error status for unknown download type
                 store_task_status(task_id, {
                     "status": ProgressState.ERROR,
-                    "message": f"Unsupported download type: {download_type}",
+                    "message": f"Unsupported download type: {incoming_type}",
                     "timestamp": time.time()
                 })
-                logger.error(f"Unsupported download type: {download_type}")
-                return task_id  # Still return the task_id so the error can be tracked
-            
-            logger.info(f"Added {download_type} download task {task_id} to Celery queue")
-            return task_id
+                logger.error(f"Unsupported download type: {incoming_type}")
+                return task_id
             
         except Exception as e:
             logger.error(f"Error adding task to Celery queue: {e}", exc_info=True)
-            # Generate a task ID even for failed tasks so we can track the error
             error_task_id = str(uuid.uuid4())
             store_task_status(error_task_id, {
                 "status": ProgressState.ERROR,
