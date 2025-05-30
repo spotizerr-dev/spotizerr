@@ -389,6 +389,7 @@ a:focus {
   height: 20px;
   filter: brightness(0) invert(1);  /* Ensure the icon appears white */
   display: block;
+  margin: 0; /* Explicitly remove any margin */
 }
 
 /* Hover and active states for the circular download button */

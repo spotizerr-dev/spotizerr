@@ -484,49 +484,164 @@ a:focus {
 
 /* Toggle Known Status Button for Tracks/Albums */
 .toggle-known-status-btn {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  border: none;
-  display: inline-flex;
+  background-color: transparent;
+  border: 1px solid var(--color-text-secondary);
+  color: var(--color-text-secondary);
+  padding: 5px;
+  border-radius: 50%; /* Make it circular */
+  cursor: pointer;
+  display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
-  margin-left: 0.5rem; /* Spacing from other buttons if any */
+  width: 30px; /* Fixed size */
+  height: 30px; /* Fixed size */
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, opacity 0.2s; /* Added opacity */
+  /* opacity: 0; Initially hidden, JS will make it visible if artist is watched via persistent-album-action-btn */
 }
 
 .toggle-known-status-btn img {
-  width: 18px; /* Adjust icon size as needed */
-  height: 18px;
-  filter: brightness(0) invert(1); /* White icon */
+  width: 16px; /* Adjust icon size */
+  height: 16px;
+  filter: brightness(0) invert(1); /* Make icon white consistently */
+  margin: 0; /* Ensure no accidental margin for centering */
+}
+
+.toggle-known-status-btn:hover {
+  border-color: var(--color-primary);
+  background-color: rgba(var(--color-primary-rgb), 0.1);
 }
 
 .toggle-known-status-btn[data-status="known"] {
-  background-color: #28a745; /* Green for known/available */
+  /* Optional: specific styles if it's already known, e.g., a slightly different border */
+  border-color: var(--color-success); /* Green border for known items */
 }
 
-.toggle-known-status-btn[data-status="known"]:hover {
-  background-color: #218838; /* Darker green on hover */
+.toggle-known-status-btn[data-status="known"]:hover img {
+   /* REMOVE THE LINE BELOW THIS COMMENT */
+   /* filter: invert(20%) sepia(100%) saturate(500%) hue-rotate(330deg); Removed */ 
 }
 
 .toggle-known-status-btn[data-status="missing"] {
-  background-color: #dc3545; /* Red for missing */
+  /* Optional: specific styles if it's missing, e.g., a warning color */
+  border-color: var(--color-warning); /* Orange border for missing items */
 }
 
-.toggle-known-status-btn[data-status="missing"]:hover {
-  background-color: #c82333; /* Darker red on hover */
+.toggle-known-status-btn[data-status="missing"]:hover img {
+  /* REMOVE THE LINE BELOW THIS COMMENT */
+  /* filter: invert(60%) sepia(100%) saturate(500%) hue-rotate(80deg); Removed */ 
 }
 
 .toggle-known-status-btn:active {
   transform: scale(0.95);
 }
 
+/* Ensure album download button also fits well within actions container */
+.album-actions-container .album-download-btn {
+    width: 30px;
+    height: 30px;
+    padding: 5px; /* Ensure padding doesn't make it too big */
+}
+
+.album-actions-container .album-download-btn img {
+    width: 16px;
+    height: 16px;
+}
+
+/* Album actions container */
 .album-actions-container {
-    display: flex;
-    align-items: center;
-    /* If you want buttons at the bottom of the card or specific positioning, adjust here */
-    /* For now, they will flow naturally. Adding padding if needed. */
-    padding-top: 0.5rem; 
+  /* position: absolute; */ /* No longer needed if buttons are positioned individually */
+  /* bottom: 8px; */
+  /* right: 8px; */
+  /* display: flex; */
+  /* gap: 8px; */
+  /* background-color: rgba(0, 0, 0, 0.6); */
+  /* padding: 5px; */
+  /* border-radius: var(--radius-sm); */
+  /* opacity: 0; */ /* Ensure it doesn't hide buttons if it still wraps them elsewhere */
+  /* transition: opacity 0.2s ease-in-out; */
+   display: none; /* Hide this container if it solely relied on hover and now buttons are persistent */
+}
+
+/* .album-card:hover .album-actions-container { */
+  /* opacity: 1; */ /* Remove this hover effect */
+/* } */
+
+/* Album card actions container - for persistent buttons at the bottom */
+.album-card-actions {
+  display: flex;
+  justify-content: space-between; /* Pushes children to ends */
+  align-items: center;
+  padding: 8px; /* Spacing around the buttons */
+  border-top: 1px solid var(--color-surface-darker, #2a2a2a); /* Separator line */
+  /* Ensure it takes up full width of the card if not already */
+  width: 100%; 
+}
+
+/* Persistent action button (e.g., toggle known/missing) on album card - BOTTOM-LEFT */
+.persistent-album-action-btn {
+  /* position: absolute; */ /* No longer absolute */
+  /* bottom: 8px; */ 
+  /* left: 8px; */
+  /* z-index: 2; */ 
+  opacity: 1; /* Ensure it is visible */
+  /* Specific margin if needed, but flexbox space-between should handle it */
+  margin: 0; /* Reset any previous margins */
+}
+
+/* Persistent download button on album card - BOTTOM-RIGHT */
+.persistent-download-btn {
+  /* position: absolute; */ /* No longer absolute */
+  /* bottom: 8px; */
+  /* right: 8px; */
+  /* z-index: 2; */
+  opacity: 1; /* Ensure it is visible */
+  /* Specific margin if needed, but flexbox space-between should handle it */
+  margin: 0; /* Reset any previous margins */
+}
+
+.album-cover.album-missing-in-db {
+  border: 3px dashed var(--color-warning); /* Example: orange dashed border */
+  opacity: 0.7;
+}
+
+/* NEW STYLES FOR BUTTON STATES */
+.persistent-album-action-btn.status-missing {
+  background-color: #d9534f; /* Bootstrap's btn-danger red */
+  border-color: #d43f3a; 
+}
+
+.persistent-album-action-btn.status-missing:hover {
+  background-color: #c9302c; 
+  border-color: #ac2925;
+}
+
+/* Ensure icon is white on colored background */
+.persistent-album-action-btn.status-missing img {
+  filter: brightness(0) invert(1);
+}
+
+.persistent-album-action-btn.status-known {
+  background-color: #5cb85c; /* Bootstrap's btn-success green */
+  border-color: #4cae4c;
+}
+
+.persistent-album-action-btn.status-known:hover {
+  background-color: #449d44;
+  border-color: #398439;
+}
+
+/* Ensure icon is white on colored background */
+.persistent-album-action-btn.status-known img {
+  filter: brightness(0) invert(1);
+}
+/* END OF NEW STYLES */
+
+/* Spinning Icon Animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
+}
+
+.icon-spin {
+  animation: spin 1s linear infinite;
 }

@@ -123,7 +123,6 @@ def get_artist_info():
         )
     
     try:
-        from routes.utils.get_info import get_spotify_info
         artist_info = get_spotify_info(spotify_id, "artist_discography")
 
         # If artist_info is successfully fetched (it contains album items),

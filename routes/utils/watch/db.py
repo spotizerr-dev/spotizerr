@@ -179,25 +179,31 @@ def get_playlist_track_ids_from_db(playlist_spotify_id: str):
         return track_ids
 
 def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list):
-    """Adds or updates a list of tracks in the specified playlist's tracks table in playlists.db."""
+    """
+    Updates existing tracks in the playlist's DB table to mark them as currently present
+    in Spotify and updates their last_seen timestamp. Also refreshes metadata.
+    Does NOT insert new tracks. New tracks are only added upon successful download.
+    """
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
     if not tracks_data:
         return
 
     current_time = int(time.time())
-    tracks_to_insert = []
+    tracks_to_update = []
     for track_item in tracks_data:
         track = track_item.get('track')
         if not track or not track.get('id'):
-            logger.warning(f"Skipping track due to missing data or ID in playlist {playlist_spotify_id}: {track_item}")
+            logger.warning(f"Skipping track update due to missing data or ID in playlist {playlist_spotify_id}: {track_item}")
             continue
 
-        # Ensure 'artists' and 'album' -> 'artists' are lists and extract names
         artist_names = ", ".join([artist['name'] for artist in track.get('artists', []) if artist.get('name')])
         album_artist_names = ", ".join([artist['name'] for artist in track.get('album', {}).get('artists', []) if artist.get('name')])
 
-        tracks_to_insert.append((
-            track['id'],
+        # Prepare tuple for UPDATE statement.
+        # Order: title, artist_names, album_name, album_artist_names, track_number,
+        # album_spotify_id, duration_ms, added_at_playlist,
+        # is_present_in_spotify, last_seen_in_spotify, spotify_track_id (for WHERE)
+        tracks_to_update.append((
             track.get('name', 'N/A'),
             artist_names,
             track.get('album', {}).get('name', 'N/A'),
@@ -205,30 +211,44 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list):
             track.get('track_number'),
             track.get('album', {}).get('id'),
             track.get('duration_ms'),
-            track_item.get('added_at'), # From playlist item
-            current_time, # added_to_db
-            1, # is_present_in_spotify
-            current_time # last_seen_in_spotify
+            track_item.get('added_at'), # From playlist item, update if changed
+            1, # is_present_in_spotify flag
+            current_time, # last_seen_in_spotify timestamp
+            # added_to_db is NOT updated here as this function only updates existing records.
+            track['id'] # spotify_track_id for the WHERE clause
         ))
 
-    if not tracks_to_insert:
-        logger.info(f"No valid tracks to insert for playlist {playlist_spotify_id}.")
+    if not tracks_to_update:
+        logger.info(f"No valid tracks to prepare for update for playlist {playlist_spotify_id}.")
         return
 
     try:
         with _get_playlists_db_connection() as conn: # Use playlists connection
             cursor = conn.cursor()
-            _create_playlist_tracks_table(playlist_spotify_id) # Ensure table exists
+            # The table should have been created when the playlist was added to watch
+            # or when the first track was successfully downloaded.
+            # _create_playlist_tracks_table(playlist_spotify_id) # Not strictly needed here if table creation is robust elsewhere.
 
+            # The fields in SET must match the order of ?s, excluding the last one for WHERE.
+            # This will only update rows where spotify_track_id matches.
             cursor.executemany(f"""
-                INSERT OR REPLACE INTO {table_name}
-                (spotify_track_id, title, artist_names, album_name, album_artist_names, track_number, album_spotify_id, duration_ms, added_at_playlist, added_to_db, is_present_in_spotify, last_seen_in_spotify)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, tracks_to_insert)
+                UPDATE {table_name} SET
+                    title = ?,
+                    artist_names = ?,
+                    album_name = ?,
+                    album_artist_names = ?,
+                    track_number = ?,
+                    album_spotify_id = ?,
+                    duration_ms = ?,
+                    added_at_playlist = ?,
+                    is_present_in_spotify = ?,
+                    last_seen_in_spotify = ?
+                WHERE spotify_track_id = ?
+            """, tracks_to_update)
             conn.commit()
-            logger.info(f"Added/updated {len(tracks_to_insert)} tracks in DB for playlist {playlist_spotify_id} in {PLAYLISTS_DB_PATH}.")
+            logger.info(f"Attempted to update metadata for {len(tracks_to_update)} tracks from API in DB for playlist {playlist_spotify_id}. Actual rows updated: {cursor.rowcount if cursor.rowcount != -1 else 'unknown'}.")
     except sqlite3.Error as e:
-        logger.error(f"Error adding tracks to playlist {playlist_spotify_id} in table {table_name} in {PLAYLISTS_DB_PATH}: {e}", exc_info=True)
+        logger.error(f"Error updating tracks in playlist {playlist_spotify_id} in table {table_name} in {PLAYLISTS_DB_PATH}: {e}", exc_info=True)
         # Not raising here to allow other operations to continue if one batch fails.
 
 def mark_tracks_as_not_present_in_spotify(playlist_spotify_id: str, track_ids_to_mark: list):

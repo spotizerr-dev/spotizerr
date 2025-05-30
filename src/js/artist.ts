@@ -76,12 +76,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // This is done inside renderArtist after button element is potentially created.
 });
 
-function renderArtist(artistData: ArtistData, artistId: string) {
+async function renderArtist(artistData: ArtistData, artistId: string) {
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.classList.add('hidden');
   
   const errorEl = document.getElementById('error');
   if (errorEl) errorEl.classList.add('hidden');
+
+  // Fetch watch status upfront to avoid race conditions for album button rendering
+  const isArtistActuallyWatched = await getArtistWatchStatus(artistId);
 
   // Check if explicit filter is enabled
   const isExplicitFilterEnabled = downloadQueue.isExplicitFilterEnabled();
@@ -107,7 +110,7 @@ function renderArtist(artistData: ArtistData, artistId: string) {
   // Initialize Watch Button after other elements are rendered
   const watchArtistBtn = document.getElementById('watchArtistBtn') as HTMLButtonElement | null;
   if (watchArtistBtn) {
-      initializeWatchButton(artistId);
+      initializeWatchButton(artistId, isArtistActuallyWatched);
   } else {
       console.warn("Watch artist button not found in HTML.");
   }
@@ -202,8 +205,9 @@ function renderArtist(artistData: ArtistData, artistId: string) {
   if (groupsContainer) {
     groupsContainer.innerHTML = '';
 
-    // Determine if the artist is being watched to show/hide management buttons for albums
-    const isArtistWatched = watchArtistBtn && watchArtistBtn.dataset.watching === 'true';
+    // Use the definitively fetched watch status for rendering album buttons
+    // const isArtistWatched = watchArtistBtn && watchArtistBtn.dataset.watching === 'true'; // Old way
+    const useThisWatchStatusForAlbums = isArtistActuallyWatched; // New way
 
     for (const [groupType, albums] of Object.entries(albumGroups)) {
       const groupSection = document.createElement('section');
@@ -230,58 +234,75 @@ function renderArtist(artistData: ArtistData, artistId: string) {
         if (!album) return;
         const albumElement = document.createElement('div');
         albumElement.className = 'album-card';
+        albumElement.dataset.albumId = album.id;
         
         let albumCardHTML = `
           <a href="/album/${album.id || ''}" class="album-link">
             <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}"
                  alt="Album cover"
-                 class="album-cover">
+                 class="album-cover ${album.is_locally_known === false ? 'album-missing-in-db' : ''}">
           </a>
           <div class="album-info">
             <div class="album-title">${album.name || 'Unknown Album'}</div>
             <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
           </div>
         `;
-
-        const actionsContainer = document.createElement('div');
-        actionsContainer.className = 'album-actions-container';
-
-        if (!isExplicitFilterEnabled) {
-          const downloadBtnHTML = `
-            <button class="download-btn download-btn--circle album-download-btn"
-                    data-id="${album.id || ''}"
-                    data-type="${album.album_type || 'album'}"
-                    data-name="${album.name || 'Unknown Album'}"
-                    title="Download">
-              <img src="/static/images/download.svg" alt="Download">
-            </button>
-          `;
-          actionsContainer.innerHTML += downloadBtnHTML;
-        }
-
-        if (isArtistWatched) {
-          // Initial state is set based on album.is_locally_known
-          const isKnown = album.is_locally_known === true;
-          const initialStatus = isKnown ? "known" : "missing";
-          const initialIcon = isKnown ? "/static/images/check.svg" : "/static/images/missing.svg";
-          const initialTitle = isKnown ? "Click to mark as missing from DB" : "Click to mark as known in DB";
-          
-          const toggleKnownBtnHTML = `
-            <button class="action-btn toggle-known-status-btn" 
-                    data-id="${album.id || ''}"
-                    data-artist-id="${artistId}" 
-                    data-status="${initialStatus}" 
-                    title="${initialTitle}">
-              <img src="${initialIcon}" alt="Mark as Missing/Known">
-            </button>
-          `;
-          actionsContainer.innerHTML += toggleKnownBtnHTML;
-        }
-
         albumElement.innerHTML = albumCardHTML;
-        if (actionsContainer.hasChildNodes()) {
-            albumElement.appendChild(actionsContainer);
+
+        const albumCardActions = document.createElement('div');
+        albumCardActions.className = 'album-card-actions';
+
+        // Persistent Mark as Known/Missing button (if artist is watched) - Appears first (left)
+        if (useThisWatchStatusForAlbums && album.id) { 
+          const toggleKnownBtn = document.createElement('button');
+          toggleKnownBtn.className = 'toggle-known-status-btn persistent-album-action-btn'; 
+          toggleKnownBtn.dataset.albumId = album.id; 
+          
+          if (album.is_locally_known) {
+            toggleKnownBtn.dataset.status = 'known';
+            toggleKnownBtn.innerHTML = '<img src="/static/images/check.svg" alt="Mark as missing">';
+            toggleKnownBtn.title = 'Mark album as not in local library (Missing)';
+            toggleKnownBtn.classList.add('status-known'); // Green
+          } else {
+            toggleKnownBtn.dataset.status = 'missing';
+            toggleKnownBtn.innerHTML = '<img src="/static/images/missing.svg" alt="Mark as known">';
+            toggleKnownBtn.title = 'Mark album as in local library (Known)';
+            toggleKnownBtn.classList.add('status-missing'); // Red
+          }
+          albumCardActions.appendChild(toggleKnownBtn); // Add to actions container
         }
+
+        // Persistent Download Button (if not explicit filter) - Appears second (right)
+        if (!isExplicitFilterEnabled) {
+          const downloadBtn = document.createElement('button');
+          downloadBtn.className = 'download-btn download-btn--circle persistent-download-btn'; 
+          downloadBtn.innerHTML = '<img src="/static/images/download.svg" alt="Download album">';
+          downloadBtn.title = 'Download this album';
+          downloadBtn.addEventListener('click', (e) => {
+            e.preventDefault(); 
+            e.stopPropagation();
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<img src="/static/images/refresh.svg" alt="Queueing..." class="icon-spin">';
+            startDownload(album.id, 'album', { name: album.name, artist: album.artists?.[0]?.name || 'Unknown Artist', type: 'album' })
+              .then(() => {
+                downloadBtn.innerHTML = '<img src="/static/images/check.svg" alt="Queued">';
+                showNotification(`Album '${album.name}' queued for download.`);
+                downloadQueue.toggleVisibility(true);
+              })
+              .catch(err => {
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = '<img src="/static/images/download.svg" alt="Download album">';
+                showError(`Failed to queue album: ${err?.message || 'Unknown error'}`);
+              });
+          });
+          albumCardActions.appendChild(downloadBtn); // Add to actions container
+        }
+        
+        // Only append albumCardActions if it has any buttons
+        if (albumCardActions.hasChildNodes()) {
+            albumElement.appendChild(albumCardActions);
+        }
+        
         albumsListContainer.appendChild(albumElement);
       });
       groupSection.appendChild(albumsListContainer);
@@ -311,56 +332,74 @@ function renderArtist(artistData: ArtistData, artistId: string) {
         if (!album) return;
         const albumElement = document.createElement('div');
         albumElement.className = 'album-card';
+        albumElement.dataset.albumId = album.id; // Set dataset for appears_on albums too
+
         let albumCardHTML = `
           <a href="/album/${album.id || ''}" class="album-link">
             <img src="${album.images?.[1]?.url || album.images?.[0]?.url || '/static/images/placeholder.jpg'}"
                  alt="Album cover"
-                 class="album-cover">
+                 class="album-cover ${album.is_locally_known === false ? 'album-missing-in-db' : ''}">
           </a>
           <div class="album-info">
             <div class="album-title">${album.name || 'Unknown Album'}</div>
             <div class="album-artist">${album.artists?.map(a => a?.name || 'Unknown Artist').join(', ') || 'Unknown Artist'}</div>
           </div>
         `;
-        
-        const actionsContainer = document.createElement('div');
-        actionsContainer.className = 'album-actions-container';
-
-        if (!isExplicitFilterEnabled) {
-          const downloadBtnHTML = `
-            <button class="download-btn download-btn--circle album-download-btn"
-                    data-id="${album.id || ''}"
-                    data-type="${album.album_type || 'album'}"
-                    data-name="${album.name || 'Unknown Album'}"
-                    title="Download">
-              <img src="/static/images/download.svg" alt="Download">
-            </button>
-          `;
-          actionsContainer.innerHTML += downloadBtnHTML;
-        }
-
-        if (isArtistWatched) {
-          // Initial state is set based on album.is_locally_known
-          const isKnown = album.is_locally_known === true;
-          const initialStatus = isKnown ? "known" : "missing";
-          const initialIcon = isKnown ? "/static/images/check.svg" : "/static/images/missing.svg";
-          const initialTitle = isKnown ? "Click to mark as missing from DB" : "Click to mark as known in DB";
-          
-          const toggleKnownBtnHTML = `
-            <button class="action-btn toggle-known-status-btn" 
-                    data-id="${album.id || ''}"
-                    data-artist-id="${artistId}" 
-                    data-status="${initialStatus}" 
-                    title="${initialTitle}">
-              <img src="${initialIcon}" alt="Mark as Missing/Known">
-            </button>
-          `;
-          actionsContainer.innerHTML += toggleKnownBtnHTML;
-        }
         albumElement.innerHTML = albumCardHTML;
-        if (actionsContainer.hasChildNodes()) {
-            albumElement.appendChild(actionsContainer);
+        
+        const albumCardActions_AppearsOn = document.createElement('div');
+        albumCardActions_AppearsOn.className = 'album-card-actions';
+
+        // Persistent Mark as Known/Missing button for appearing_on albums (if artist is watched) - Appears first (left)
+        if (useThisWatchStatusForAlbums && album.id) {
+            const toggleKnownBtn = document.createElement('button');
+            toggleKnownBtn.className = 'toggle-known-status-btn persistent-album-action-btn'; 
+            toggleKnownBtn.dataset.albumId = album.id;
+            if (album.is_locally_known) {
+                toggleKnownBtn.dataset.status = 'known';
+                toggleKnownBtn.innerHTML = '<img src="/static/images/check.svg" alt="Mark as missing">';
+                toggleKnownBtn.title = 'Mark album as not in local library (Missing)';
+                toggleKnownBtn.classList.add('status-known'); // Green
+            } else {
+                toggleKnownBtn.dataset.status = 'missing';
+                toggleKnownBtn.innerHTML = '<img src="/static/images/missing.svg" alt="Mark as known">';
+                toggleKnownBtn.title = 'Mark album as in local library (Known)';
+                toggleKnownBtn.classList.add('status-missing'); // Red
+            }
+            albumCardActions_AppearsOn.appendChild(toggleKnownBtn); // Add to actions container
         }
+
+        // Persistent Download Button for appearing_on albums (if not explicit filter) - Appears second (right)
+        if (!isExplicitFilterEnabled) {
+          const downloadBtn = document.createElement('button');
+          downloadBtn.className = 'download-btn download-btn--circle persistent-download-btn'; 
+          downloadBtn.innerHTML = '<img src="/static/images/download.svg" alt="Download album">';
+          downloadBtn.title = 'Download this album';
+          downloadBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<img src="/static/images/refresh.svg" alt="Queueing..." class="icon-spin">';
+            startDownload(album.id, 'album', { name: album.name, artist: album.artists?.[0]?.name || 'Unknown Artist', type: 'album' })
+              .then(() => {
+                downloadBtn.innerHTML = '<img src="/static/images/check.svg" alt="Queued">';
+                showNotification(`Album '${album.name}' queued for download.`);
+                downloadQueue.toggleVisibility(true);
+              })
+              .catch(err => {
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = '<img src="/static/images/download.svg" alt="Download album">';
+                showError(`Failed to queue album: ${err?.message || 'Unknown error'}`);
+              });
+          });
+          albumCardActions_AppearsOn.appendChild(downloadBtn); // Add to actions container
+        }
+        
+        // Only append albumCardActions_AppearsOn if it has any buttons
+        if (albumCardActions_AppearsOn.hasChildNodes()) {
+            albumElement.appendChild(albumCardActions_AppearsOn);
+        }
+
         appearingAlbumsListContainer.appendChild(albumElement);
       });
       featuringSection.appendChild(appearingAlbumsListContainer);
@@ -410,100 +449,104 @@ function attachGroupDownloadListeners(artistId: string, artistName: string) {
 }
 
 function attachAlbumActionListeners(artistIdForContext: string) {
-  document.querySelectorAll('.album-download-btn').forEach(btn => {
-    const button = btn as HTMLButtonElement;
-    button.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const currentTarget = e.currentTarget as HTMLButtonElement | null;
-      if (!currentTarget) return;
-      const itemId = currentTarget.dataset.id || '';
-      const name = currentTarget.dataset.name || 'Unknown';
-      const type = 'album';
-      if (!itemId) {
-        showError('Could not get album ID for download');
-        return;
-      }
-      currentTarget.remove();
-      downloadQueue.download(itemId, type, { name, type })
-        .catch((err: any) => showError('Download failed: ' + (err?.message || 'Unknown error')));
-    });
-  });
+  const groupsContainer = document.getElementById('album-groups');
+  if (!groupsContainer) return;
 
-  document.querySelectorAll('.toggle-known-status-btn').forEach((btn) => {
-    btn.addEventListener('click', async (e: Event) => {
-      e.stopPropagation();
-      const button = e.currentTarget as HTMLButtonElement;
-      const albumId = button.dataset.id || '';
-      const artistId = button.dataset.artistId || artistIdForContext; 
+  groupsContainer.addEventListener('click', async (event) => {
+    const target = event.target as HTMLElement;
+    const button = target.closest('.toggle-known-status-btn') as HTMLButtonElement | null;
+
+    if (button && button.dataset.albumId) {
+      const albumId = button.dataset.albumId;
       const currentStatus = button.dataset.status;
-      const img = button.querySelector('img');
-
-      if (!albumId || !artistId || !img) {
-        showError('Missing data for toggling album status');
-        return;
-      }
-
+      
+      // Optimistic UI update
       button.disabled = true;
+      const originalIcon = button.innerHTML; // Save original icon
+      button.innerHTML = '<img src="/static/images/refresh.svg" alt="Updating..." class="icon-spin">';
+
       try {
-        if (currentStatus === 'missing') {
-          await handleMarkAlbumAsKnown(artistId, albumId);
-          button.dataset.status = 'known';
-          img.src = '/static/images/check.svg';
-          button.title = 'Click to mark as missing from DB';
-        } else {
-          await handleMarkAlbumAsMissing(artistId, albumId);
+        if (currentStatus === 'known') {
+          await handleMarkAlbumAsMissing(artistIdForContext, albumId);
           button.dataset.status = 'missing';
-          img.src = '/static/images/missing.svg';
-          button.title = 'Click to mark as known in DB';
+          button.innerHTML = '<img src="/static/images/missing.svg" alt="Mark as known">'; // Update to missing.svg
+          button.title = 'Mark album as in local library (Known)';
+          button.classList.remove('status-known');
+          button.classList.add('status-missing');
+          const albumCard = button.closest('.album-card') as HTMLElement | null;
+          if (albumCard) {
+            const coverImg = albumCard.querySelector('.album-cover') as HTMLImageElement | null;
+            if (coverImg) coverImg.classList.add('album-missing-in-db');
+          }
+          showNotification(`Album marked as missing from local library.`);
+        } else {
+          await handleMarkAlbumAsKnown(artistIdForContext, albumId);
+          button.dataset.status = 'known';
+          button.innerHTML = '<img src="/static/images/check.svg" alt="Mark as missing">'; // Update to check.svg
+          button.title = 'Mark album as not in local library (Missing)';
+          button.classList.remove('status-missing');
+          button.classList.add('status-known');
+          const albumCard = button.closest('.album-card') as HTMLElement | null;
+          if (albumCard) {
+            const coverImg = albumCard.querySelector('.album-cover') as HTMLImageElement | null;
+            if (coverImg) coverImg.classList.remove('album-missing-in-db');
+          }
+          showNotification(`Album marked as present in local library.`);
         }
       } catch (error) {
+        console.error('Failed to update album status:', error);
         showError('Failed to update album status. Please try again.');
+        // Revert UI on error
+        button.dataset.status = currentStatus; // Revert status
+        button.innerHTML = originalIcon; // Revert icon
+         // Revert card style if needed (though if API failed, actual state is unchanged)
+      } finally {
+        button.disabled = false; // Re-enable button
       }
-      button.disabled = false;
-    });
+    }
   });
 }
 
 async function handleMarkAlbumAsKnown(artistId: string, albumId: string) {
-  try {
-    const response = await fetch(`/api/artist/watch/${artistId}/albums`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([albumId]),
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-    const result = await response.json();
-    showNotification(result.message || 'Album marked as known.');
-  } catch (error: any) {
-    showError(`Failed to mark album as known: ${error.message}`);
-    throw error; // Re-throw for the caller to handle button state if needed
+  // Ensure albumId is a string and not undefined.
+  if (!albumId || typeof albumId !== 'string') {
+    console.error('Invalid albumId provided to handleMarkAlbumAsKnown:', albumId);
+    throw new Error('Invalid album ID.');
   }
+  const response = await fetch(`/api/artist/watch/${artistId}/albums`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([albumId]) // API expects an array of album IDs
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to mark album as known.' }));
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
 }
 
 async function handleMarkAlbumAsMissing(artistId: string, albumId: string) {
-  try {
-    const response = await fetch(`/api/artist/watch/${artistId}/albums`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([albumId]),
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-    const result = await response.json();
-    showNotification(result.message || 'Album marked as missing.');
-  } catch (error: any) {
-    showError(`Failed to mark album as missing: ${error.message}`);
-    throw error; // Re-throw
+  // Ensure albumId is a string and not undefined.
+  if (!albumId || typeof albumId !== 'string') {
+    console.error('Invalid albumId provided to handleMarkAlbumAsMissing:', albumId);
+    throw new Error('Invalid album ID.');
   }
+  const response = await fetch(`/api/artist/watch/${artistId}/albums`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify([albumId]) // API expects an array of album IDs
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to mark album as missing.' }));
+    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+  }
+  // For DELETE, Spotify often returns 204 No Content, or we might return custom JSON.
+  // If expecting JSON:
+  // return response.json();
+  // If handling 204 or simple success message:
+  const result = await response.json(); // Assuming the backend sends a JSON response
+  console.log('Mark as missing result:', result);
+  return result;
 }
 
 // Add startDownload function (similar to track.js and main.js)
@@ -619,20 +662,20 @@ function updateWatchButton(artistId: string, isWatching: boolean) {
   }
 }
 
-async function initializeWatchButton(artistId: string) {
+async function initializeWatchButton(artistId: string, initialIsWatching: boolean) {
   const watchArtistBtn = document.getElementById('watchArtistBtn') as HTMLButtonElement | null;
   const syncArtistBtn = document.getElementById('syncArtistBtn') as HTMLButtonElement | null;
 
   if (!watchArtistBtn) return;
 
   try {
-    watchArtistBtn.disabled = true; // Disable while fetching status
-    if (syncArtistBtn) syncArtistBtn.disabled = true; // Also disable sync button initially
+    watchArtistBtn.disabled = true; 
+    if (syncArtistBtn) syncArtistBtn.disabled = true; 
 
-    const isWatching = await getArtistWatchStatus(artistId);
-    updateWatchButton(artistId, isWatching);
+    // const isWatching = await getArtistWatchStatus(artistId); // No longer fetch here, use parameter
+    updateWatchButton(artistId, initialIsWatching); // Use passed status
     watchArtistBtn.disabled = false;
-    if (syncArtistBtn) syncArtistBtn.disabled = !(watchArtistBtn.dataset.watching === 'true'); // Corrected logic
+    if (syncArtistBtn) syncArtistBtn.disabled = !(watchArtistBtn.dataset.watching === 'true'); 
 
     watchArtistBtn.addEventListener('click', async () => {
       const currentlyWatching = watchArtistBtn.dataset.watching === 'true';
@@ -642,15 +685,22 @@ async function initializeWatchButton(artistId: string) {
         if (currentlyWatching) {
           await unwatchArtist(artistId);
           updateWatchButton(artistId, false);
+          // Re-fetch and re-render artist data
+          const newArtistData = await (await fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)).json() as ArtistData;
+          renderArtist(newArtistData, artistId); 
         } else {
           await watchArtist(artistId);
           updateWatchButton(artistId, true);
+          // Re-fetch and re-render artist data
+          const newArtistData = await (await fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)).json() as ArtistData;
+          renderArtist(newArtistData, artistId);
         }
       } catch (error) {
-        updateWatchButton(artistId, currentlyWatching);
+        // On error, revert button to its state before the click attempt
+        updateWatchButton(artistId, currentlyWatching); 
       }
       watchArtistBtn.disabled = false;
-      if (syncArtistBtn) syncArtistBtn.disabled = !(watchArtistBtn.dataset.watching === 'true'); // Corrected logic
+      if (syncArtistBtn) syncArtistBtn.disabled = !(watchArtistBtn.dataset.watching === 'true'); 
     });
 
     // Add event listener for the sync button
@@ -675,8 +725,10 @@ async function initializeWatchButton(artistId: string) {
 
   } catch (error) {
     if (watchArtistBtn) watchArtistBtn.disabled = false;
-    if (syncArtistBtn) syncArtistBtn.disabled = true; // Keep sync disabled on error
-    updateWatchButton(artistId, false); 
+    if (syncArtistBtn) syncArtistBtn.disabled = true; 
+    updateWatchButton(artistId, false); // On error fetching initial status (though now it's passed)
+                                      // This line might be less relevant if initialIsWatching is guaranteed by caller
+                                      // but as a fallback it sets to a non-watching state.
   }
 }
 

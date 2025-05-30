@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Setup Redis and Celery
 from routes.utils.celery_config import REDIS_URL, REDIS_BACKEND, REDIS_PASSWORD, get_config_params
 # Import for playlist watch DB update
-from routes.utils.watch.db import add_single_track_to_playlist_db
+from routes.utils.watch.db import add_single_track_to_playlist_db, add_or_update_album_for_artist
 
 # Import history manager function
 from .history_manager import add_entry_to_history
@@ -840,6 +840,41 @@ class ProgressTrackingTask(Task):
                 countdown=30  # Delay in seconds
             )
             
+            # If from playlist_watch and successful, add track to DB
+            original_request = task_info.get("original_request", {})
+            if original_request.get("source") == "playlist_watch" and task_info.get("download_type") == "track": # ensure it's a track for playlist
+                playlist_id = original_request.get("playlist_id")
+                track_item_for_db = original_request.get("track_item_for_db")
+                
+                if playlist_id and track_item_for_db and track_item_for_db.get('track'):
+                    logger.info(f"Task {task_id} was from playlist watch for playlist {playlist_id}. Adding track to DB.")
+                    try:
+                        add_single_track_to_playlist_db(playlist_id, track_item_for_db)
+                    except Exception as db_add_err:
+                        logger.error(f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from playlist_watch but missing playlist_id or track_item_for_db for DB update. Original Request: {original_request}")
+
+            # If from artist_watch and successful, update album in DB
+            if original_request.get("source") == "artist_watch" and task_info.get("download_type") == "album":
+                artist_spotify_id = original_request.get("artist_spotify_id")
+                album_data_for_db = original_request.get("album_data_for_db")
+
+                if artist_spotify_id and album_data_for_db and album_data_for_db.get("id"):
+                    album_spotify_id = album_data_for_db.get("id")
+                    logger.info(f"Task {task_id} was from artist watch for artist {artist_spotify_id}, album {album_spotify_id}. Updating album in DB as complete.")
+                    try:
+                        add_or_update_album_for_artist(
+                            artist_spotify_id=artist_spotify_id,
+                            album_data=album_data_for_db,
+                            task_id=task_id, 
+                            is_download_complete=True
+                        )
+                    except Exception as db_update_err:
+                        logger.error(f"Failed to update album {album_spotify_id} in DB for artist {artist_spotify_id} after successful download task {task_id}: {db_update_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from artist_watch (album) but missing key data (artist_spotify_id or album_data_for_db) for DB update. Original Request: {original_request}")
+
         else:
             # Generic done for other types
             logger.info(f"Task {task_id} completed: {content_type.upper()}")
@@ -870,21 +905,16 @@ def task_prerun_handler(task_id=None, task=None, *args, **kwargs):
 def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args, **kwargs):
     """Signal handler when a task finishes"""
     try:
-        # Skip if task is already marked as complete or error in Redis for history logging purposes
         last_status_for_history = get_last_task_status(task_id)
         if last_status_for_history and last_status_for_history.get("status") in [ProgressState.COMPLETE, ProgressState.ERROR, ProgressState.CANCELLED, "ERROR_RETRIED", "ERROR_AUTO_CLEANED"]:
-            # Check if it was a REVOKED (cancelled) task, if so, ensure it's logged.
             if state == states.REVOKED and last_status_for_history.get("status") != ProgressState.CANCELLED:
                  logger.info(f"Task {task_id} was REVOKED (likely cancelled), logging to history.")
                  _log_task_to_history(task_id, 'CANCELLED', "Task was revoked/cancelled.")
-            # else:
-                # logger.debug(f"History: Task {task_id} already in terminal state {last_status_for_history.get('status')} in Redis. History logging likely handled.")
-            # return # Do not return here, let the normal status update proceed for Redis if necessary
+            # return # Let status update proceed if necessary
 
         task_info = get_task_info(task_id)
         current_redis_status = last_status_for_history.get("status") if last_status_for_history else None
 
-        # Update task status based on Celery task state
         if state == states.SUCCESS:
             if current_redis_status != ProgressState.COMPLETE:
                 store_task_status(task_id, {
@@ -898,16 +928,15 @@ def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args
             logger.info(f"Task {task_id} completed successfully: {task_info.get('name', 'Unknown')}")
             _log_task_to_history(task_id, 'COMPLETED')
 
-            # If the task was a single track, schedule its data for deletion after a delay
-            if task_info.get("download_type") == "track":
+            if task_info.get("download_type") == "track": # Applies to single track downloads and tracks from playlists/albums
                 delayed_delete_task_data.apply_async(
                     args=[task_id, "Task completed successfully and auto-cleaned."],
-                    countdown=30  # Delay in seconds
+                    countdown=30
                 )
 
-            # If from playlist_watch and successful, add track to DB
             original_request = task_info.get("original_request", {})
-            if original_request.get("source") == "playlist_watch":
+            # Handle successful track from playlist watch
+            if original_request.get("source") == "playlist_watch" and task_info.get("download_type") == "track":
                 playlist_id = original_request.get("playlist_id")
                 track_item_for_db = original_request.get("track_item_for_db")
                 
@@ -919,9 +948,29 @@ def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args
                         logger.error(f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}", exc_info=True)
                 else:
                     logger.warning(f"Task {task_id} was from playlist_watch but missing playlist_id or track_item_for_db for DB update. Original Request: {original_request}")
+            
+            # Handle successful album from artist watch
+            if original_request.get("source") == "artist_watch" and task_info.get("download_type") == "album":
+                artist_spotify_id = original_request.get("artist_spotify_id")
+                album_data_for_db = original_request.get("album_data_for_db")
+
+                if artist_spotify_id and album_data_for_db and album_data_for_db.get("id"):
+                    album_spotify_id = album_data_for_db.get("id")
+                    logger.info(f"Task {task_id} was from artist watch for artist {artist_spotify_id}, album {album_spotify_id}. Updating album in DB as complete.")
+                    try:
+                        add_or_update_album_for_artist(
+                            artist_spotify_id=artist_spotify_id,
+                            album_data=album_data_for_db,
+                            task_id=task_id, 
+                            is_download_complete=True
+                        )
+                    except Exception as db_update_err:
+                        logger.error(f"Failed to update album {album_spotify_id} in DB for artist {artist_spotify_id} after successful download task {task_id}: {db_update_err}", exc_info=True)
+                else:
+                    logger.warning(f"Task {task_id} was from artist_watch (album) but missing key data (artist_spotify_id or album_data_for_db) for DB update. Original Request: {original_request}")
 
     except Exception as e:
-        logger.error(f"Error in task_postrun_handler: {e}")
+        logger.error(f"Error in task_postrun_handler: {e}", exc_info=True)
 
 @task_failure.connect
 def task_failure_handler(task_id=None, exception=None, traceback=None, *args, **kwargs):

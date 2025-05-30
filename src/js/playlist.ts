@@ -664,10 +664,16 @@ async function watchPlaylist(playlistId: string) {
       throw new Error(errorData.error || 'Failed to watch playlist');
     }
     updateWatchButtons(true, playlistId);
-    showNotification(`Playlist added to watchlist. It will be synced shortly.`);
+    // Re-fetch and re-render playlist data
+    const newPlaylistInfoResponse = await fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`);
+    if (!newPlaylistInfoResponse.ok) throw new Error('Failed to re-fetch playlist info after watch.');
+    const newPlaylistData = await newPlaylistInfoResponse.json() as Playlist;
+    renderPlaylist(newPlaylistData);
+
+    showNotification(`Playlist added to watchlist. Tracks are being updated.`);
   } catch (error: any) {
     showError(`Error watching playlist: ${error.message}`);
-    if (watchBtn) watchBtn.disabled = false;
+    if (watchBtn) watchBtn.disabled = false; // Re-enable on error before potential UI revert
   }
 }
 
@@ -685,10 +691,16 @@ async function unwatchPlaylist(playlistId: string) {
       throw new Error(errorData.error || 'Failed to unwatch playlist');
     }
     updateWatchButtons(false, playlistId);
-    showNotification('Playlist removed from watchlist.');
+    // Re-fetch and re-render playlist data
+    const newPlaylistInfoResponse = await fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`);
+    if (!newPlaylistInfoResponse.ok) throw new Error('Failed to re-fetch playlist info after unwatch.');
+    const newPlaylistData = await newPlaylistInfoResponse.json() as Playlist;
+    renderPlaylist(newPlaylistData);
+
+    showNotification('Playlist removed from watchlist. Track statuses updated.');
   } catch (error: any) {
     showError(`Error unwatching playlist: ${error.message}`);
-    if (watchBtn) watchBtn.disabled = false;
+    if (watchBtn) watchBtn.disabled = false; // Re-enable on error before potential UI revert
   }
 }
 

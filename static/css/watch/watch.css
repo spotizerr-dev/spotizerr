@@ -172,11 +172,6 @@ body {
   border: none;
 }
 
-.item-actions .check-item-now-btn,
-.item-actions .unwatch-item-btn {
-  /* Shared properties are in .item-actions .btn-icon */
-}
-
 .item-actions .check-item-now-btn {
   background-color: var(--color-accent-green);
 }

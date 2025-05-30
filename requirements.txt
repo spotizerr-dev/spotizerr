@@ -10,7 +10,7 @@ click==8.2.1
 click-didyoumean==0.3.1
 click-plugins==1.1.1
 click-repl==0.3.0
-deezspot @ git+https://github.com/Xoconoch/deezspot-fork-again@0b906e94e774cdeb8557a14a53236c0834fb1a2e
+deezspot @ git+https://github.com/Xoconoch/deezspot-fork-again
 defusedxml==0.7.1
 fastapi==0.115.12
 Flask==3.1.1

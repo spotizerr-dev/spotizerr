@@ -322,16 +322,14 @@ def check_watched_artists(specific_artist_id: str = None):
                         task_id_or_none = download_queue_manager.add_task(task_payload, from_watch_job=True)
                         
                         if task_id_or_none: # Task was newly queued
-                            add_or_update_album_for_artist(artist_spotify_id, album_data, task_id=task_id_or_none, is_download_complete=False)
-                            logger.info(f"Artist Watch Manager: Queued download task {task_id_or_none} for new album '{album_name}' from artist '{artist_name}'.")
+                            # REMOVED: add_or_update_album_for_artist(artist_spotify_id, album_data, task_id=task_id_or_none, is_download_complete=False)
+                            # The album will be added/updated in the DB by celery_tasks.py upon successful download completion.
+                            logger.info(f"Artist Watch Manager: Queued download task {task_id_or_none} for new album '{album_name}' from artist '{artist_name}'. DB entry will be created/updated on success.")
                             queued_for_download_count += 1
-                        # If task_id_or_none is None, it was a duplicate. We can still log/record album_data if needed, but without task_id or as already seen.
-                        # add_or_update_album_for_artist(artist_spotify_id, album_data, task_id=None) # This would just log metadata if not a duplicate.
-                        # The current add_task logic in celery_manager might create an error task for duplicates,
-                        # so we might not need to do anything special here for duplicates apart from not incrementing count.
+                        # If task_id_or_none is None, it was a duplicate. Celery manager handles logging.
 
                     except Exception as e:
-                        logger.error(f"Artist Watch Manager: Failed to queue/record download for new album {album_id} ('{album_name}') from artist '{artist_name}': {e}", exc_info=True)
+                        logger.error(f"Artist Watch Manager: Failed to queue download for new album {album_id} ('{album_name}') from artist '{artist_name}': {e}", exc_info=True)
                 else:
                     logger.info(f"Artist Watch Manager: Album '{album_name}' ({album_id}) by '{artist_name}' already known in DB (ID found in db_album_ids). Skipping queue.")
                     # Optionally, update its entry (e.g. last_seen, or if details changed), but for now, we only queue new ones.
