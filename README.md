@@ -49,13 +49,9 @@ Music downloader which combines the best of two worlds: Spotify's catalog and De
 mkdir spotizerr && cd spotizerr
 ```
 
-2. Copy the `.env` file from this repo and update all variables (e.g. Redis credentials, PUID/PGID, UMASK).
+2. Setup a `.env` file following the `.env.example` file from this repo and update all variables (e.g. Redis credentials, PUID/PGID, UMASK).
 3. Copy `docker-compose.yml` from this repo.
-4. Create required directories:
-```bash
-mkdir -p data/creds data/config data/watch data/history downloads logs/tasks .cache
-```
-5. Launch containers:
+4. Launch containers:
 ```bash
 docker compose up -d
 ```
@@ -146,7 +142,7 @@ First create a Spotify credentials file using the 3rd-party `librespot-auth` too
 This file has the following format:
 
 ```
-{"username": "string" "auth_type": 1 "auth_data": "string"}
+{"username": "long text" "auth_type": 1 "auth_data": "even longer text"}
 ```
 
 The important ones are the "username" and "auth_data" parameters, these match the "username" and "credentials" sections respectively when adding/editing spotify credentials in Spotizerr.
@@ -235,23 +231,13 @@ Copy that value and paste it into the correspondant setting in Spotizerr
    - For deezer: MP3 128k, MP3 320k (sometimes premium, it varies) and FLAC (premium only)
 
 - **Customizable formatting**:
-  - Track number padding (01. Track or 1. Track)
+   - Track number padding (01. Track or 1. Track)
   - Adjust retry parameters (max attempts, delay, delay increase)
 
-### Environment Variables
-
-Define your variables in the `.env` file in the project root:
-```dotenv
-REDIS_HOST=redis             # Redis host name
-REDIS_PORT=6379              # Redis port number
-REDIS_DB=0                   # Redis DB index
-REDIS_PASSWORD=CHANGE_ME     # Redis AUTH password
-EXPLICIT_FILTER=false        # Filter explicit content
-PUID=1000                    # Container user ID
-PGID=1000                    # Container group ID
-UMASK=0022                   # Default file permission mask
-```
-
+- **Watching artits/playlists**
+   - Start watching a spotify playlist and its tracks will be downloaded dynamically as it updates.
+   - Start watching a spotify artist and their albums will be automatically downloaded, never miss a release!
+   
 ## Troubleshooting
 
 **Common Issues**:
