@@ -37,3 +37,4 @@ logs/spotizerr.log
 static/js
 data
 logs/
+.env

@@ -20,3 +20,7 @@ search_demo.py
 celery_worker.log
 static/js/*
 logs/
+.env.example
+.env
+.venv
+data

@@ -33,8 +33,8 @@ RUN npm install -g typescript
 RUN tsc
 
 # Create necessary directories with proper permissions
-RUN mkdir -p downloads config creds logs && \
-    chmod 777 downloads config creds logs
+RUN mkdir -p downloads data/config data/creds data/watch data/history logs/tasks && \
+    chmod -R 777 downloads data logs
 
 # Make entrypoint script executable
 RUN chmod +x entrypoint.sh
