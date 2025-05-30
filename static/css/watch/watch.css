@@ -343,4 +343,17 @@ body {
 .notification-toast.hide {
   opacity: 0;
   transform: translateY(100%); /* Slide down for exit, or could keep translateX if preferred */
+}
+
+@keyframes spin-counter-clockwise {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.spin-counter-clockwise {
+  animation: spin-counter-clockwise 1s linear infinite;
 } 

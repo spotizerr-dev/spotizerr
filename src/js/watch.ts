@@ -535,7 +535,7 @@ function showEmptyState(show: boolean) {
 async function unwatchItem(itemId: string, itemType: 'artist' | 'playlist', buttonElement: HTMLButtonElement, cardElement: HTMLElement) {
   const originalButtonContent = buttonElement.innerHTML;
   buttonElement.disabled = true;
-  buttonElement.innerHTML = '<img src="/static/images/loader-small.svg" alt="Unwatching...">'; // Assuming a small loader icon
+  buttonElement.innerHTML = '<img src="/static/images/refresh.svg" class="spin-counter-clockwise" alt="Unwatching...">'; // Assuming a small loader icon
 
   const endpoint = `/api/${itemType}/watch/${itemId}`;
 
