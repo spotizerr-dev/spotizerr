@@ -167,7 +167,7 @@ In order for searching to work, you need to set up your own Spotify Developer ap
 4. Fill in:
    - App name (e.g., "My Spotizerr App")
    - App description
-   - Redirect URI: `http://localhost:7171/callback` (or your custom domain if exposed)
+   - Redirect URI: `http://127.0.0.1:7171/callback` (or your custom domain if exposed)
    - Check the Developer Terms agreement box
 5. Click "Create"
 6. On your app page, note your "Client ID" 
@@ -250,7 +250,6 @@ EXPLICIT_FILTER=false        # Filter explicit content
 PUID=1000                    # Container user ID
 PGID=1000                    # Container group ID
 UMASK=0022                   # Default file permission mask
-SPOTIPY_CACHE_PATH=/app/cache/.cache  # Spotify token cache path
 ```
 
 ## Troubleshooting
