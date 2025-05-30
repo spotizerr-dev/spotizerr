@@ -20,10 +20,10 @@ from routes.utils.watch.db import (
     update_artist_metadata_after_check    # Renamed from update_artist_metadata
 )
 from routes.utils.get_info import get_spotify_info # To fetch playlist, track, artist, and album details
-from routes.utils.celery_queue_manager import download_queue_manager, get_config_params
+from routes.utils.celery_queue_manager import download_queue_manager
 
 logger = logging.getLogger(__name__)
-CONFIG_PATH = Path('./data/config/watch.json')
+CONFIG_FILE_PATH = Path('./data/config/watch.json')
 STOP_EVENT = threading.Event()
 
 DEFAULT_WATCH_CONFIG = {
@@ -36,24 +36,37 @@ DEFAULT_WATCH_CONFIG = {
 }
 
 def get_watch_config():
-    """Loads the watch configuration from watch.json."""
+    """Loads the watch configuration from watch.json.
+    Creates the file with defaults if it doesn't exist.
+    Ensures all default keys are present in the loaded config.
+    """
     try:
-        if CONFIG_PATH.exists():
-            with open(CONFIG_PATH, 'r') as f:
-                config = json.load(f)
-                # Ensure all default keys are present
-                for key, value in DEFAULT_WATCH_CONFIG.items():
-                    config.setdefault(key, value)
-                return config
-        else:
-            # Create a default config if it doesn't exist
-            with open(CONFIG_PATH, 'w') as f:
+        # Ensure ./data/config directory exists
+        CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        if not CONFIG_FILE_PATH.exists():
+            logger.info(f"{CONFIG_FILE_PATH} not found. Creating with default watch config.")
+            with open(CONFIG_FILE_PATH, 'w') as f:
                 json.dump(DEFAULT_WATCH_CONFIG, f, indent=2)
-            logger.info(f"Created default watch config at {CONFIG_PATH}")
-            return DEFAULT_WATCH_CONFIG
+            return DEFAULT_WATCH_CONFIG.copy()
+
+        with open(CONFIG_FILE_PATH, 'r') as f:
+            config = json.load(f)
+        
+        updated = False
+        for key, value in DEFAULT_WATCH_CONFIG.items():
+            if key not in config:
+                config[key] = value
+                updated = True
+        
+        if updated:
+            logger.info(f"Watch configuration at {CONFIG_FILE_PATH} was missing some default keys. Updated with defaults.")
+            with open(CONFIG_FILE_PATH, 'w') as f:
+                json.dump(config, f, indent=2)
+        return config
     except Exception as e:
-        logger.error(f"Error loading watch config: {e}", exc_info=True)
-        return DEFAULT_WATCH_CONFIG # Fallback
+        logger.error(f"Error loading or creating watch config at {CONFIG_FILE_PATH}: {e}", exc_info=True)
+        return DEFAULT_WATCH_CONFIG.copy() # Fallback
 
 def construct_spotify_url(item_id, item_type="track"):
     return f"https://open.spotify.com/{item_type}/{item_id}"

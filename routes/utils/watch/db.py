@@ -11,8 +11,8 @@ DB_DIR = Path('./data/watch')
 PLAYLISTS_DB_PATH = DB_DIR / 'playlists.db'
 ARTISTS_DB_PATH = DB_DIR / 'artists.db'
 
-# Config path remains the same
-CONFIG_PATH = Path('./data/config/watch.json')
+# Config path for watch.json is managed in routes.utils.watch.manager now
+# CONFIG_PATH = Path('./data/config/watch.json') # Removed
 
 def _get_playlists_db_connection():
     DB_DIR.mkdir(parents=True, exist_ok=True)
