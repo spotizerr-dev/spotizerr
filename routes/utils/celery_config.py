@@ -22,86 +22,71 @@ REDIS_BACKEND = os.getenv('REDIS_BACKEND', REDIS_URL)
 logger.info(f"Redis configuration: REDIS_URL={REDIS_URL}, REDIS_BACKEND={REDIS_BACKEND}")
 
 # Config path
-CONFIG_PATH = './data/config/main.json'
+CONFIG_FILE_PATH = Path('./data/config/main.json')
+
+DEFAULT_MAIN_CONFIG = {
+    'service': 'spotify',
+    'spotify': '',
+    'deezer': '',
+    'fallback': False,
+    'spotifyQuality': 'NORMAL',
+    'deezerQuality': 'MP3_128',
+    'realTime': False,
+    'customDirFormat': '%ar_album%/%album%',
+    'customTrackFormat': '%tracknum%. %music%',
+    'tracknum_padding': True,
+    'maxConcurrentDownloads': 3,
+    'maxRetries': 3,
+    'retryDelaySeconds': 5,
+    'retry_delay_increase': 5
+}
 
 def get_config_params():
     """
     Get configuration parameters from the config file.
+    Creates the file with defaults if it doesn't exist.
+    Ensures all default keys are present in the loaded config.
     
     Returns:
         dict: A dictionary containing configuration parameters
     """
     try:
-        if not Path(CONFIG_PATH).exists():
-            return {
-                'service': 'spotify',
-                'spotify': '',
-                'deezer': '',
-                'fallback': False,
-                'spotifyQuality': 'NORMAL',
-                'deezerQuality': 'MP3_128',
-                'realTime': False,
-                'customDirFormat': '%ar_album%/%album%',
-                'customTrackFormat': '%tracknum%. %music%',
-                'tracknum_padding': True,
-                'maxConcurrentDownloads': 3,
-                'maxRetries': 3,
-                'retryDelaySeconds': 5,
-                'retry_delay_increase': 5
-            }
+        # Ensure ./data/config directory exists
+        CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+        if not CONFIG_FILE_PATH.exists():
+            logger.info(f"{CONFIG_FILE_PATH} not found. Creating with default values.")
+            with open(CONFIG_FILE_PATH, 'w') as f:
+                json.dump(DEFAULT_MAIN_CONFIG, f, indent=4)
+            return DEFAULT_MAIN_CONFIG.copy() # Return a copy of defaults
             
-        with open(CONFIG_PATH, 'r') as f:
+        with open(CONFIG_FILE_PATH, 'r') as f:
             config = json.load(f)
             
-        # Set defaults for missing values
-        defaults = {
-            'service': 'spotify',
-            'spotify': '',
-            'deezer': '',
-            'fallback': False,
-            'spotifyQuality': 'NORMAL',
-            'deezerQuality': 'MP3_128',
-            'realTime': False,
-            'customDirFormat': '%ar_album%/%album%',
-            'customTrackFormat': '%tracknum%. %music%',
-            'tracknum_padding': True,
-            'maxConcurrentDownloads': 3,
-            'maxRetries': 3,
-            'retryDelaySeconds': 5,
-            'retry_delay_increase': 5
-        }
-        
-        for key, value in defaults.items():
+        # Ensure all default keys are present in the loaded config
+        updated = False
+        for key, value in DEFAULT_MAIN_CONFIG.items():
             if key not in config:
                 config[key] = value
+                updated = True
+        
+        if updated:
+            logger.info(f"Configuration at {CONFIG_FILE_PATH} was missing some default keys. Updated with defaults.")
+            with open(CONFIG_FILE_PATH, 'w') as f:
+                json.dump(config, f, indent=4)
                 
         return config
     except Exception as e:
-        logger.error(f"Error reading config: {e}")
-        # Return defaults if config read fails
-        return {
-            'service': 'spotify',
-            'spotify': '',
-            'deezer': '',
-            'fallback': False,
-            'spotifyQuality': 'NORMAL',
-            'deezerQuality': 'MP3_128',
-            'realTime': False,
-            'customDirFormat': '%ar_album%/%album%',
-            'customTrackFormat': '%tracknum%. %music%',
-            'tracknum_padding': True,
-            'maxConcurrentDownloads': 3,
-            'maxRetries': 3,
-            'retryDelaySeconds': 5,
-            'retry_delay_increase': 5
-        }
+        logger.error(f"Error reading or creating config at {CONFIG_FILE_PATH}: {e}", exc_info=True)
+        # Return defaults if config read/create fails
+        return DEFAULT_MAIN_CONFIG.copy()
 
 # Load configuration values we need for Celery
-config = get_config_params()
-MAX_CONCURRENT_DL = config.get('maxConcurrentDownloads', 3)
-MAX_RETRIES = config.get('maxRetries', 3)
-RETRY_DELAY = config.get('retryDelaySeconds', 5)
-RETRY_DELAY_INCREASE = config.get('retry_delay_increase', 5)
+config_params_values = get_config_params() # Renamed to avoid conflict with module name
+MAX_CONCURRENT_DL = config_params_values.get('maxConcurrentDownloads', 3)
+MAX_RETRIES = config_params_values.get('maxRetries', 3)
+RETRY_DELAY = config_params_values.get('retryDelaySeconds', 5)
+RETRY_DELAY_INCREASE = config_params_values.get('retry_delay_increase', 5)
 
 # Define task queues
 task_queues = {

@@ -52,7 +52,7 @@ else
 
         # Ensure proper permissions for all app directories
         echo "Setting permissions for /app directories..."
-        chown -R "${USER_NAME}:${GROUP_NAME}" /app/downloads /app/config /app/creds /app/logs /app/cache || true
+        chown -R "${USER_NAME}:${GROUP_NAME}" /app/downloads /app/data /app/logs || true
         # Ensure Spotipy cache file exists and is writable
         touch /app/.cache || true
         chown "${USER_NAME}:${GROUP_NAME}" /app/.cache || true
