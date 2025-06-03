@@ -40,6 +40,11 @@ jobs:
             # Keep dev tag for main/master branch
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
+      - name: Set version in config.html
+        run: |
+          VERSION=$(echo "${{ steps.meta.outputs.version }}" | sed 's/^v//')
+          sed -i "s|Set on build|Version: $VERSION|g" static/html/config.html
+
       # Build and push Docker image with multiarch support
       - name: Build and push
         uses: docker/build-push-action@v4
