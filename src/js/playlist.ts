@@ -61,6 +61,12 @@ interface WatchedPlaylistStatus {
   playlist_data?: Playlist; // Optional, present if watched
 }
 
+// Added: Interface for global watch config
+interface GlobalWatchConfig {
+  enabled: boolean;
+  [key: string]: any;
+}
+
 interface DownloadQueueItem {
     name: string;
     artist?: string; // Can be a simple string for the queue
@@ -69,7 +75,22 @@ interface DownloadQueueItem {
     // Add any other properties your item might have, compatible with QueueItem
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Added: Helper function to fetch global watch config
+async function getGlobalWatchConfig(): Promise<GlobalWatchConfig> {
+  try {
+    const response = await fetch('/api/config/watch');
+    if (!response.ok) {
+      console.error('Failed to fetch global watch config, assuming disabled.');
+      return { enabled: false }; // Default to disabled on error
+    }
+    return await response.json() as GlobalWatchConfig;
+  } catch (error) {
+    console.error('Error fetching global watch config:', error);
+    return { enabled: false }; // Default to disabled on error
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   // Parse playlist ID from URL
   const pathSegments = window.location.pathname.split('/');
   const playlistId = pathSegments[pathSegments.indexOf('playlist') + 1];
@@ -79,20 +100,40 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  const globalWatchConfig = await getGlobalWatchConfig(); // Fetch global config
+  const isGlobalWatchActuallyEnabled = globalWatchConfig.enabled;
+
   // Fetch playlist info directly
   fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json() as Promise<Playlist>;
     })
-    .then(data => renderPlaylist(data))
+    .then(data => renderPlaylist(data, isGlobalWatchActuallyEnabled))
     .catch(error => {
       console.error('Error:', error);
       showError('Failed to load playlist.');
     });
 
-  // Fetch initial watch status
-  fetchWatchStatus(playlistId);
+  // Fetch initial watch status for the specific playlist
+  if (isGlobalWatchActuallyEnabled) {
+    fetchWatchStatus(playlistId); // This function then calls updateWatchButtons
+  } else {
+    // If global watch is disabled, ensure watch-related buttons are hidden/disabled
+    const watchBtn = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
+    const syncBtn = document.getElementById('syncPlaylistBtn') as HTMLButtonElement;
+    if (watchBtn) {
+      watchBtn.classList.add('hidden');
+      watchBtn.disabled = true;
+      // Remove any existing event listener to prevent actions
+      watchBtn.onclick = null;
+    }
+    if (syncBtn) {
+      syncBtn.classList.add('hidden');
+      syncBtn.disabled = true;
+      syncBtn.onclick = null;
+    }
+  }
 
   const queueIcon = document.getElementById('queueIcon');
   if (queueIcon) {
@@ -100,12 +141,48 @@ document.addEventListener('DOMContentLoaded', () => {
       downloadQueue.toggleVisibility();
     });
   }
+
+  // Attempt to set initial watchlist button visibility from cache
+  const watchlistButton = document.getElementById('watchlistButton') as HTMLAnchorElement | null;
+  if (watchlistButton) {
+      const cachedWatchEnabled = localStorage.getItem('spotizerr_watch_enabled_cached');
+      if (cachedWatchEnabled === 'true') {
+          watchlistButton.classList.remove('hidden');
+      }
+  }
+
+  // Fetch watch config to determine if watchlist button should be visible
+  async function updateWatchlistButtonVisibility() {
+    if (watchlistButton) {
+        try {
+            const response = await fetch('/api/config/watch');
+            if (response.ok) {
+                const watchConfig = await response.json();
+                localStorage.setItem('spotizerr_watch_enabled_cached', watchConfig.enabled ? 'true' : 'false');
+                if (watchConfig && watchConfig.enabled === false) {
+                    watchlistButton.classList.add('hidden');
+                } else {
+                    watchlistButton.classList.remove('hidden'); // Ensure it's shown if enabled
+                }
+            } else {
+                console.error('Failed to fetch watch config for playlist page, defaulting to hidden');
+                // Don't update cache on error
+                watchlistButton.classList.add('hidden'); // Hide if config fetch fails
+            }
+        } catch (error) {
+            console.error('Error fetching watch config for playlist page:', error);
+            // Don't update cache on error
+            watchlistButton.classList.add('hidden'); // Hide on error
+        }
+    }
+  }
+  updateWatchlistButtonVisibility();
 });
 
 /**
  * Renders playlist header and tracks.
  */
-function renderPlaylist(playlist: Playlist) {
+function renderPlaylist(playlist: Playlist, isGlobalWatchEnabled: boolean) {
   // Hide loading and error messages
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.classList.add('hidden');
@@ -250,7 +327,11 @@ function renderPlaylist(playlist: Playlist) {
 
   // Determine if the playlist is being watched to show/hide management buttons
   const watchPlaylistButton = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
-  const isPlaylistWatched = watchPlaylistButton && watchPlaylistButton.classList.contains('watching');
+  // isIndividuallyWatched checks if the button is visible and has the 'watching' class.
+  // This implies global watch is enabled if the button is even interactable for individual status.
+  const isIndividuallyWatched = watchPlaylistButton && 
+                                watchPlaylistButton.classList.contains('watching') && 
+                                !watchPlaylistButton.classList.contains('hidden');
 
   if (playlist.tracks?.items) {
     playlist.tracks.items.forEach((item: PlaylistItem, index: number) => {
@@ -314,7 +395,7 @@ function renderPlaylist(playlist: Playlist) {
         actionsContainer.innerHTML += downloadBtnHTML;
       }
 
-      if (isPlaylistWatched) {
+      if (isGlobalWatchEnabled && isIndividuallyWatched) { // Check global and individual watch status
         // Initial state is set based on track.is_locally_known
         const isKnown = track.is_locally_known === true; // Ensure boolean check, default to false if undefined
         const initialStatus = isKnown ? "known" : "missing";
@@ -346,7 +427,7 @@ function renderPlaylist(playlist: Playlist) {
   if (tracksContainerEl) tracksContainerEl.classList.remove('hidden');
 
   // Attach download listeners to newly rendered download buttons
-  attachTrackActionListeners();
+  attachTrackActionListeners(isGlobalWatchEnabled);
 }
 
 /**
@@ -374,7 +455,7 @@ function showError(message: string) {
 /**
  * Attaches event listeners to all individual track action buttons (download, mark known, mark missing).
  */
-function attachTrackActionListeners() {
+function attachTrackActionListeners(isGlobalWatchEnabled: boolean) {
   document.querySelectorAll('.track-download-btn').forEach((btn) => {
     btn.addEventListener('click', (e: Event) => {
       e.stopPropagation();
@@ -402,6 +483,11 @@ function attachTrackActionListeners() {
 
       if (!trackId || !playlistId || !img) {
         showError('Missing data for toggling track status');
+        return;
+      }
+
+      if (!isGlobalWatchEnabled) { // Added check
+        showNotification("Watch feature is currently disabled globally. Cannot change track status.");
         return;
       }
 
@@ -656,6 +742,18 @@ function updateWatchButtons(isWatched: boolean, playlistId: string) {
 async function watchPlaylist(playlistId: string) {
   const watchBtn = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
   if (watchBtn) watchBtn.disabled = true;
+  // This function should only be callable if global watch is enabled.
+  // We can add a check here or rely on the UI not presenting the button.
+  // For safety, let's check global config again before proceeding.
+  const globalConfig = await getGlobalWatchConfig();
+  if (!globalConfig.enabled) {
+    showError("Cannot watch playlist, feature is disabled globally.");
+    if (watchBtn) {
+      watchBtn.disabled = false; // Re-enable if it was somehow clicked
+      updateWatchButtons(false, playlistId); // Reset button to non-watching state
+    }
+    return;
+  }
 
   try {
     const response = await fetch(`/api/playlist/watch/${playlistId}`, { method: 'PUT' });
@@ -668,7 +766,7 @@ async function watchPlaylist(playlistId: string) {
     const newPlaylistInfoResponse = await fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`);
     if (!newPlaylistInfoResponse.ok) throw new Error('Failed to re-fetch playlist info after watch.');
     const newPlaylistData = await newPlaylistInfoResponse.json() as Playlist;
-    renderPlaylist(newPlaylistData);
+    renderPlaylist(newPlaylistData, globalConfig.enabled); // Pass current global enabled state
 
     showNotification(`Playlist added to watchlist. Tracks are being updated.`);
   } catch (error: any) {
@@ -683,6 +781,17 @@ async function watchPlaylist(playlistId: string) {
 async function unwatchPlaylist(playlistId: string) {
   const watchBtn = document.getElementById('watchPlaylistBtn') as HTMLButtonElement;
   if (watchBtn) watchBtn.disabled = true;
+  // Similarly, check global config
+  const globalConfig = await getGlobalWatchConfig();
+  if (!globalConfig.enabled) {
+    // This case should be rare if UI behaves, but good for robustness
+    showError("Cannot unwatch playlist, feature is disabled globally.");
+    if (watchBtn) {
+      watchBtn.disabled = false;
+      // updateWatchButtons(true, playlistId); // Or keep as is if it was 'watching'
+    }
+    return;
+  }
 
   try {
     const response = await fetch(`/api/playlist/watch/${playlistId}`, { method: 'DELETE' });
@@ -695,7 +804,7 @@ async function unwatchPlaylist(playlistId: string) {
     const newPlaylistInfoResponse = await fetch(`/api/playlist/info?id=${encodeURIComponent(playlistId)}`);
     if (!newPlaylistInfoResponse.ok) throw new Error('Failed to re-fetch playlist info after unwatch.');
     const newPlaylistData = await newPlaylistInfoResponse.json() as Playlist;
-    renderPlaylist(newPlaylistData);
+    renderPlaylist(newPlaylistData, globalConfig.enabled); // Pass current global enabled state
 
     showNotification('Playlist removed from watchlist. Track statuses updated.');
   } catch (error: any) {
@@ -710,6 +819,12 @@ async function unwatchPlaylist(playlistId: string) {
 async function syncPlaylist(playlistId: string) {
   const syncBtn = document.getElementById('syncPlaylistBtn') as HTMLButtonElement;
   let originalButtonContent = ''; // Define outside
+  // Check global config
+  const globalConfig = await getGlobalWatchConfig();
+  if (!globalConfig.enabled) {
+    showError("Cannot sync playlist, feature is disabled globally.");
+    return;
+  }
 
   if (syncBtn) {
     syncBtn.disabled = true;

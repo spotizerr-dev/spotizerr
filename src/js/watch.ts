@@ -133,12 +133,36 @@ interface WatchedPlaylistOriginal {
 
 type WatchedItem = (WatchedArtistOriginal & { itemType: 'artist' }) | (WatchedPlaylistOriginal & { itemType: 'playlist' });
 
-document.addEventListener('DOMContentLoaded', function() {
+// Added: Interface for global watch config
+interface GlobalWatchConfig {
+  enabled: boolean;
+  [key: string]: any; // Allow other properties
+}
+
+// Added: Helper function to fetch global watch config
+async function getGlobalWatchConfig(): Promise<GlobalWatchConfig> {
+  try {
+    const response = await fetch('/api/config/watch');
+    if (!response.ok) {
+      console.error('Failed to fetch global watch config, assuming disabled.');
+      return { enabled: false }; // Default to disabled on error
+    }
+    return await response.json() as GlobalWatchConfig;
+  } catch (error) {
+    console.error('Error fetching global watch config:', error);
+    return { enabled: false }; // Default to disabled on error
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async function() {
   const watchedItemsContainer = document.getElementById('watchedItemsContainer');
   const loadingIndicator = document.getElementById('loadingWatchedItems');
   const emptyStateIndicator = document.getElementById('emptyWatchedItems');
   const queueIcon = document.getElementById('queueIcon');
   const checkAllWatchedBtn = document.getElementById('checkAllWatchedBtn') as HTMLButtonElement | null;
+
+  // Fetch global watch config first
+  const globalWatchConfig = await getGlobalWatchConfig();
 
   if (queueIcon) {
     queueIcon.addEventListener('click', () => {
@@ -214,8 +238,28 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Initial load
-  loadWatchedItems();
+  // Initial load is now conditional
+  if (globalWatchConfig.enabled) {
+    if (checkAllWatchedBtn) checkAllWatchedBtn.classList.remove('hidden');
+    loadWatchedItems();
+  } else {
+    // Watch feature is disabled globally
+    showLoading(false);
+    showEmptyState(false);
+    if (checkAllWatchedBtn) checkAllWatchedBtn.classList.add('hidden'); // Hide the button
+
+    if (watchedItemsContainer) {
+      watchedItemsContainer.innerHTML = `
+        <div class="empty-state-container">
+          <img src="/static/images/eye-crossed.svg" alt="Watch Disabled" class="empty-state-icon">
+          <p class="empty-state-message">The Watchlist feature is currently disabled in the application settings.</p>
+          <p class="empty-state-submessage">Please enable it in <a href="/settings" class="settings-link">Settings</a> to use this page.</p>
+        </div>
+      `;
+    }
+    // Ensure the main loading indicator is also hidden if it was shown by default
+    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+  }
 }); 
 
 const MAX_NOTIFICATIONS = 3;

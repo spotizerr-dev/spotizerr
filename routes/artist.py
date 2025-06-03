@@ -22,7 +22,7 @@ from routes.utils.watch.db import (
     remove_specific_albums_from_artist_table,
     is_album_in_artist_db
 )
-from routes.utils.watch.manager import check_watched_artists
+from routes.utils.watch.manager import check_watched_artists, get_watch_config
 from routes.utils.get_info import get_spotify_info
 
 artist_bp = Blueprint('artist', __name__, url_prefix='/api/artist')
@@ -159,6 +159,10 @@ def get_artist_info():
 @artist_bp.route('/watch/<string:artist_spotify_id>', methods=['PUT'])
 def add_artist_to_watchlist(artist_spotify_id):
     """Adds an artist to the watchlist."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally."}), 403
+
     logger.info(f"Attempting to add artist {artist_spotify_id} to watchlist.")
     try:
         if get_watched_artist(artist_spotify_id):
@@ -224,6 +228,10 @@ def get_artist_watch_status(artist_spotify_id):
 @artist_bp.route('/watch/<string:artist_spotify_id>', methods=['DELETE'])
 def remove_artist_from_watchlist(artist_spotify_id):
     """Removes an artist from the watchlist."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally."}), 403
+
     logger.info(f"Attempting to remove artist {artist_spotify_id} from watchlist.")
     try:
         if not get_watched_artist(artist_spotify_id):
@@ -249,6 +257,10 @@ def list_watched_artists_endpoint():
 @artist_bp.route('/watch/trigger_check', methods=['POST'])
 def trigger_artist_check_endpoint():
     """Manually triggers the artist checking mechanism for all watched artists."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot trigger check."}), 403
+
     logger.info("Manual trigger for artist check received for all artists.")
     try:
         thread = threading.Thread(target=check_watched_artists, args=(None,))
@@ -261,6 +273,10 @@ def trigger_artist_check_endpoint():
 @artist_bp.route('/watch/trigger_check/<string:artist_spotify_id>', methods=['POST'])
 def trigger_specific_artist_check_endpoint(artist_spotify_id: str):
     """Manually triggers the artist checking mechanism for a specific artist."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot trigger check."}), 403
+
     logger.info(f"Manual trigger for specific artist check received for ID: {artist_spotify_id}")
     try:
         watched_artist = get_watched_artist(artist_spotify_id)
@@ -279,6 +295,10 @@ def trigger_specific_artist_check_endpoint(artist_spotify_id: str):
 @artist_bp.route('/watch/<string:artist_spotify_id>/albums', methods=['POST'])
 def mark_albums_as_known_for_artist(artist_spotify_id):
     """Fetches details for given album IDs and adds/updates them in the artist's local DB table."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot mark albums."}), 403
+
     logger.info(f"Attempting to mark albums as known for artist {artist_spotify_id}.")
     try:
         album_ids = request.json
@@ -313,6 +333,10 @@ def mark_albums_as_known_for_artist(artist_spotify_id):
 @artist_bp.route('/watch/<string:artist_spotify_id>/albums', methods=['DELETE'])
 def mark_albums_as_missing_locally_for_artist(artist_spotify_id):
     """Removes specified albums from the artist's local DB table."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot mark albums."}), 403
+
     logger.info(f"Attempting to mark albums as missing (delete locally) for artist {artist_spotify_id}.")
     try:
         album_ids = request.json

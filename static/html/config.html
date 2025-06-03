@@ -324,7 +324,7 @@
     <img src="{{ url_for('static', filename='images/arrow-left.svg') }}" alt="Back" />
   </a>
   
-  <a href="/watchlist" class="btn-icon watchlist-icon floating-icon" aria-label="Watchlist" title="Go to Watchlist">
+  <a id="watchlistButton" href="/watchlist" class="btn-icon watchlist-icon floating-icon hidden" aria-label="Watchlist" title="Go to Watchlist">
     <img src="{{ url_for('static', filename='images/binoculars.svg') }}" alt="Watchlist" onerror="handleImageError(this)"/>
   </a>
 
