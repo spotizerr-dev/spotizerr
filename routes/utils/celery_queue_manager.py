@@ -60,7 +60,9 @@ def get_config_params():
             'save_cover': config.get('save_cover', True),
             'maxRetries': config.get('maxRetries', 3),
             'retryDelaySeconds': config.get('retryDelaySeconds', 5),
-            'retry_delay_increase': config.get('retry_delay_increase', 5)
+            'retry_delay_increase': config.get('retry_delay_increase', 5),
+            'convertTo': config.get('convertTo', None),
+            'bitrate': config.get('bitrate', None)
         }
     except Exception as e:
         logger.error(f"Error reading config for parameters: {e}")
@@ -78,7 +80,9 @@ def get_config_params():
             'save_cover': True,
             'maxRetries': 3,
             'retryDelaySeconds': 5,
-            'retry_delay_increase': 5
+            'retry_delay_increase': 5,
+            'convertTo': None,  # Default for conversion
+            'bitrate': None  # Default for bitrate
         }
 
 class CeleryDownloadQueueManager:
@@ -201,6 +205,8 @@ class CeleryDownloadQueueManager:
                 "custom_track_format": original_request.get("custom_track_format", config_params['customTrackFormat']),
                 "pad_tracks": self._parse_bool_param(original_request.get("tracknum_padding"), config_params['tracknum_padding']),
                 "save_cover": self._parse_bool_param(original_request.get("save_cover"), config_params['save_cover']),
+                "convertTo": original_request.get("convertTo", config_params.get('convertTo')),
+                "bitrate": original_request.get("bitrate", config_params.get('bitrate')),
                 "retry_count": 0,
                 "original_request": original_request,
                 "created_at": time.time()

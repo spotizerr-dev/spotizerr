@@ -1087,6 +1087,8 @@ def download_track(self, **task_data):
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
         save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
+        convert_to = task_data.get("convertTo", config_params.get("convertTo"))
+        bitrate = task_data.get("bitrate", config_params.get("bitrate"))
         
         # Execute the download - service is now determined from URL
         download_track_func(
@@ -1100,7 +1102,9 @@ def download_track(self, **task_data):
             custom_track_format=custom_track_format,
             pad_tracks=pad_tracks,
             save_cover=save_cover,
-            progress_callback=self.progress_callback
+            progress_callback=self.progress_callback,
+            convert_to=convert_to,
+            bitrate=bitrate
         )
         
         return {"status": "success", "message": "Track download completed"}
@@ -1156,6 +1160,8 @@ def download_album(self, **task_data):
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
         save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
+        convert_to = task_data.get("convertTo", config_params.get("convertTo"))
+        bitrate = task_data.get("bitrate", config_params.get("bitrate"))
         
         # Execute the download - service is now determined from URL
         download_album_func(
@@ -1169,7 +1175,9 @@ def download_album(self, **task_data):
             custom_track_format=custom_track_format,
             pad_tracks=pad_tracks,
             save_cover=save_cover,
-            progress_callback=self.progress_callback
+            progress_callback=self.progress_callback,
+            convert_to=convert_to,
+            bitrate=bitrate
         )
         
         return {"status": "success", "message": "Album download completed"}
@@ -1225,6 +1233,8 @@ def download_playlist(self, **task_data):
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
         save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
+        convert_to = task_data.get("convertTo", config_params.get("convertTo"))
+        bitrate = task_data.get("bitrate", config_params.get("bitrate"))
         
         # Get retry parameters
         initial_retry_delay = task_data.get("initial_retry_delay", config_params.get("retryDelaySeconds", 5))
@@ -1247,6 +1257,8 @@ def download_playlist(self, **task_data):
             retry_delay_increase=retry_delay_increase,
             max_retries=max_retries,
             progress_callback=self.progress_callback,
+            convert_to=convert_to,
+            bitrate=bitrate
         )
         
         return {"status": "success", "message": "Playlist download completed"}
