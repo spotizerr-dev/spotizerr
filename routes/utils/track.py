@@ -15,6 +15,7 @@ def download_track(
     custom_dir_format="%ar_album%/%album%/%copyright%",
     custom_track_format="%tracknum%. %music% - %artist%",
     pad_tracks=True,
+    save_cover=True,
     initial_retry_delay=5,
     retry_delay_increase=5,
     max_retries=3,
@@ -108,6 +109,7 @@ def download_track(
                         not_interface=False,
                         custom_dir_format=custom_dir_format,
                         custom_track_format=custom_track_format,
+                        save_cover=save_cover,
                         initial_retry_delay=initial_retry_delay,
                         retry_delay_increase=retry_delay_increase,
                         max_retries=max_retries
@@ -143,6 +145,7 @@ def download_track(
                             custom_dir_format=custom_dir_format,
                             custom_track_format=custom_track_format,
                             pad_tracks=pad_tracks,
+                            save_cover=save_cover,
                             initial_retry_delay=initial_retry_delay,
                             retry_delay_increase=retry_delay_increase,
                             max_retries=max_retries
@@ -176,6 +179,7 @@ def download_track(
                     custom_dir_format=custom_dir_format,
                     custom_track_format=custom_track_format,
                     pad_tracks=pad_tracks,
+                    save_cover=save_cover,
                     initial_retry_delay=initial_retry_delay,
                     retry_delay_increase=retry_delay_increase,
                     max_retries=max_retries
@@ -204,6 +208,7 @@ def download_track(
                 custom_dir_format=custom_dir_format,
                 custom_track_format=custom_track_format,
                 pad_tracks=pad_tracks,
+                save_cover=save_cover,
                 initial_retry_delay=initial_retry_delay,
                 retry_delay_increase=retry_delay_increase,
                 max_retries=max_retries

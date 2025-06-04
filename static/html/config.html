@@ -201,6 +201,7 @@
                 <option value="%mood%">%mood% - Mood information</option>
                 <option value="%rating%">%rating% - Track rating</option>
                 <option value="%website%">%website% - Website information</option>
+                <option value="%quality%">%quality% - Quality of the track</option>
               </optgroup>
               <optgroup label="ReplayGain">
                 <option value="%replaygain_album_gain%">%replaygain_album_gain% - Album gain</option>
@@ -223,6 +224,17 @@
           </label>
           <div class="setting-description">
             When enabled: "01. Track" - When disabled: "1. Track"
+          </div>
+        </div>
+        <!-- New Save Cover Art Toggle -->
+        <div class="config-item">
+          <label>Save Cover Art:</label>
+          <label class="switch">
+            <input type="checkbox" id="saveCoverToggle" />
+            <span class="slider"></span>
+          </label>
+          <div class="setting-description">
+            When enabled, cover art will saved as cover.jpg in the same directory as the track.
           </div>
         </div>
       </div>

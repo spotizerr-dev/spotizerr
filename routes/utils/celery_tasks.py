@@ -1086,6 +1086,7 @@ def download_track(self, **task_data):
         custom_dir_format = task_data.get("custom_dir_format", config_params.get("customDirFormat", "%ar_album%/%album%"))
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
+        save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
         
         # Execute the download - service is now determined from URL
         download_track_func(
@@ -1098,6 +1099,7 @@ def download_track(self, **task_data):
             custom_dir_format=custom_dir_format,
             custom_track_format=custom_track_format,
             pad_tracks=pad_tracks,
+            save_cover=save_cover,
             progress_callback=self.progress_callback
         )
         
@@ -1153,6 +1155,7 @@ def download_album(self, **task_data):
         custom_dir_format = task_data.get("custom_dir_format", config_params.get("customDirFormat", "%ar_album%/%album%"))
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
+        save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
         
         # Execute the download - service is now determined from URL
         download_album_func(
@@ -1165,6 +1168,7 @@ def download_album(self, **task_data):
             custom_dir_format=custom_dir_format,
             custom_track_format=custom_track_format,
             pad_tracks=pad_tracks,
+            save_cover=save_cover,
             progress_callback=self.progress_callback
         )
         
@@ -1220,6 +1224,7 @@ def download_playlist(self, **task_data):
         custom_dir_format = task_data.get("custom_dir_format", config_params.get("customDirFormat", "%ar_album%/%album%"))
         custom_track_format = task_data.get("custom_track_format", config_params.get("customTrackFormat", "%tracknum%. %music%"))
         pad_tracks = task_data.get("pad_tracks", config_params.get("tracknum_padding", True))
+        save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
         
         # Get retry parameters
         initial_retry_delay = task_data.get("initial_retry_delay", config_params.get("retryDelaySeconds", 5))
@@ -1237,6 +1242,7 @@ def download_playlist(self, **task_data):
             custom_dir_format=custom_dir_format,
             custom_track_format=custom_track_format,
             pad_tracks=pad_tracks,
+            save_cover=save_cover,
             initial_retry_delay=initial_retry_delay,
             retry_delay_increase=retry_delay_increase,
             max_retries=max_retries,

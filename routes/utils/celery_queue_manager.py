@@ -57,6 +57,7 @@ def get_config_params():
             'customDirFormat': config.get('customDirFormat', '%ar_album%/%album%'),
             'customTrackFormat': config.get('customTrackFormat', '%tracknum%. %music%'),
             'tracknum_padding': config.get('tracknum_padding', True),
+            'save_cover': config.get('save_cover', True),
             'maxRetries': config.get('maxRetries', 3),
             'retryDelaySeconds': config.get('retryDelaySeconds', 5),
             'retry_delay_increase': config.get('retry_delay_increase', 5)
@@ -74,6 +75,7 @@ def get_config_params():
             'customDirFormat': '%ar_album%/%album%',
             'customTrackFormat': '%tracknum%. %music%',
             'tracknum_padding': True,
+            'save_cover': True,
             'maxRetries': 3,
             'retryDelaySeconds': 5,
             'retry_delay_increase': 5
@@ -198,6 +200,7 @@ class CeleryDownloadQueueManager:
                 "custom_dir_format": original_request.get("custom_dir_format", config_params['customDirFormat']),
                 "custom_track_format": original_request.get("custom_track_format", config_params['customTrackFormat']),
                 "pad_tracks": self._parse_bool_param(original_request.get("tracknum_padding"), config_params['tracknum_padding']),
+                "save_cover": self._parse_bool_param(original_request.get("save_cover"), config_params['save_cover']),
                 "retry_count": 0,
                 "original_request": original_request,
                 "created_at": time.time()
