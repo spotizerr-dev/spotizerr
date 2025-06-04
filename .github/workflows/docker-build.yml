@@ -42,7 +42,9 @@ jobs:
 
       - name: Set version in config.html
         run: |
-          VERSION=$(echo "${{ steps.meta.outputs.version }}" | sed 's/^v//')
+          TAG_VERSION="${{ github.ref_name }}"
+          # Remove 'v' prefix if it exists
+          VERSION="${TAG_VERSION#v}"
           sed -i "s|Set on build|Version: $VERSION|g" static/html/config.html
 
       # Build and push Docker image with multiarch support
