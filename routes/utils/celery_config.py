@@ -39,7 +39,9 @@ DEFAULT_MAIN_CONFIG = {
     'maxConcurrentDownloads': 3,
     'maxRetries': 3,
     'retryDelaySeconds': 5,
-    'retry_delay_increase': 5
+    'retry_delay_increase': 5,
+    'convertTo': None,
+    'bitrate': None
 }
 
 def get_config_params():

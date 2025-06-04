@@ -19,7 +19,9 @@ def download_track(
     initial_retry_delay=5,
     retry_delay_increase=5,
     max_retries=3,
-    progress_callback=None
+    progress_callback=None,
+    convert_to=None,
+    bitrate=None
 ):
     try:
         # Detect URL source (Spotify or Deezer) from URL
@@ -112,7 +114,9 @@ def download_track(
                         save_cover=save_cover,
                         initial_retry_delay=initial_retry_delay,
                         retry_delay_increase=retry_delay_increase,
-                        max_retries=max_retries
+                        max_retries=max_retries,
+                        convert_to=convert_to,
+                        bitrate=bitrate
                     )
                 except Exception as e:
                     deezer_error = e
@@ -148,7 +152,9 @@ def download_track(
                             save_cover=save_cover,
                             initial_retry_delay=initial_retry_delay,
                             retry_delay_increase=retry_delay_increase,
-                            max_retries=max_retries
+                            max_retries=max_retries,
+                            convert_to=convert_to,
+                            bitrate=bitrate
                         )
                     except Exception as e2:
                         # If fallback also fails, raise an error indicating both attempts failed
@@ -182,7 +188,9 @@ def download_track(
                     save_cover=save_cover,
                     initial_retry_delay=initial_retry_delay,
                     retry_delay_increase=retry_delay_increase,
-                    max_retries=max_retries
+                    max_retries=max_retries,
+                    convert_to=convert_to,
+                    bitrate=bitrate
                 )
         # For Deezer URLs: download directly from Deezer
         elif service == 'deezer':
@@ -211,7 +219,9 @@ def download_track(
                 save_cover=save_cover,
                 initial_retry_delay=initial_retry_delay,
                 retry_delay_increase=retry_delay_increase,
-                max_retries=max_retries
+                max_retries=max_retries,
+                convert_to=convert_to,
+                bitrate=bitrate
             )
         else:
             raise ValueError(f"Unsupported service: {service}")

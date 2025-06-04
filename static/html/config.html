@@ -86,6 +86,36 @@
           <label for="maxConcurrentDownloads">Max Concurrent Downloads:</label>
           <input type="number" id="maxConcurrentDownloads" min="1" value="3" class="form-input">
         </div>      
+        
+        <!-- New Conversion Options -->
+        <h2 class="section-title">Conversion Settings</h2>
+        <div class="config-item">
+          <label for="convertToSelect">Convert To Format:</label>
+          <select id="convertToSelect" class="form-select">
+            <option value="">No Conversion</option>
+            <option value="MP3">MP3</option>
+            <option value="AAC">AAC</option>
+            <option value="OGG">OGG</option>
+            <option value="OPUS">OPUS</option>
+            <option value="FLAC">FLAC</option>
+            <option value="WAV">WAV</option>
+            <option value="ALAC">ALAC</option>
+          </select>
+          <div class="setting-description">
+            Select a format to convert downloaded files to. "No Conversion" keeps the original format.
+          </div>
+        </div>
+        <div class="config-item">
+          <label for="bitrateSelect">Bitrate:</label>
+          <select id="bitrateSelect" class="form-select" disabled>
+            <!-- Options will be populated by JavaScript -->
+            <option value="">N/A</option>
+          </select>
+          <div class="setting-description">
+            Select the bitrate for the chosen format. Only applicable for lossy formats.
+          </div>
+        </div>
+
         <!-- New Retry Options -->
         <h2 class="section-title">Retry Options</h2>
         <div class="config-item">

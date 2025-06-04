@@ -41,10 +41,11 @@ document.addEventListener('DOMContentLoaded', () => {
             totalEntries = data.total_count;
             currentPage = Math.floor(offset / limit) + 1;
             updatePagination();
+            updateSortIndicators();
         } catch (error) {
             console.error('Error fetching history:', error);
             if (historyTableBody) {
-                historyTableBody.innerHTML = '<tr><td colspan="7">Error loading history.</td></tr>';
+                historyTableBody.innerHTML = '<tr><td colspan="9">Error loading history.</td></tr>';
             }
         }
     }
@@ -54,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         historyTableBody.innerHTML = ''; // Clear existing rows
         if (!entries || entries.length === 0) {
-            historyTableBody.innerHTML = '<tr><td colspan="7">No history entries found.</td></tr>';
+            historyTableBody.innerHTML = '<tr><td colspan="9">No history entries found.</td></tr>';
             return;
         }
 
@@ -63,6 +64,19 @@ document.addEventListener('DOMContentLoaded', () => {
             row.insertCell().textContent = entry.item_name || 'N/A';
             row.insertCell().textContent = entry.item_artist || 'N/A';
             row.insertCell().textContent = entry.download_type ? entry.download_type.charAt(0).toUpperCase() + entry.download_type.slice(1) : 'N/A';
+            row.insertCell().textContent = entry.service_used || 'N/A';
+            // Construct Quality display string
+            let qualityDisplay = entry.quality_profile || 'N/A';
+            if (entry.convert_to) {
+                qualityDisplay = `${entry.convert_to.toUpperCase()}`;
+                if (entry.bitrate) {
+                    qualityDisplay += ` ${entry.bitrate}k`;
+                }
+                qualityDisplay += ` (${entry.quality_profile || 'Original'})`;
+            } else if (entry.bitrate) { // Case where convert_to might not be set, but bitrate is (e.g. for OGG Vorbis quality settings)
+                 qualityDisplay = `${entry.bitrate}k (${entry.quality_profile || 'Profile'})`;
+            }
+            row.insertCell().textContent = qualityDisplay;
             
             const statusCell = row.insertCell();
             statusCell.textContent = entry.status_final || 'N/A';
@@ -91,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         errorDetailsDiv = document.createElement('div');
                         errorDetailsDiv.className = 'error-details';
                         const newCell = row.insertCell(); // This will append to the end of the row
-                        newCell.colSpan = 7; // Span across all columns
+                        newCell.colSpan = 9; // Span across all columns
                         newCell.appendChild(errorDetailsDiv);
                         // Visually, this new cell will be after the 'Details' button cell.
                         // To make it appear as part of the status cell or below the row, more complex DOM manipulation or CSS would be needed.
@@ -122,6 +136,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         `Album: ${entry.item_album || 'N/A'}\n` +
                         `URL: ${entry.item_url}\n` +
                         `Spotify ID: ${entry.spotify_id || 'N/A'}\n` +
+                        `Service Used: ${entry.service_used || 'N/A'}\n` +
+                        `Quality Profile (Original): ${entry.quality_profile || 'N/A'}\n` +
+                        `ConvertTo: ${entry.convert_to || 'N/A'}\n` +
+                        `Bitrate: ${entry.bitrate ? entry.bitrate + 'k' : 'N/A'}\n` +
                         `Status: ${entry.status_final}\n` +
                         `Error: ${entry.error_message || 'None'}\n` +
                         `Added: ${new Date(entry.timestamp_added * 1000).toLocaleString()}\n` +
@@ -145,6 +163,16 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchHistory(1);
         });
     });
+
+    function updateSortIndicators() {
+        document.querySelectorAll('th[data-sort]').forEach(headerCell => {
+            const th = headerCell as HTMLElement;
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.sort === currentSortBy) {
+                th.classList.add(currentSortOrder === 'ASC' ? 'sort-asc' : 'sort-desc');
+            }
+        });
+    }
 
     prevButton?.addEventListener('click', () => fetchHistory(currentPage - 1));
     nextButton?.addEventListener('click', () => fetchHistory(currentPage + 1));

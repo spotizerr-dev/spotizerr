@@ -53,6 +53,17 @@ let isEditingSearch = false;
 let activeSpotifyAccount = '';
 let activeDeezerAccount = '';
 
+// Define available formats and their bitrates
+const CONVERSION_FORMATS: Record<string, string[]> = {
+  MP3: ['32k', '64k', '96k', '128k', '192k', '256k', '320k'],
+  AAC: ['32k', '64k', '96k', '128k', '192k', '256k'],
+  OGG: ['64k', '96k', '128k', '192k', '256k', '320k'],
+  OPUS: ['32k', '64k', '96k', '128k', '192k', '256k'],
+  FLAC: [], // No specific bitrates
+  WAV: [],  // No specific bitrates
+  ALAC: []  // No specific bitrates
+};
+
 // Reference to the credentials form card and add button
 let credentialsFormCard: HTMLElement | null = null;
 let showAddAccountFormBtn: HTMLElement | null = null;
@@ -124,6 +135,23 @@ async function loadConfig() {
     const saveCoverToggle = document.getElementById('saveCoverToggle') as HTMLInputElement | null;
     if (saveCoverToggle) saveCoverToggle.checked = savedConfig.save_cover === undefined ? true : !!savedConfig.save_cover;
     
+    // Load conversion settings
+    const convertToSelect = document.getElementById('convertToSelect') as HTMLSelectElement | null;
+    if (convertToSelect) {
+      convertToSelect.value = savedConfig.convertTo || '';
+      updateBitrateOptions(convertToSelect.value);
+    }
+    const bitrateSelect = document.getElementById('bitrateSelect') as HTMLSelectElement | null;
+    if (bitrateSelect && savedConfig.bitrate) {
+      if (Array.from(bitrateSelect.options).some(option => option.value === savedConfig.bitrate)) {
+          bitrateSelect.value = savedConfig.bitrate;
+      }
+    } else if (bitrateSelect) {
+        if (convertToSelect && !CONVERSION_FORMATS[convertToSelect.value]?.length) {
+            bitrateSelect.value = ''; 
+        }
+    }
+
     // Update explicit filter status
     updateExplicitFilterStatus(savedConfig.explicitFilter);
 
@@ -248,6 +276,13 @@ function setupEventListeners() {
   (document.getElementById('saveCoverToggle') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
   (document.getElementById('maxRetries') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
   (document.getElementById('retryDelaySeconds') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
+
+  // Conversion settings listeners
+  (document.getElementById('convertToSelect') as HTMLSelectElement | null)?.addEventListener('change', function() {
+    updateBitrateOptions(this.value);
+    saveConfig(); 
+  });
+  (document.getElementById('bitrateSelect') as HTMLSelectElement | null)?.addEventListener('change', saveConfig);
 
   // Update active account globals when the account selector is changed.
   (document.getElementById('spotifyAccountSelect') as HTMLSelectElement | null)?.addEventListener('change', (e: Event) => {
@@ -821,6 +856,13 @@ function resetForm() {
   }
   (document.getElementById('credentialForm') as HTMLFormElement | null)?.reset();
   
+  // Reset conversion dropdowns to ensure bitrate is updated correctly
+  const convertToSelect = document.getElementById('convertToSelect') as HTMLSelectElement | null;
+  if (convertToSelect) {
+      convertToSelect.value = ''; // Reset to 'No Conversion'
+      updateBitrateOptions(''); // Update bitrate for 'No Conversion'
+  }
+
   // Reset form title and button text
   const serviceName = currentService.charAt(0).toUpperCase() + currentService.slice(1);
   (document.getElementById('formTitle') as HTMLElement | null)!.textContent = `Add New ${serviceName} Account`;
@@ -847,7 +889,9 @@ async function saveConfig() {
     retryDelaySeconds: parseInt((document.getElementById('retryDelaySeconds') as HTMLInputElement | null)?.value || '5', 10) || 5,
     retry_delay_increase: parseInt((document.getElementById('retryDelayIncrease') as HTMLInputElement | null)?.value || '5', 10) || 5,
     tracknum_padding: (document.getElementById('tracknumPaddingToggle') as HTMLInputElement | null)?.checked,
-    save_cover: (document.getElementById('saveCoverToggle') as HTMLInputElement | null)?.checked
+    save_cover: (document.getElementById('saveCoverToggle') as HTMLInputElement | null)?.checked,
+    convertTo: (document.getElementById('convertToSelect') as HTMLSelectElement | null)?.value || null, // Get convertTo value
+    bitrate: (document.getElementById('bitrateSelect') as HTMLSelectElement | null)?.value || null // Get bitrate value
   };
 
   try {
@@ -908,6 +952,23 @@ async function saveConfig() {
     const saveCoverToggle = document.getElementById('saveCoverToggle') as HTMLInputElement | null;
     if (saveCoverToggle) saveCoverToggle.checked = savedConfig.save_cover === undefined ? true : !!savedConfig.save_cover;
     
+    // Load conversion settings after save
+    const convertToSelect = document.getElementById('convertToSelect') as HTMLSelectElement | null;
+    if (convertToSelect) {
+      convertToSelect.value = savedConfig.convertTo || '';
+      updateBitrateOptions(convertToSelect.value);
+    }
+    const bitrateSelect = document.getElementById('bitrateSelect') as HTMLSelectElement | null;
+    if (bitrateSelect && savedConfig.bitrate) {
+      if (Array.from(bitrateSelect.options).some(option => option.value === savedConfig.bitrate)) {
+          bitrateSelect.value = savedConfig.bitrate;
+      }
+    } else if (bitrateSelect) {
+        if (convertToSelect && !CONVERSION_FORMATS[convertToSelect.value]?.length) {
+            bitrateSelect.value = ''; 
+        }
+    }
+
     // Update explicit filter status
     updateExplicitFilterStatus(savedConfig.explicitFilter);
 
@@ -1085,5 +1146,38 @@ function updateWatchWarningDisplay() {
   const firstEnableNoticeDiv = document.getElementById('watchFeatureFirstEnableNotice');
   if (firstEnableNoticeDiv && watchEnabledToggle && !watchEnabledToggle.checked) {
     firstEnableNoticeDiv.style.display = 'none';
+  }
+}
+
+// Function to update bitrate options based on selected format
+function updateBitrateOptions(selectedFormat: string) {
+  const bitrateSelect = document.getElementById('bitrateSelect') as HTMLSelectElement | null;
+  if (!bitrateSelect) return;
+
+  bitrateSelect.innerHTML = ''; // Clear existing options
+  const currentBitrateValue = bitrateSelect.value; // Preserve current value if possible
+
+  if (selectedFormat && CONVERSION_FORMATS[selectedFormat] && CONVERSION_FORMATS[selectedFormat].length > 0) {
+    bitrateSelect.disabled = false;
+    CONVERSION_FORMATS[selectedFormat].forEach(bRate => {
+      const option = document.createElement('option');
+      option.value = bRate;
+      option.textContent = bRate;
+      bitrateSelect.appendChild(option);
+    });
+    // Try to restore previous valid bitrate or set to first available
+    if (CONVERSION_FORMATS[selectedFormat].includes(currentBitrateValue)) {
+        bitrateSelect.value = currentBitrateValue;
+    } else {
+        bitrateSelect.value = CONVERSION_FORMATS[selectedFormat][0]; // Default to first available bitrate
+    }
+  } else {
+    // For formats with no specific bitrates (FLAC, WAV, ALAC) or 'No Conversion'
+    bitrateSelect.disabled = true;
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'N/A';
+    bitrateSelect.appendChild(option);
+    bitrateSelect.value = '';
   }
 }

@@ -20,6 +20,8 @@ def download_playlist(
     retry_delay_increase=5,
     max_retries=3,
     progress_callback=None,
+    convert_to=None,
+    bitrate=None
 ):
     try:
         # Detect URL source (Spotify or Deezer) from URL
@@ -114,6 +116,8 @@ def download_playlist(
                         initial_retry_delay=initial_retry_delay,
                         retry_delay_increase=retry_delay_increase,
                         max_retries=max_retries,
+                        convert_to=convert_to,
+                        bitrate=bitrate
                     )
                     print(f"DEBUG: Playlist download completed successfully using Deezer credentials")
                 except Exception as e:
@@ -155,7 +159,9 @@ def download_playlist(
                             save_cover=save_cover,
                             initial_retry_delay=initial_retry_delay,
                             retry_delay_increase=retry_delay_increase,
-                            max_retries=max_retries
+                            max_retries=max_retries,
+                            convert_to=convert_to,
+                            bitrate=bitrate
                         )
                         print(f"DEBUG: Playlist download completed successfully using Spotify fallback")
                     except Exception as e2:
@@ -196,7 +202,9 @@ def download_playlist(
                     save_cover=save_cover,
                     initial_retry_delay=initial_retry_delay,
                     retry_delay_increase=retry_delay_increase,
-                    max_retries=max_retries
+                    max_retries=max_retries,
+                    convert_to=convert_to,
+                    bitrate=bitrate
                 )
                 print(f"DEBUG: Playlist download completed successfully using Spotify main")
         # For Deezer URLs: download directly from Deezer
@@ -231,7 +239,9 @@ def download_playlist(
                 save_cover=save_cover,
                 initial_retry_delay=initial_retry_delay,
                 retry_delay_increase=retry_delay_increase,
-                max_retries=max_retries
+                max_retries=max_retries,
+                convert_to=convert_to,
+                bitrate=bitrate
             )
             print(f"DEBUG: Playlist download completed successfully using Deezer direct")
         else:

@@ -38,3 +38,4 @@ static/js
 data
 logs/
 .env
+Test.py
