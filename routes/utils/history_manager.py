@@ -29,7 +29,11 @@ def init_history_db():
                 timestamp_added REAL,
                 timestamp_completed REAL,
                 original_request_json TEXT,
-                last_status_obj_json TEXT
+                last_status_obj_json TEXT,
+                service_used TEXT,
+                quality_profile TEXT,
+                convert_to TEXT,
+                bitrate TEXT
             )
         """)
         conn.commit()
@@ -51,7 +55,8 @@ def add_entry_to_history(history_data: dict):
         'task_id', 'download_type', 'item_name', 'item_artist', 'item_album',
         'item_url', 'spotify_id', 'status_final', 'error_message',
         'timestamp_added', 'timestamp_completed', 'original_request_json',
-        'last_status_obj_json'
+        'last_status_obj_json', 'service_used', 'quality_profile',
+        'convert_to', 'bitrate'
     ]
     # Ensure all keys are present, filling with None if not
     for key in required_keys:
@@ -66,14 +71,17 @@ def add_entry_to_history(history_data: dict):
                 task_id, download_type, item_name, item_artist, item_album,
                 item_url, spotify_id, status_final, error_message,
                 timestamp_added, timestamp_completed, original_request_json,
-                last_status_obj_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                last_status_obj_json, service_used, quality_profile,
+                convert_to, bitrate
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             history_data['task_id'], history_data['download_type'], history_data['item_name'],
             history_data['item_artist'], history_data['item_album'], history_data['item_url'],
             history_data['spotify_id'], history_data['status_final'], history_data['error_message'],
             history_data['timestamp_added'], history_data['timestamp_completed'],
-            history_data['original_request_json'], history_data['last_status_obj_json']
+            history_data['original_request_json'], history_data['last_status_obj_json'],
+            history_data['service_used'], history_data['quality_profile'],
+            history_data['convert_to'], history_data['bitrate']
         ))
         conn.commit()
         logger.info(f"Added/Updated history for task_id: {history_data['task_id']}, status: {history_data['status_final']}")
@@ -131,7 +139,8 @@ def get_history_entries(limit=25, offset=0, sort_by='timestamp_completed', sort_
         # Validate sort_by and sort_order to prevent SQL injection
         valid_sort_columns = [
             'task_id', 'download_type', 'item_name', 'item_artist', 'item_album',
-            'item_url', 'status_final', 'timestamp_added', 'timestamp_completed'
+            'item_url', 'status_final', 'timestamp_added', 'timestamp_completed',
+            'service_used', 'quality_profile', 'convert_to', 'bitrate'
         ]
         if sort_by not in valid_sort_columns:
             sort_by = 'timestamp_completed' # Default sort
@@ -175,7 +184,11 @@ if __name__ == '__main__':
         'timestamp_added': time.time() - 3600,
         'timestamp_completed': time.time(),
         'original_request_json': json.dumps({'param1': 'value1'}),
-        'last_status_obj_json': json.dumps({'status': 'complete', 'message': 'Finished!'})
+        'last_status_obj_json': json.dumps({'status': 'complete', 'message': 'Finished!'}),
+        'service_used': 'Spotify (Primary)',
+        'quality_profile': 'NORMAL',
+        'convert_to': None,
+        'bitrate': None
     }
     add_entry_to_history(sample_data_complete)
 
@@ -192,7 +205,11 @@ if __name__ == '__main__':
         'timestamp_added': time.time() - 7200,
         'timestamp_completed': time.time() - 60,
         'original_request_json': json.dumps({'param2': 'value2'}),
-        'last_status_obj_json': json.dumps({'status': 'error', 'error': 'Network issue'})
+        'last_status_obj_json': json.dumps({'status': 'error', 'error': 'Network issue'}),
+        'service_used': 'Deezer',
+        'quality_profile': 'MP3_320',
+        'convert_to': 'mp3',
+        'bitrate': '320'
     }
     add_entry_to_history(sample_data_error)
 
@@ -210,7 +227,11 @@ if __name__ == '__main__':
         'timestamp_added': time.time() - 3600,
         'timestamp_completed': time.time() + 100, # Updated completion time
         'original_request_json': json.dumps({'param1': 'value1', 'new_param': 'added'}),
-        'last_status_obj_json': json.dumps({'status': 'complete', 'message': 'Finished! With update.'})
+        'last_status_obj_json': json.dumps({'status': 'complete', 'message': 'Finished! With update.'}),
+        'service_used': 'Spotify (Deezer Fallback)',
+        'quality_profile': 'HIGH',
+        'convert_to': 'flac',
+        'bitrate': None
     }
     add_entry_to_history(updated_data_complete)
 

@@ -160,6 +160,28 @@ def _log_task_to_history(task_id, final_status_str, error_msg=None):
             logger.warning(f"History: No task_info found for task_id {task_id}. Cannot log to history.")
             return
 
+        # Determine service_used and quality_profile
+        main_service_name = str(task_info.get('main', 'Unknown')).capitalize() # e.g. Spotify, Deezer from their respective .env values
+        fallback_service_name = str(task_info.get('fallback', '')).capitalize()
+
+        service_used_str = main_service_name
+        if task_info.get('fallback') and fallback_service_name: # Check if fallback was configured
+             # Try to infer actual service used if possible, otherwise show configured.
+             # This part is a placeholder for more accurate determination if deezspot gives explicit feedback.
+             # For now, we assume 'main' was used unless an error hints otherwise.
+             # A more robust solution would involve deezspot callback providing this.
+            service_used_str = f"{main_service_name} (Fallback: {fallback_service_name})"
+            # If error message indicates fallback, we could try to parse it.
+            # e.g. if error_msg and "fallback" in error_msg.lower(): service_used_str = f"{fallback_service_name} (Used Fallback)"
+
+        # Determine quality profile (primarily from the 'quality' field)
+        # 'quality' usually holds the primary service's quality (e.g., spotifyQuality, deezerQuality)
+        quality_profile_str = str(task_info.get('quality', 'N/A'))
+
+        # Get convertTo and bitrate
+        convert_to_str = str(task_info.get('convertTo', '')) # Empty string if None or not present
+        bitrate_str = str(task_info.get('bitrate', ''))     # Empty string if None or not present
+
         # Extract Spotify ID from item URL if possible
         spotify_id = None
         item_url = task_info.get('url', '')
@@ -185,7 +207,11 @@ def _log_task_to_history(task_id, final_status_str, error_msg=None):
             'timestamp_added': task_info.get('created_at', time.time()),
             'timestamp_completed': last_status_obj.get('timestamp', time.time()) if last_status_obj else time.time(),
             'original_request_json': json.dumps(task_info.get('original_request', {})),
-            'last_status_obj_json': json.dumps(last_status_obj if last_status_obj else {})
+            'last_status_obj_json': json.dumps(last_status_obj if last_status_obj else {}),
+            'service_used': service_used_str,
+            'quality_profile': quality_profile_str,
+            'convert_to': convert_to_str if convert_to_str else None, # Store None if empty string
+            'bitrate': bitrate_str if bitrate_str else None        # Store None if empty string
         }
         add_entry_to_history(history_entry)
     except Exception as e:
