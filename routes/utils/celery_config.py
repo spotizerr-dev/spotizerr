@@ -35,6 +35,7 @@ DEFAULT_MAIN_CONFIG = {
     'customDirFormat': '%ar_album%/%album%',
     'customTrackFormat': '%tracknum%. %music%',
     'tracknum_padding': True,
+    'save_cover': True,
     'maxConcurrentDownloads': 3,
     'maxRetries': 3,
     'retryDelaySeconds': 5,

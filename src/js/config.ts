@@ -121,6 +121,8 @@ async function loadConfig() {
     if (retryDelayIncrease) retryDelayIncrease.value = savedConfig.retry_delay_increase || '5';
     const tracknumPaddingToggle = document.getElementById('tracknumPaddingToggle') as HTMLInputElement | null;
     if (tracknumPaddingToggle) tracknumPaddingToggle.checked = savedConfig.tracknum_padding === undefined ? true : !!savedConfig.tracknum_padding;
+    const saveCoverToggle = document.getElementById('saveCoverToggle') as HTMLInputElement | null;
+    if (saveCoverToggle) saveCoverToggle.checked = savedConfig.save_cover === undefined ? true : !!savedConfig.save_cover;
     
     // Update explicit filter status
     updateExplicitFilterStatus(savedConfig.explicitFilter);
@@ -243,6 +245,7 @@ function setupEventListeners() {
   (document.getElementById('spotifyQualitySelect') as HTMLSelectElement | null)?.addEventListener('change', saveConfig);
   (document.getElementById('deezerQualitySelect') as HTMLSelectElement | null)?.addEventListener('change', saveConfig);
   (document.getElementById('tracknumPaddingToggle') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
+  (document.getElementById('saveCoverToggle') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
   (document.getElementById('maxRetries') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
   (document.getElementById('retryDelaySeconds') as HTMLInputElement | null)?.addEventListener('change', saveConfig);
 
@@ -843,7 +846,8 @@ async function saveConfig() {
     maxRetries: parseInt((document.getElementById('maxRetries') as HTMLInputElement | null)?.value || '3', 10) || 3,
     retryDelaySeconds: parseInt((document.getElementById('retryDelaySeconds') as HTMLInputElement | null)?.value || '5', 10) || 5,
     retry_delay_increase: parseInt((document.getElementById('retryDelayIncrease') as HTMLInputElement | null)?.value || '5', 10) || 5,
-    tracknum_padding: (document.getElementById('tracknumPaddingToggle') as HTMLInputElement | null)?.checked
+    tracknum_padding: (document.getElementById('tracknumPaddingToggle') as HTMLInputElement | null)?.checked,
+    save_cover: (document.getElementById('saveCoverToggle') as HTMLInputElement | null)?.checked
   };
 
   try {
@@ -901,6 +905,8 @@ async function saveConfig() {
     if (retryDelayIncrease) retryDelayIncrease.value = savedConfig.retry_delay_increase || '5';
     const tracknumPaddingToggle = document.getElementById('tracknumPaddingToggle') as HTMLInputElement | null;
     if (tracknumPaddingToggle) tracknumPaddingToggle.checked = savedConfig.tracknum_padding === undefined ? true : !!savedConfig.tracknum_padding;
+    const saveCoverToggle = document.getElementById('saveCoverToggle') as HTMLInputElement | null;
+    if (saveCoverToggle) saveCoverToggle.checked = savedConfig.save_cover === undefined ? true : !!savedConfig.save_cover;
     
     // Update explicit filter status
     updateExplicitFilterStatus(savedConfig.explicitFilter);
