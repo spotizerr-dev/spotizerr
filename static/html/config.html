@@ -15,7 +15,7 @@
     <div class="config-container">
       <header class="config-header">
         <h1 class="header-title">Configuration</h1>
-        <span class="version-text">2.0.1</span>
+        <span class="version-text">Set on build</span>
       </header>
 
       <div class="account-config card">
@@ -118,9 +118,9 @@
               <option value="">-- Select placeholder --</option>
               <optgroup label="Common">
                 <option value="%music%">%music% - Track title</option>
-                <option value="%artist%">%artist% - Track artist</option>
+                <option value="%artist%">%artist% - Track artist. If multiple artists, use %artist_1%, %artist_2%, etc. to select a specific one.</option>
                 <option value="%album%">%album% - Album name</option>
-                <option value="%ar_album%">%ar_album% - Album artist</option>
+                <option value="%ar_album%">%ar_album% - Album artist. If multiple album artists, use %ar_album_1%, %ar_album_2%, etc. to select a specific one.</option>
                 <option value="%tracknum%">%tracknum% - Track number</option>
                 <option value="%year%">%year% - Year of release</option>
               </optgroup>
@@ -171,9 +171,9 @@
               <option value="">-- Select placeholder --</option>
               <optgroup label="Common">
                 <option value="%music%">%music% - Track title</option>
-                <option value="%artist%">%artist% - Track artist</option>
+                <option value="%artist%">%artist% - Track artist. If multiple artists, use %artist_1%, %artist_2%, etc. to select a specific one.</option>
                 <option value="%album%">%album% - Album name</option>
-                <option value="%ar_album%">%ar_album% - Album artist</option>
+                <option value="%ar_album%">%ar_album% - Album artist. If multiple album artists, use %ar_album_1%, %ar_album_2%, etc. to select a specific one.</option>
                 <option value="%tracknum%">%tracknum% - Track number</option>
                 <option value="%year%">%year% - Year of release</option>
               </optgroup>
@@ -324,7 +324,7 @@
     <img src="{{ url_for('static', filename='images/arrow-left.svg') }}" alt="Back" />
   </a>
   
-  <a href="/watchlist" class="btn-icon watchlist-icon floating-icon" aria-label="Watchlist" title="Go to Watchlist">
+  <a id="watchlistButton" href="/watchlist" class="btn-icon watchlist-icon floating-icon hidden" aria-label="Watchlist" title="Go to Watchlist">
     <img src="{{ url_for('static', filename='images/binoculars.svg') }}" alt="Watchlist" onerror="handleImageError(this)"/>
   </a>
 

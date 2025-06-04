@@ -30,6 +30,42 @@ document.addEventListener('DOMContentLoaded', () => {
       downloadQueue.toggleVisibility();
     });
   }
+
+  // Attempt to set initial watchlist button visibility from cache
+  const watchlistButton = document.getElementById('watchlistButton') as HTMLAnchorElement | null;
+  if (watchlistButton) {
+      const cachedWatchEnabled = localStorage.getItem('spotizerr_watch_enabled_cached');
+      if (cachedWatchEnabled === 'true') {
+          watchlistButton.classList.remove('hidden');
+      }
+  }
+
+  // Fetch watch config to determine if watchlist button should be visible
+  async function updateWatchlistButtonVisibility() {
+    if (watchlistButton) {
+        try {
+            const response = await fetch('/api/config/watch');
+            if (response.ok) {
+                const watchConfig = await response.json();
+                localStorage.setItem('spotizerr_watch_enabled_cached', watchConfig.enabled ? 'true' : 'false');
+                if (watchConfig && watchConfig.enabled === false) {
+                    watchlistButton.classList.add('hidden');
+                } else {
+                    watchlistButton.classList.remove('hidden'); // Ensure it's shown if enabled
+                }
+            } else {
+                console.error('Failed to fetch watch config for track page, defaulting to hidden');
+                // Don't update cache on error
+                watchlistButton.classList.add('hidden'); // Hide if config fetch fails
+            }
+        } catch (error) {
+            console.error('Error fetching watch config for track page:', error);
+            // Don't update cache on error
+            watchlistButton.classList.add('hidden'); // Hide on error
+        }
+    }
+  }
+  updateWatchlistButtonVisibility();
 });
 
 /**

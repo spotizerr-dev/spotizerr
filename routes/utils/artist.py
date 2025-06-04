@@ -100,7 +100,7 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
         raise ValueError(error_msg)
         
     # Get artist info with albums
-    artist_data = get_spotify_info(artist_id, "artist")
+    artist_data = get_spotify_info(artist_id, "artist_discography")
     
     # Debug logging to inspect the structure of artist_data
     logger.debug(f"Artist data structure has keys: {list(artist_data.keys() if isinstance(artist_data, dict) else [])}")
@@ -153,11 +153,13 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
         album_name = album.get('name', 'Unknown Album')
         album_artists = album.get('artists', [])
         album_artist = album_artists[0].get('name', 'Unknown Artist') if album_artists else 'Unknown Artist'
-        
+        album_id = album.get('id')
+
         logger.debug(f"Extracted album URL: {album_url}")
-        
-        if not album_url:
-            logger.warning(f"Skipping album without URL: {album_name}")
+        logger.debug(f"Extracted album ID: {album_id}")
+
+        if not album_url or not album_id:
+            logger.warning(f"Skipping album without URL or ID: {album_name}")
             continue
         
         # Create album-specific request args instead of using original artist request
@@ -172,7 +174,7 @@ def download_artist_albums(url, album_type="album,single,compilation", request_a
         }
         
         # Include original download URL for this album task
-        album_request_args["original_url"] = url_for('album.handle_download', url=album_url, _external=True)
+        album_request_args["original_url"] = url_for('album.handle_download', album_id=album_id, _external=True)
         
         # Create task for this album
         task_data = {

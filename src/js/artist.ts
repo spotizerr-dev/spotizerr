@@ -46,7 +46,28 @@ interface WatchStatusResponse {
   artist_data?: any; // The artist data from DB if watched
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Added: Interface for global watch config
+interface GlobalWatchConfig {
+  enabled: boolean;
+  [key: string]: any;
+}
+
+// Added: Helper function to fetch global watch config
+async function getGlobalWatchConfig(): Promise<GlobalWatchConfig> {
+  try {
+    const response = await fetch('/api/config/watch');
+    if (!response.ok) {
+      console.error('Failed to fetch global watch config, assuming disabled.');
+      return { enabled: false }; // Default to disabled on error
+    }
+    return await response.json() as GlobalWatchConfig;
+  } catch (error) {
+    console.error('Error fetching global watch config:', error);
+    return { enabled: false }; // Default to disabled on error
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   const pathSegments = window.location.pathname.split('/');
   const artistId = pathSegments[pathSegments.indexOf('artist') + 1];
 
@@ -55,13 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  const globalWatchConfig = await getGlobalWatchConfig(); // Fetch global config
+  const isGlobalWatchActuallyEnabled = globalWatchConfig.enabled;
+
   // Fetch artist info directly
   fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)
     .then(response => {
       if (!response.ok) throw new Error('Network response was not ok');
       return response.json() as Promise<ArtistData>;
     })
-    .then(data => renderArtist(data, artistId))
+    .then(data => renderArtist(data, artistId, isGlobalWatchActuallyEnabled))
     .catch(error => {
       console.error('Error:', error);
       showError('Failed to load artist info.');
@@ -72,11 +96,47 @@ document.addEventListener('DOMContentLoaded', () => {
     queueIcon.addEventListener('click', () => downloadQueue.toggleVisibility());
   }
   
+  // Attempt to set initial watchlist button visibility from cache
+  const watchlistButton = document.getElementById('watchlistButton') as HTMLAnchorElement | null;
+  if (watchlistButton) {
+      const cachedWatchEnabled = localStorage.getItem('spotizerr_watch_enabled_cached');
+      if (cachedWatchEnabled === 'true') {
+          watchlistButton.classList.remove('hidden');
+      }
+  }
+
+  // Fetch watch config to determine if watchlist button should be visible
+  async function updateWatchlistButtonVisibility() {
+    if (watchlistButton) {
+        try {
+            const response = await fetch('/api/config/watch');
+            if (response.ok) {
+                const watchConfig = await response.json();
+                localStorage.setItem('spotizerr_watch_enabled_cached', watchConfig.enabled ? 'true' : 'false');
+                if (watchConfig && watchConfig.enabled === false) {
+                    watchlistButton.classList.add('hidden');
+                } else {
+                    watchlistButton.classList.remove('hidden'); // Ensure it's shown if enabled
+                }
+            } else {
+                console.error('Failed to fetch watch config for artist page, defaulting to hidden');
+                // Don't update cache on error
+                watchlistButton.classList.add('hidden'); // Hide if config fetch fails
+            }
+        } catch (error) {
+            console.error('Error fetching watch config for artist page:', error);
+            // Don't update cache on error
+            watchlistButton.classList.add('hidden'); // Hide on error
+        }
+    }
+  }
+  updateWatchlistButtonVisibility();
+  
   // Initialize the watch button after main artist rendering
   // This is done inside renderArtist after button element is potentially created.
 });
 
-async function renderArtist(artistData: ArtistData, artistId: string) {
+async function renderArtist(artistData: ArtistData, artistId: string, isGlobalWatchEnabled: boolean) {
   const loadingEl = document.getElementById('loading');
   if (loadingEl) loadingEl.classList.add('hidden');
   
@@ -84,7 +144,10 @@ async function renderArtist(artistData: ArtistData, artistId: string) {
   if (errorEl) errorEl.classList.add('hidden');
 
   // Fetch watch status upfront to avoid race conditions for album button rendering
-  const isArtistActuallyWatched = await getArtistWatchStatus(artistId);
+  let isArtistActuallyWatched = false; // Default
+  if (isGlobalWatchEnabled) { // Only fetch if globally enabled
+      isArtistActuallyWatched = await getArtistWatchStatus(artistId);
+  }
 
   // Check if explicit filter is enabled
   const isExplicitFilterEnabled = downloadQueue.isExplicitFilterEnabled();
@@ -107,12 +170,25 @@ async function renderArtist(artistData: ArtistData, artistId: string) {
     artistImageEl.src = artistImageSrc;
   }
 
-  // Initialize Watch Button after other elements are rendered
   const watchArtistBtn = document.getElementById('watchArtistBtn') as HTMLButtonElement | null;
-  if (watchArtistBtn) {
-      initializeWatchButton(artistId, isArtistActuallyWatched);
+  const syncArtistBtn = document.getElementById('syncArtistBtn') as HTMLButtonElement | null;
+
+  if (!isGlobalWatchEnabled) {
+    if (watchArtistBtn) {
+        watchArtistBtn.classList.add('hidden');
+        watchArtistBtn.disabled = true;
+    }
+    if (syncArtistBtn) {
+        syncArtistBtn.classList.add('hidden');
+        syncArtistBtn.disabled = true;
+    }
   } else {
-      console.warn("Watch artist button not found in HTML.");
+    if (watchArtistBtn) {
+        initializeWatchButton(artistId, isArtistActuallyWatched);
+    } else {
+        console.warn("Watch artist button not found in HTML.");
+    }
+    // Sync button visibility is managed by initializeWatchButton
   }
 
   // Define the artist URL (used by both full-discography and group downloads)
@@ -207,8 +283,8 @@ async function renderArtist(artistData: ArtistData, artistId: string) {
 
     // Use the definitively fetched watch status for rendering album buttons
     // const isArtistWatched = watchArtistBtn && watchArtistBtn.dataset.watching === 'true'; // Old way
-    const useThisWatchStatusForAlbums = isArtistActuallyWatched; // New way
-
+    // const useThisWatchStatusForAlbums = isArtistActuallyWatched; // Old way, now combination of global and individual
+    
     for (const [groupType, albums] of Object.entries(albumGroups)) {
       const groupSection = document.createElement('section');
       groupSection.className = 'album-group';
@@ -253,7 +329,7 @@ async function renderArtist(artistData: ArtistData, artistId: string) {
         albumCardActions.className = 'album-card-actions';
 
         // Persistent Mark as Known/Missing button (if artist is watched) - Appears first (left)
-        if (useThisWatchStatusForAlbums && album.id) { 
+        if (isGlobalWatchEnabled && isArtistActuallyWatched && album.id) { 
           const toggleKnownBtn = document.createElement('button');
           toggleKnownBtn.className = 'toggle-known-status-btn persistent-album-action-btn'; 
           toggleKnownBtn.dataset.albumId = album.id; 
@@ -351,7 +427,7 @@ async function renderArtist(artistData: ArtistData, artistId: string) {
         albumCardActions_AppearsOn.className = 'album-card-actions';
 
         // Persistent Mark as Known/Missing button for appearing_on albums (if artist is watched) - Appears first (left)
-        if (useThisWatchStatusForAlbums && album.id) {
+        if (isGlobalWatchEnabled && isArtistActuallyWatched && album.id) {
             const toggleKnownBtn = document.createElement('button');
             toggleKnownBtn.className = 'toggle-known-status-btn persistent-album-action-btn'; 
             toggleKnownBtn.dataset.albumId = album.id;
@@ -413,7 +489,7 @@ async function renderArtist(artistData: ArtistData, artistId: string) {
   if (albumsContainerEl) albumsContainerEl.classList.remove('hidden');
 
   if (!isExplicitFilterEnabled) {
-    attachAlbumActionListeners(artistId);
+    attachAlbumActionListeners(artistId, isGlobalWatchEnabled);
     attachGroupDownloadListeners(artistId, artistName);
   }
 }
@@ -448,7 +524,7 @@ function attachGroupDownloadListeners(artistId: string, artistName: string) {
   });
 }
 
-function attachAlbumActionListeners(artistIdForContext: string) {
+function attachAlbumActionListeners(artistIdForContext: string, isGlobalWatchEnabled: boolean) {
   const groupsContainer = document.getElementById('album-groups');
   if (!groupsContainer) return;
 
@@ -457,6 +533,10 @@ function attachAlbumActionListeners(artistIdForContext: string) {
     const button = target.closest('.toggle-known-status-btn') as HTMLButtonElement | null;
 
     if (button && button.dataset.albumId) {
+      if (!isGlobalWatchEnabled) {
+        showNotification("Watch feature is currently disabled globally.");
+        return;
+      }
       const albumId = button.dataset.albumId;
       const currentStatus = button.dataset.status;
       
@@ -685,15 +765,24 @@ async function initializeWatchButton(artistId: string, initialIsWatching: boolea
         if (currentlyWatching) {
           await unwatchArtist(artistId);
           updateWatchButton(artistId, false);
-          // Re-fetch and re-render artist data
+          // Re-fetch and re-render artist data, passing the global watch status again
           const newArtistData = await (await fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)).json() as ArtistData;
-          renderArtist(newArtistData, artistId); 
+          // Assuming renderArtist needs the global status, which it does. We need to get it or have it available.
+          // Since initializeWatchButton is called from renderArtist, we can assume isGlobalWatchEnabled is in that scope.
+          // This part is tricky as initializeWatchButton doesn't have isGlobalWatchEnabled.
+          // Let's re-fetch global config or rely on the fact that if this button is clickable, global is on.
+          // For simplicity, the re-render will pick up the global status from its own scope if called from top level.
+          // The click handler itself does not need to pass isGlobalWatchEnabled to renderArtist, renderArtist's caller does.
+          // Let's ensure renderArtist is called correctly after watch/unwatch.
+          const globalWatchConfig = await getGlobalWatchConfig(); // Re-fetch for re-render
+          renderArtist(newArtistData, artistId, globalWatchConfig.enabled); 
         } else {
           await watchArtist(artistId);
           updateWatchButton(artistId, true);
           // Re-fetch and re-render artist data
           const newArtistData = await (await fetch(`/api/artist/info?id=${encodeURIComponent(artistId)}`)).json() as ArtistData;
-          renderArtist(newArtistData, artistId);
+          const globalWatchConfig = await getGlobalWatchConfig(); // Re-fetch for re-render
+          renderArtist(newArtistData, artistId, globalWatchConfig.enabled);
         }
       } catch (error) {
         // On error, revert button to its state before the click attempt

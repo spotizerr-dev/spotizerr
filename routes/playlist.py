@@ -20,7 +20,7 @@ from routes.utils.watch.db import (
     is_track_in_playlist_db # Added import
 )
 from routes.utils.get_info import get_spotify_info # Already used, but ensure it's here
-from routes.utils.watch.manager import check_watched_playlists # For manual trigger
+from routes.utils.watch.manager import check_watched_playlists, get_watch_config # For manual trigger & config
 
 logger = logging.getLogger(__name__) # Added logger initialization
 playlist_bp = Blueprint('playlist', __name__, url_prefix='/api/playlist')
@@ -180,6 +180,10 @@ def get_playlist_info():
 @playlist_bp.route('/watch/<string:playlist_spotify_id>', methods=['PUT'])
 def add_to_watchlist(playlist_spotify_id):
     """Adds a playlist to the watchlist."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally."}), 403
+
     logger.info(f"Attempting to add playlist {playlist_spotify_id} to watchlist.")
     try:
         # Check if already watched
@@ -227,6 +231,10 @@ def get_playlist_watch_status(playlist_spotify_id):
 @playlist_bp.route('/watch/<string:playlist_spotify_id>', methods=['DELETE'])
 def remove_from_watchlist(playlist_spotify_id):
     """Removes a playlist from the watchlist."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally."}), 403
+
     logger.info(f"Attempting to remove playlist {playlist_spotify_id} from watchlist.")
     try:
         if not get_watched_playlist(playlist_spotify_id):
@@ -242,6 +250,10 @@ def remove_from_watchlist(playlist_spotify_id):
 @playlist_bp.route('/watch/<string:playlist_spotify_id>/tracks', methods=['POST'])
 def mark_tracks_as_known(playlist_spotify_id):
     """Fetches details for given track IDs and adds/updates them in the playlist's local DB table."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot mark tracks."}), 403
+
     logger.info(f"Attempting to mark tracks as known for playlist {playlist_spotify_id}.")
     try:
         track_ids = request.json
@@ -275,7 +287,11 @@ def mark_tracks_as_known(playlist_spotify_id):
 @playlist_bp.route('/watch/<string:playlist_spotify_id>/tracks', methods=['DELETE'])
 def mark_tracks_as_missing_locally(playlist_spotify_id):
     """Removes specified tracks from the playlist's local DB table."""
-    logger.info(f"Attempting to mark tracks as missing (delete locally) for playlist {playlist_spotify_id}.")
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot mark tracks."}), 403
+
+    logger.info(f"Attempting to mark tracks as missing (remove locally) for playlist {playlist_spotify_id}.")
     try:
         track_ids = request.json
         if not isinstance(track_ids, list) or not all(isinstance(tid, str) for tid in track_ids):
@@ -304,6 +320,10 @@ def list_watched_playlists_endpoint():
 @playlist_bp.route('/watch/trigger_check', methods=['POST'])
 def trigger_playlist_check_endpoint():
     """Manually triggers the playlist checking mechanism for all watched playlists."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot trigger check."}), 403
+
     logger.info("Manual trigger for playlist check received for all playlists.")
     try:
         # Run check_watched_playlists without an ID to check all
@@ -317,6 +337,10 @@ def trigger_playlist_check_endpoint():
 @playlist_bp.route('/watch/trigger_check/<string:playlist_spotify_id>', methods=['POST'])
 def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str):
     """Manually triggers the playlist checking mechanism for a specific playlist."""
+    watch_config = get_watch_config()
+    if not watch_config.get("enabled", False):
+        return jsonify({"error": "Watch feature is currently disabled globally. Cannot trigger check."}), 403
+
     logger.info(f"Manual trigger for specific playlist check received for ID: {playlist_spotify_id}")
     try:
         # Check if the playlist is actually in the watchlist first
