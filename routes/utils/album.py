@@ -4,7 +4,7 @@ import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 from pathlib import Path
-from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
+from routes.utils.credentials import get_credential, _get_global_spotify_api_creds, get_spotify_blob_path
 from routes.utils.celery_config import get_config_params
 
 def download_album(
@@ -99,13 +99,12 @@ def download_album(
                         if not global_spotify_client_id or not global_spotify_client_secret:
                             raise ValueError("Global Spotify API credentials (client_id/secret) not configured for Spotify download.")
 
-                        spotify_main_creds = get_credential('spotify', main) # For blob path
-                        blob_file_path = spotify_main_creds.get('blob_file_path')
-                        if not Path(blob_file_path).exists():
-                           raise FileNotFoundError(f"Spotify credentials blob file not found at {blob_file_path} for account '{main}'")
+                        blob_file_path = get_spotify_blob_path(main)
+                        if not blob_file_path or not blob_file_path.exists():
+                           raise FileNotFoundError(f"Spotify credentials blob file not found or path is invalid for account '{main}'. Path: {str(blob_file_path)}")
 
                         spo = SpoLogin(
-                            credentials_path=blob_file_path,
+                            credentials_path=str(blob_file_path), # Ensure it's a string
                             spotify_client_id=global_spotify_client_id,
                             spotify_client_secret=global_spotify_client_secret,
                             progress_callback=progress_callback
@@ -143,13 +142,12 @@ def download_album(
                 if not global_spotify_client_id or not global_spotify_client_secret:
                     raise ValueError("Global Spotify API credentials (client_id/secret) not configured for Spotify download.")
 
-                spotify_main_creds = get_credential('spotify', main) # For blob path
-                blob_file_path = spotify_main_creds.get('blob_file_path')
-                if not Path(blob_file_path).exists():
-                    raise FileNotFoundError(f"Spotify credentials blob file not found at {blob_file_path} for account '{main}'")
+                blob_file_path = get_spotify_blob_path(main)
+                if not blob_file_path or not blob_file_path.exists():
+                    raise FileNotFoundError(f"Spotify credentials blob file not found or path is invalid for account '{main}'. Path: {str(blob_file_path)}")
 
                 spo = SpoLogin(
-                    credentials_path=blob_file_path,
+                    credentials_path=str(blob_file_path), # Ensure it's a string
                     spotify_client_id=global_spotify_client_id,
                     spotify_client_secret=global_spotify_client_secret,
                     progress_callback=progress_callback
