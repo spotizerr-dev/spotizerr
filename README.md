@@ -61,114 +61,9 @@ Access at: `http://localhost:7171`
 
 ## Configuration
 
-### Initial Setup
-1. Access settings via the gear icon
-2. Switch between service tabs (Spotify/Deezer)
-3. Enter credentials using the form
-4. Configure active accounts in settings
+### Spotify Setup
 
-_Note: If you want Spotify-only mode, just keep "Download fallback" setting disabled and don't bother adding Deezer credentials. Deezer-only mode is not, and will not be supported since there already is a much better tool for that called "Deemix"_
-
-### Spotify Credentials Setup
-
-First create a Spotify credentials file using the 3rd-party `librespot-auth` tool, this step has to be done in a PC/Laptop that has the Spotify desktop app installed.
-
----
-#### For Linux (using Docker)
-1. Clone the `librespot-auth` repository:  
-   ```shell
-   git clone --depth 1 https://github.com/dspearson/librespot-auth.git
-   ```
-
-2. Build the repository using the Rust Docker image:  
-   ```shell
-   docker run --rm -v "$(pwd)/librespot-auth":/app -w /app rust:latest cargo build --release
-   ```
-
-3. Run the built binary:    
-     ```shell
-     ./librespot-auth/target/release/librespot-auth --name "mySpotifyAccount1" --class=computer
-     ```
-
----
-
-#### For Windows (using Docker)
-
-1. Clone the `librespot-auth` repository:  
-   ```shell
-   git clone --depth 1 https://github.com/dspearson/librespot-auth.git
-   ```
-
-2. Build the repository using a windows-targeted Rust Docker image ([why a different image?](https://github.com/jscharnitzke/rust-build-windows)):  
-   ```shell
-   docker run --rm -v "${pwd}/librespot-auth:/app" -w "/app" jscharnitzke/rust-build-windows --release
-   ```
-
-3. Run the built binary:   
-     ```shell
-     .\librespot-auth\target\x86_64-pc-windows-gnu\release\librespot-auth.exe --name "mySpotifyAccount1" --class=computer
-     ```
----
-
-#### For Apple Silicon (macOS)
-1. Clone the `librespot-auth` repository:  
-   ```shell
-   git clone --depth 1 https://github.com/dspearson/librespot-auth.git
-   ```
-
-2. Install Rust using Homebrew:  
-   ```shell
-   brew install rustup
-   brew install rust
-   ```
-
-3. Build `librespot-auth` for Apple Silicon:  
-   ```shell
-   cd librespot-auth
-   cargo build --target=aarch64-apple-darwin --release
-   ```
-
-4. Run the built binary:  
-   ```shell
-   ./target/aarch64-apple-darwin/release/librespot-auth --name "mySpotifyAccount1" --class=computer
-   ```
----
-
-- Now open the Spotify app
-- Click on the "Connect to a device" icon
-- Under the "Select Another Device" section, click "mySpotifyAccount1"
-- This utility will create a `credentials.json` file
-
-This file has the following format:
-
-```
-{"username": "long text" "auth_type": 1 "auth_data": "even longer text"}
-```
-
-The important ones are the "username" and "auth_data" parameters, these match the "username" and "credentials" sections respectively when adding/editing spotify credentials in Spotizerr.
-
-In the terminal, you can directly print these parameters using jq:
-
-```
-jq -r '.username, .auth_data' credentials.json
-```
-
-### Spotify Developer Setup
-
-In order for searching to work, you need to set up your own Spotify Developer application:
-
-1. Visit the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
-2. Log in with your Spotify account
-3. Click "Create app"
-4. Fill in:
-   - App name (e.g., "My Spotizerr App")
-   - App description
-   - Redirect URI: `http://127.0.0.1:7171/callback` (or your custom domain if exposed)
-   - Check the Developer Terms agreement box
-5. Click "Create"
-6. On your app page, note your "Client ID" 
-7. Click "Show client secret" to reveal your "Client Secret"
-8. Add these credentials in Spotizerr's settings page under the Spotify service section
+Spotify is VERY petty, so, in order to simplify the process, another tool was created to perform this part of the setup; see [spotizerr-auth](https://github.com/Xoconoch/spotizerr-auth)
 
 ### Deezer ARL Setup
 
@@ -266,4 +161,4 @@ Copy that value and paste it into the correspondant setting in Spotizerr
 
 # Acknowledgements
 
-- This project is based on the amazing [deezspot library](https://github.com/jakiepari/deezspot), although their creators are in no way related with Spotizerr, they still deserve credit
+- This project was inspired by the amazing [deezspot library](https://github.com/jakiepari/deezspot), although their creators are in no way related with Spotizerr, they still deserve credit.

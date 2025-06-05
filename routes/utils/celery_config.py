@@ -100,6 +100,10 @@ task_queues = {
     'downloads': {
         'exchange': 'downloads',
         'routing_key': 'downloads',
+    },
+    'utility_tasks': {
+        'exchange': 'utility_tasks',
+        'routing_key': 'utility_tasks',
     }
 }
 

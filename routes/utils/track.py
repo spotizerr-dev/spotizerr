@@ -4,6 +4,8 @@ import traceback
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 from pathlib import Path
+from routes.utils.credentials import get_credential, _get_global_spotify_api_creds, get_spotify_blob_path
+from routes.utils.celery_config import get_config_params
 
 def download_track(
     url,
@@ -28,84 +30,53 @@ def download_track(
         is_spotify_url = 'open.spotify.com' in url.lower()
         is_deezer_url = 'deezer.com' in url.lower()
         
-        # Determine service exclusively from URL
+        service = ''
         if is_spotify_url:
             service = 'spotify'
         elif is_deezer_url:
             service = 'deezer'
         else:
-            # If URL can't be detected, raise an error
             error_msg = "Invalid URL: Must be from open.spotify.com or deezer.com"
             print(f"ERROR: {error_msg}")
             raise ValueError(error_msg)
             
-        print(f"DEBUG: track.py - URL detection: is_spotify_url={is_spotify_url}, is_deezer_url={is_deezer_url}")
         print(f"DEBUG: track.py - Service determined from URL: {service}")
-        print(f"DEBUG: track.py - Credentials: main={main}, fallback={fallback}")
-        
-        # Load Spotify client credentials if available
-        spotify_client_id = None
-        spotify_client_secret = None
-        
-        # Smartly determine where to look for Spotify search credentials
-        if service == 'spotify' and fallback:
-            # If fallback is enabled, use the fallback account for Spotify search credentials
-            search_creds_path = Path(f'./data/creds/spotify/{fallback}/search.json')
-            print(f"DEBUG: Using Spotify search credentials from fallback: {search_creds_path}")
-        else:
-            # Otherwise use the main account for Spotify search credentials
-            search_creds_path = Path(f'./data/creds/spotify/{main}/search.json')
-            print(f"DEBUG: Using Spotify search credentials from main: {search_creds_path}")
-            
-        if search_creds_path.exists():
-            try:
-                with open(search_creds_path, 'r') as f:
-                    search_creds = json.load(f)
-                    spotify_client_id = search_creds.get('client_id')
-                    spotify_client_secret = search_creds.get('client_secret')
-                    print(f"DEBUG: Loaded Spotify client credentials successfully")
-            except Exception as e:
-                print(f"Error loading Spotify search credentials: {e}")
-                
-        # For Spotify URLs: check if fallback is enabled, if so use the fallback logic,
-        # otherwise download directly from Spotify
+        print(f"DEBUG: track.py - Credentials provided: main_account_name='{main}', fallback_account_name='{fallback}'")
+
+        # Get global Spotify API credentials for SpoLogin and DeeLogin (if it uses Spotify search)
+        global_spotify_client_id, global_spotify_client_secret = _get_global_spotify_api_creds()
+        if not global_spotify_client_id or not global_spotify_client_secret:
+            # This is a critical failure if Spotify operations are involved
+            warning_msg = "WARN: track.py - Global Spotify client_id/secret not found in search.json. Spotify operations will likely fail."
+            print(warning_msg)
+            # Depending on flow, might want to raise error here if service is 'spotify'
+            # For now, let it proceed and fail at SpoLogin/DeeLogin init if keys are truly needed and missing.
+
         if service == 'spotify':
-            if fallback:
-                if quality is None:
-                    quality = 'FLAC'
-                if fall_quality is None:
-                    fall_quality = 'HIGH'
+            if fallback: # Fallback is a Deezer account name for a Spotify URL
+                if quality is None: quality = 'FLAC' # Deezer quality for first attempt
+                if fall_quality is None: fall_quality = 'HIGH' # Spotify quality for fallback (if Deezer fails)
                     
-                # First attempt: use Deezer's download_trackspo with 'main' (Deezer credentials)
                 deezer_error = None
                 try:
-                    deezer_creds_dir = os.path.join('./data/creds/deezer', main)
-                    deezer_creds_path = os.path.abspath(os.path.join(deezer_creds_dir, 'credentials.json'))
+                    # Attempt 1: Deezer via download_trackspo (using 'fallback' as Deezer account name)
+                    print(f"DEBUG: track.py - Spotify URL. Attempt 1: Deezer (account: {fallback})")
+                    deezer_fallback_creds = get_credential('deezer', fallback)
+                    arl = deezer_fallback_creds.get('arl')
+                    if not arl:
+                        raise ValueError(f"ARL not found for Deezer account '{fallback}'.")
                     
-                    # DEBUG: Print Deezer credential paths being used
-                    print(f"DEBUG: Looking for Deezer credentials at:")
-                    print(f"DEBUG:   deezer_creds_dir = {deezer_creds_dir}")
-                    print(f"DEBUG:   deezer_creds_path = {deezer_creds_path}")
-                    print(f"DEBUG:   Directory exists = {os.path.exists(deezer_creds_dir)}")
-                    print(f"DEBUG:   Credentials file exists = {os.path.exists(deezer_creds_path)}")
-                    
-                    # List available directories to compare
-                    print(f"DEBUG: Available Deezer credential directories:")
-                    for dir_name in os.listdir('./data/creds/deezer'):
-                        print(f"DEBUG:   ./data/creds/deezer/{dir_name}")
-                    
-                    with open(deezer_creds_path, 'r') as f:
-                        deezer_creds = json.load(f)
                     dl = DeeLogin(
-                        arl=deezer_creds.get('arl', ''),
-                        spotify_client_id=spotify_client_id,
-                        spotify_client_secret=spotify_client_secret,
+                        arl=arl,
+                        spotify_client_id=global_spotify_client_id, # Global creds
+                        spotify_client_secret=global_spotify_client_secret, # Global creds
                         progress_callback=progress_callback
                     )
+                    # download_trackspo means: Spotify URL, download via Deezer
                     dl.download_trackspo(
-                        link_track=url,
+                        link_track=url, # Spotify URL
                         output_dir="./downloads",
-                        quality_download=quality,
+                        quality_download=quality, # Deezer quality
                         recursive_quality=False,
                         recursive_download=False,
                         not_interface=False,
@@ -118,30 +89,33 @@ def download_track(
                         convert_to=convert_to,
                         bitrate=bitrate
                     )
+                    print(f"DEBUG: track.py - Track download via Deezer (account: {fallback}) successful for Spotify URL.")
                 except Exception as e:
                     deezer_error = e
-                    # Immediately report the Deezer error
-                    print(f"ERROR: Deezer download attempt failed: {e}")
+                    print(f"ERROR: track.py - Deezer attempt (account: {fallback}) for Spotify URL failed: {e}")
                     traceback.print_exc()
-                    print("Attempting Spotify fallback...")
+                    print(f"DEBUG: track.py - Attempting Spotify direct download (account: {main})...")
                     
-                    # If the first attempt fails, use the fallback Spotify credentials
+                    # Attempt 2: Spotify direct via download_track (using 'main' as Spotify account for blob)
                     try:
-                        spo_creds_dir = os.path.join('./data/creds/spotify', fallback)
-                        spo_creds_path = os.path.abspath(os.path.join(spo_creds_dir, 'credentials.json'))
+                        if not global_spotify_client_id or not global_spotify_client_secret:
+                            raise ValueError("Global Spotify API credentials (client_id/secret) not configured for Spotify download.")
                         
-                        # We've already loaded the Spotify client credentials above based on fallback
-                        
+                        # Use get_spotify_blob_path directly
+                        blob_file_path = get_spotify_blob_path(main) 
+                        if not blob_file_path.exists(): # Check existence on the Path object
+                           raise FileNotFoundError(f"Spotify credentials blob file not found at {str(blob_file_path)} for account '{main}'")
+
                         spo = SpoLogin(
-                            credentials_path=spo_creds_path,
-                            spotify_client_id=spotify_client_id,
-                            spotify_client_secret=spotify_client_secret,
+                            credentials_path=str(blob_file_path), # Account specific blob
+                            spotify_client_id=global_spotify_client_id, # Global API keys
+                            spotify_client_secret=global_spotify_client_secret, # Global API keys
                             progress_callback=progress_callback
                         )
                         spo.download_track(
-                            link_track=url,
+                            link_track=url, # Spotify URL
                             output_dir="./downloads",
-                            quality_download=fall_quality,
+                            quality_download=fall_quality, # Spotify quality
                             recursive_quality=False,
                             recursive_download=False,
                             not_interface=False,
@@ -156,28 +130,36 @@ def download_track(
                             convert_to=convert_to,
                             bitrate=bitrate
                         )
+                        print(f"DEBUG: track.py - Spotify direct download (account: {main} for blob) successful.")
                     except Exception as e2:
-                        # If fallback also fails, raise an error indicating both attempts failed
+                        print(f"ERROR: track.py - Spotify direct download (account: {main} for blob) also failed: {e2}")
                         raise RuntimeError(
-                            f"Both main (Deezer) and fallback (Spotify) attempts failed. "
+                            f"Both Deezer attempt (account: {fallback}) and Spotify direct (account: {main} for blob) failed. "
                             f"Deezer error: {deezer_error}, Spotify error: {e2}"
                         ) from e2
             else:
-                # Directly use Spotify main account
-                if quality is None:
-                    quality = 'HIGH'
-                creds_dir = os.path.join('./data/creds/spotify', main)
-                credentials_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
+                # Spotify URL, no fallback. Direct Spotify download using 'main' (Spotify account for blob)
+                if quality is None: quality = 'HIGH' # Default Spotify quality
+                print(f"DEBUG: track.py - Spotify URL, no fallback. Direct download with Spotify account (for blob): {main}")
+                
+                if not global_spotify_client_id or not global_spotify_client_secret:
+                    raise ValueError("Global Spotify API credentials (client_id/secret) not configured for Spotify download.")
+
+                # Use get_spotify_blob_path directly
+                blob_file_path = get_spotify_blob_path(main)
+                if not blob_file_path.exists(): # Check existence on the Path object
+                    raise FileNotFoundError(f"Spotify credentials blob file not found at {str(blob_file_path)} for account '{main}'")
+
                 spo = SpoLogin(
-                    credentials_path=credentials_path,
-                    spotify_client_id=spotify_client_id,
-                    spotify_client_secret=spotify_client_secret,
+                    credentials_path=str(blob_file_path), # Account specific blob
+                    spotify_client_id=global_spotify_client_id, # Global API keys
+                    spotify_client_secret=global_spotify_client_secret, # Global API keys
                     progress_callback=progress_callback
                 )
                 spo.download_track(
                     link_track=url,
                     output_dir="./downloads",
-                    quality_download=quality,
+                    quality_download=quality, 
                     recursive_quality=False,
                     recursive_download=False,
                     not_interface=False,
@@ -192,22 +174,24 @@ def download_track(
                     convert_to=convert_to,
                     bitrate=bitrate
                 )
-        # For Deezer URLs: download directly from Deezer
+                print(f"DEBUG: track.py - Direct Spotify download (account: {main} for blob) successful.")
+        
         elif service == 'deezer':
-            if quality is None:
-                quality = 'FLAC'
-            # Deezer download logic remains unchanged, with the custom formatting parameters passed along.
-            creds_dir = os.path.join('./data/creds/deezer', main)
-            creds_path = os.path.abspath(os.path.join(creds_dir, 'credentials.json'))
-            with open(creds_path, 'r') as f:
-                creds = json.load(f)
+            # Deezer URL. Direct Deezer download using 'main' (Deezer account name for ARL)
+            if quality is None: quality = 'FLAC' # Default Deezer quality
+            print(f"DEBUG: track.py - Deezer URL. Direct download with Deezer account: {main}")
+            deezer_main_creds = get_credential('deezer', main) # For ARL
+            arl = deezer_main_creds.get('arl')
+            if not arl:
+                raise ValueError(f"ARL not found for Deezer account '{main}'.")
+
             dl = DeeLogin(
-                arl=creds.get('arl', ''),
-                spotify_client_id=spotify_client_id,
-                spotify_client_secret=spotify_client_secret,
+                arl=arl, # Account specific ARL
+                spotify_client_id=global_spotify_client_id, # Global Spotify keys for internal Spo use by DeeLogin
+                spotify_client_secret=global_spotify_client_secret, # Global Spotify keys
                 progress_callback=progress_callback
             )
-            dl.download_trackdee(
+            dl.download_trackdee( # Deezer URL, download via Deezer
                 link_track=url,
                 output_dir="./downloads",
                 quality_download=quality,
@@ -223,8 +207,10 @@ def download_track(
                 convert_to=convert_to,
                 bitrate=bitrate
             )
+            print(f"DEBUG: track.py - Direct Deezer download (account: {main}) successful.")
         else:
-            raise ValueError(f"Unsupported service: {service}")
+            # Should be caught by initial service check, but as a safeguard
+            raise ValueError(f"Unsupported service determined: {service}")
     except Exception as e:
         traceback.print_exc()
         raise

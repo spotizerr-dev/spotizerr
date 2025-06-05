@@ -931,11 +931,15 @@ def task_prerun_handler(task_id=None, task=None, *args, **kwargs):
 def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args, **kwargs):
     """Signal handler when a task finishes"""
     try:
+        # Define download task names
+        download_task_names = ["download_track", "download_album", "download_playlist"]
+
         last_status_for_history = get_last_task_status(task_id)
         if last_status_for_history and last_status_for_history.get("status") in [ProgressState.COMPLETE, ProgressState.ERROR, ProgressState.CANCELLED, "ERROR_RETRIED", "ERROR_AUTO_CLEANED"]:
             if state == states.REVOKED and last_status_for_history.get("status") != ProgressState.CANCELLED:
                  logger.info(f"Task {task_id} was REVOKED (likely cancelled), logging to history.")
-                 _log_task_to_history(task_id, 'CANCELLED', "Task was revoked/cancelled.")
+                 if task and task.name in download_task_names: # Check if it's a download task
+                    _log_task_to_history(task_id, 'CANCELLED', "Task was revoked/cancelled.")
             # return # Let status update proceed if necessary
 
         task_info = get_task_info(task_id)
@@ -952,7 +956,8 @@ def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args
                     "message": "Download completed successfully."
                 })
             logger.info(f"Task {task_id} completed successfully: {task_info.get('name', 'Unknown')}")
-            _log_task_to_history(task_id, 'COMPLETED')
+            if task and task.name in download_task_names: # Check if it's a download task
+                _log_task_to_history(task_id, 'COMPLETED')
 
             if task_info.get("download_type") == "track": # Applies to single track downloads and tracks from playlists/albums
                 delayed_delete_task_data.apply_async(
@@ -999,12 +1004,15 @@ def task_postrun_handler(task_id=None, task=None, retval=None, state=None, *args
         logger.error(f"Error in task_postrun_handler: {e}", exc_info=True)
 
 @task_failure.connect
-def task_failure_handler(task_id=None, exception=None, traceback=None, *args, **kwargs):
+def task_failure_handler(task_id=None, exception=None, traceback=None, sender=None, *args, **kwargs):
     """Signal handler when a task fails"""
     try:
         # Skip if Retry exception
         if isinstance(exception, Retry):
             return
+
+        # Define download task names
+        download_task_names = ["download_track", "download_album", "download_playlist"]
         
         # Get task info and status
         task_info = get_task_info(task_id)
@@ -1038,7 +1046,8 @@ def task_failure_handler(task_id=None, exception=None, traceback=None, *args, **
             })
         
         logger.error(f"Task {task_id} failed: {str(exception)}")
-        _log_task_to_history(task_id, 'ERROR', str(exception))
+        if sender and sender.name in download_task_names: # Check if it's a download task
+            _log_task_to_history(task_id, 'ERROR', str(exception))
 
         if can_retry:
             logger.info(f"Task {task_id} can be retried ({retry_count}/{max_retries})")
@@ -1346,7 +1355,7 @@ def delete_task_data_and_log(task_id, reason="Task data deleted"):
         logger.error(f"Error deleting task data for {task_id}: {e}", exc_info=True)
         return False
 
-@celery_app.task(name="cleanup_stale_errors", queue="default") # Put on default queue, not downloads
+@celery_app.task(name="cleanup_stale_errors", queue="utility_tasks") # Put on utility_tasks queue
 def cleanup_stale_errors():
     """
     Periodically checks for tasks in ERROR state for more than 1 minute and cleans them up.
@@ -1385,7 +1394,7 @@ def cleanup_stale_errors():
         logger.error(f"Error during cleanup_stale_errors: {e}", exc_info=True)
         return {"status": "error", "error": str(e)}
 
-@celery_app.task(name="delayed_delete_task_data", queue="default") # Use default queue for utility tasks
+@celery_app.task(name="delayed_delete_task_data", queue="utility_tasks") # Use utility_tasks queue
 def delayed_delete_task_data(task_id, reason):
     """
     Celery task to delete task data after a delay.

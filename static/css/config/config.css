@@ -263,6 +263,29 @@ body {
   transform: translateY(-2px);
 }
 
+/* Master Accounts Configuration Section (Global API Keys + Per-Account Lists) */
+.master-accounts-config-section {
+  background: #181818; /* Consistent with other sections */
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  transition: transform 0.3s ease; /* Optional, for consistency */
+}
+
+.master-accounts-config-section:hover {
+  transform: translateY(-2px); /* Optional, for consistency */
+}
+
+/* Section for Global Spotify API Key Configuration */
+.global-api-keys-config {
+  background: #2a2a2a; /* Slightly different background to stand out or match input groups */
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem; /* Space before the per-account sections start */
+  border: 1px solid #404040; /* Subtle border */
+}
+
 /* Section Titles */
 .section-title {
   font-size: 1.5rem;
@@ -839,11 +862,6 @@ input:checked + .slider:before {
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
   padding: 1.5rem; /* Add padding here if you want it around the whole block */
   margin-bottom: 2rem;
-}
-
-/* Where individual credential items will be rendered */
-.credentials-list-items {
-  /* No specific styles needed here unless items need separation from the add button */
 }
 
 /* Styling for the Add New Account button to make it look like a list item */

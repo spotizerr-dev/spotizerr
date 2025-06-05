@@ -1,447 +1,467 @@
 import json
 from pathlib import Path
 import shutil
-from deezspot.spotloader import SpoLogin
-from deezspot.deezloader import DeeLogin
+import sqlite3
 import traceback # For logging detailed error messages
 import time # For retry delays
+import logging
 
-def _get_spotify_search_creds(creds_dir: Path):
-    """Helper to load client_id and client_secret from search.json for a Spotify account."""
-    search_file = creds_dir / 'search.json'
-    if search_file.exists():
+# Assuming deezspot is in a location findable by Python's import system
+# from deezspot.spotloader import SpoLogin # Used in validation
+# from deezspot.deezloader import DeeLogin # Used in validation
+# For now, as per original, validation calls these directly.
+
+logger = logging.getLogger(__name__) # Assuming logger is configured elsewhere
+
+# --- New Database and Path Definitions ---
+CREDS_BASE_DIR = Path('./data/creds')
+ACCOUNTS_DB_PATH = CREDS_BASE_DIR / 'accounts.db'
+BLOBS_DIR = CREDS_BASE_DIR / 'blobs'
+GLOBAL_SEARCH_JSON_PATH = CREDS_BASE_DIR / 'search.json' # Global Spotify API creds
+
+EXPECTED_SPOTIFY_TABLE_COLUMNS = {
+    "name": "TEXT PRIMARY KEY",
+    # client_id and client_secret are now global
+    "region": "TEXT", # ISO 3166-1 alpha-2
+    "created_at": "REAL",
+    "updated_at": "REAL"
+}
+
+EXPECTED_DEEZER_TABLE_COLUMNS = {
+    "name": "TEXT PRIMARY KEY",
+    "arl": "TEXT",
+    "region": "TEXT", # ISO 3166-1 alpha-2
+    "created_at": "REAL",
+    "updated_at": "REAL"
+}
+
+def _get_db_connection():
+    ACCOUNTS_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    BLOBS_DIR.mkdir(parents=True, exist_ok=True) # Ensure blobs directory also exists
+    conn = sqlite3.connect(ACCOUNTS_DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _ensure_table_schema(cursor: sqlite3.Cursor, table_name: str, expected_columns: dict):
+    """Ensures the given table has all expected columns, adding them if necessary."""
+    try:
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        existing_columns_info = cursor.fetchall()
+        existing_column_names = {col[1] for col in existing_columns_info}
+
+        added_columns = False
+        for col_name, col_type in expected_columns.items():
+            if col_name not in existing_column_names:
+                # Basic protection against altering PK after creation if table is not empty
+                if 'PRIMARY KEY' in col_type.upper() and existing_columns_info:
+                    logger.warning(
+                        f"Column '{col_name}' is part of PRIMARY KEY for table '{table_name}' "
+                        f"and was expected to be created by CREATE TABLE. Skipping explicit ADD COLUMN."
+                    )
+                    continue
+
+                col_type_for_add = col_type.replace(' PRIMARY KEY', '').strip()
+                try:
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type_for_add}")
+                    logger.info(f"Added missing column '{col_name} {col_type_for_add}' to table '{table_name}'.")
+                    added_columns = True
+                except sqlite3.OperationalError as alter_e:
+                    logger.warning(
+                        f"Could not add column '{col_name}' to table '{table_name}': {alter_e}. "
+                        f"It might already exist with a different definition or there's another schema mismatch."
+                    )
+        return added_columns
+    except sqlite3.Error as e:
+        logger.error(f"Error ensuring schema for table '{table_name}': {e}", exc_info=True)
+        return False
+
+def init_credentials_db():
+    """Initializes the accounts.db and its tables if they don't exist."""
+    try:
+        with _get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Spotify Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS spotify (
+                    name TEXT PRIMARY KEY,
+                    region TEXT,
+                    created_at REAL,
+                    updated_at REAL
+                )
+            """)
+            _ensure_table_schema(cursor, "spotify", EXPECTED_SPOTIFY_TABLE_COLUMNS)
+            
+            # Deezer Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS deezer (
+                    name TEXT PRIMARY KEY,
+                    arl TEXT,
+                    region TEXT,
+                    created_at REAL,
+                    updated_at REAL
+                )
+            """)
+            _ensure_table_schema(cursor, "deezer", EXPECTED_DEEZER_TABLE_COLUMNS)
+            
+            # Ensure global search.json exists, create if not
+            if not GLOBAL_SEARCH_JSON_PATH.exists():
+                logger.info(f"Global Spotify search credential file not found at {GLOBAL_SEARCH_JSON_PATH}. Creating empty file.")
+                with open(GLOBAL_SEARCH_JSON_PATH, 'w') as f_search:
+                    json.dump({"client_id": "", "client_secret": ""}, f_search, indent=4)
+
+            conn.commit()
+            logger.info(f"Credentials database initialized/schema checked at {ACCOUNTS_DB_PATH}")
+    except sqlite3.Error as e:
+        logger.error(f"Error initializing credentials database: {e}", exc_info=True)
+        raise
+
+def _get_global_spotify_api_creds():
+    """Loads client_id and client_secret from the global search.json."""
+    if GLOBAL_SEARCH_JSON_PATH.exists():
         try:
-            with open(search_file, 'r') as f:
+            with open(GLOBAL_SEARCH_JSON_PATH, 'r') as f:
                 search_data = json.load(f)
-            return search_data.get('client_id'), search_data.get('client_secret')
-        except Exception:
-            # Log error if search.json is malformed or unreadable
-            print(f"Warning: Could not read Spotify search credentials from {search_file}")
-            traceback.print_exc()
-    return None, None
+            client_id = search_data.get('client_id')
+            client_secret = search_data.get('client_secret')
+            if client_id and client_secret:
+                return client_id, client_secret
+            else:
+                logger.warning(f"Global Spotify API credentials in {GLOBAL_SEARCH_JSON_PATH} are incomplete.")
+        except Exception as e:
+            logger.error(f"Error reading global Spotify API credentials from {GLOBAL_SEARCH_JSON_PATH}: {e}", exc_info=True)
+    else:
+        logger.warning(f"Global Spotify API credential file {GLOBAL_SEARCH_JSON_PATH} not found.")
+    return None, None # Return None if file doesn't exist or creds are incomplete/invalid
 
-def _validate_with_retry(service_name, account_name, creds_dir_path, cred_file_path, data_for_validation, is_spotify):
+def save_global_spotify_api_creds(client_id: str, client_secret: str):
+    """Saves client_id and client_secret to the global search.json."""
+    try:
+        GLOBAL_SEARCH_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(GLOBAL_SEARCH_JSON_PATH, 'w') as f:
+            json.dump({"client_id": client_id, "client_secret": client_secret}, f, indent=4)
+        logger.info(f"Global Spotify API credentials saved to {GLOBAL_SEARCH_JSON_PATH}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving global Spotify API credentials to {GLOBAL_SEARCH_JSON_PATH}: {e}", exc_info=True)
+        return False
+
+def _validate_with_retry(service_name, account_name, validation_data):
     """
     Attempts to validate credentials with retries for connection errors.
-    - For Spotify, cred_file_path is used.
-    - For Deezer, data_for_validation (which contains the 'arl' key) is used.
+    validation_data (dict): For Spotify, expects {'client_id': ..., 'client_secret': ..., 'blob_file_path': ...}
+                           For Deezer, expects {'arl': ...}
     Returns True if validated, raises ValueError if not.
     """
-    max_retries = 5
+    # Deezspot imports need to be available. Assuming they are.
+    from deezspot.spotloader import SpoLogin 
+    from deezspot.deezloader import DeeLogin
+
+    max_retries = 3 # Reduced for brevity, was 5
     last_exception = None
 
     for attempt in range(max_retries):
         try:
-            if is_spotify:
-                client_id, client_secret = _get_spotify_search_creds(creds_dir_path)
-                SpoLogin(credentials_path=str(cred_file_path), spotify_client_id=client_id, spotify_client_secret=client_secret)
+            if service_name == 'spotify':
+                # For Spotify, validation uses the account's blob and GLOBAL API creds
+                global_client_id, global_client_secret = _get_global_spotify_api_creds()
+                if not global_client_id or not global_client_secret:
+                    raise ValueError("Global Spotify API client_id or client_secret not configured for validation.")
+                
+                blob_file_path = validation_data.get('blob_file_path')
+                if not blob_file_path or not Path(blob_file_path).exists():
+                    raise ValueError(f"Spotify blob file missing for validation of account {account_name}")
+                SpoLogin(credentials_path=str(blob_file_path), spotify_client_id=global_client_id, spotify_client_secret=global_client_secret)
             else: # Deezer
-                arl = data_for_validation.get('arl')
+                arl = validation_data.get('arl')
                 if not arl:
-                    # This should be caught by prior checks, but as a safeguard:
                     raise ValueError("Missing 'arl' for Deezer validation.")
                 DeeLogin(arl=arl)
             
-            print(f"{service_name.capitalize()} credentials for {account_name} validated successfully (attempt {attempt + 1}).")
-            return True # Validation successful
+            logger.info(f"{service_name.capitalize()} credentials for {account_name} validated successfully (attempt {attempt + 1}).")
+            return True
         except Exception as e:
             last_exception = e
             error_str = str(e).lower()
-            # More comprehensive check for connection-related errors
             is_connection_error = (
-                "connection refused" in error_str or
-                "connection error" in error_str or
-                "timeout" in error_str or 
-                "temporary failure in name resolution" in error_str or
-                "dns lookup failed" in error_str or
-                "network is unreachable" in error_str or
-                "ssl handshake failed" in error_str or # Can be network-related
-                "connection reset by peer" in error_str
+                "connection refused" in error_str or "connection error" in error_str or
+                "timeout" in error_str or "temporary failure in name resolution" in error_str or
+                "dns lookup failed" in error_str or "network is unreachable" in error_str or
+                "ssl handshake failed" in error_str or "connection reset by peer" in error_str
             )
 
             if is_connection_error and attempt < max_retries - 1:
-                retry_delay = 2 + attempt # Increasing delay (2s, 3s, 4s, 5s)
-                print(f"Validation for {account_name} ({service_name}) failed on attempt {attempt + 1}/{max_retries} due to connection issue: {e}. Retrying in {retry_delay}s...")
+                retry_delay = 2 + attempt 
+                logger.warning(f"Validation for {account_name} ({service_name}) failed (attempt {attempt + 1}) due to connection issue: {e}. Retrying in {retry_delay}s...")
                 time.sleep(retry_delay)
-                continue # Go to next retry attempt
+                continue
             else:
-                # Not a connection error, or it's the last retry for a connection error
-                print(f"Validation for {account_name} ({service_name}) failed on attempt {attempt + 1} with non-retryable error or max retries reached for connection error.")
-                break # Exit retry loop
+                logger.error(f"Validation for {account_name} ({service_name}) failed on attempt {attempt + 1} (non-retryable or max retries).")
+                break
 
-    # If loop finished without returning True, validation failed
-    print(f"ERROR: Credential validation definitively failed for {service_name} account {account_name} after {attempt + 1} attempt(s).")
     if last_exception:
         base_error_message = str(last_exception).splitlines()[-1]
-        detailed_error_message = f"Invalid {service_name} credentials. Verification failed: {base_error_message}"
-        if is_spotify and "incorrect padding" in base_error_message.lower():
-            detailed_error_message += ". Hint: Do not throw your password here, read the docs"
-        # traceback.print_exc() # Already printed in create/edit, avoid duplicate full trace
+        detailed_error_message = f"Invalid {service_name} credentials for {account_name}. Verification failed: {base_error_message}"
+        if service_name == 'spotify' and "incorrect padding" in base_error_message.lower():
+            detailed_error_message += ". Hint: For Spotify, ensure the credentials blob content is correct."
         raise ValueError(detailed_error_message)
-    else: # Should not happen if loop runs at least once
-        raise ValueError(f"Invalid {service_name} credentials. Verification failed (unknown reason after retries).")
-
-def get_credential(service, name, cred_type='credentials'):
-    """
-    Retrieves existing credential contents by name.
-    
-    Args:
-        service (str): 'spotify' or 'deezer'
-        name (str): Custom name of the credential to retrieve
-        cred_type (str): 'credentials' or 'search' - type of credential file to read
-        
-    Returns:
-        dict: Credential data as dictionary
-        
-    Raises:
-        FileNotFoundError: If the credential doesn't exist
-        ValueError: For invalid service name or cred_type
-    """
-    if service not in ['spotify', 'deezer']:
-        raise ValueError("Service must be 'spotify' or 'deezer'")
-    
-    if cred_type not in ['credentials', 'search']:
-        raise ValueError("Credential type must be 'credentials' or 'search'")
-    
-    # For Deezer, only credentials.json is supported
-    if service == 'deezer' and cred_type == 'search':
-        raise ValueError("Search credentials are only supported for Spotify")
-    
-    creds_dir = Path('./data/creds') / service / name
-    file_path = creds_dir / f'{cred_type}.json'
-    
-    if not file_path.exists():
-        if cred_type == 'search':
-            # Return empty dict if search.json doesn't exist
-            return {}
-        raise FileNotFoundError(f"Credential '{name}' not found for {service}")
-    
-    with open(file_path, 'r') as f:
-        return json.load(f)
-
-def list_credentials(service):
-    """
-    Lists all available credential names for a service
-    
-    Args:
-        service (str): 'spotify' or 'deezer'
-        
-    Returns:
-        list: Array of credential names
-        
-    Raises:
-        ValueError: For invalid service name
-    """
-    if service not in ['spotify', 'deezer']:
-        raise ValueError("Service must be 'spotify' or 'deezer'")
-    
-    service_dir = Path('./data/creds') / service
-    if not service_dir.exists():
-        return []
-    
-    return [d.name for d in service_dir.iterdir() if d.is_dir()]
+    else:
+        raise ValueError(f"Invalid {service_name} credentials for {account_name}. Verification failed (unknown reason after retries).")
 
 
-def create_credential(service, name, data, cred_type='credentials'):
+def create_credential(service, name, data):
     """
-    Creates a new credential file for the specified service.
-    
+    Creates a new credential.
     Args:
         service (str): 'spotify' or 'deezer'
         name (str): Custom name for the credential
-        data (dict): Dictionary containing the credential data
-        cred_type (str): 'credentials' or 'search' - type of credential file to create
-        
+        data (dict): For Spotify: {'client_id', 'client_secret', 'region', 'blob_content'}
+                     For Deezer: {'arl', 'region'}
     Raises:
-        ValueError: If service is invalid, data has invalid fields, or missing required fields
-        FileExistsError: If the credential directory already exists (for credentials.json)
+        ValueError, FileExistsError
     """
     if service not in ['spotify', 'deezer']:
         raise ValueError("Service must be 'spotify' or 'deezer'")
-    
-    if cred_type not in ['credentials', 'search']:
-        raise ValueError("Credential type must be 'credentials' or 'search'")
-    
-    # For Deezer, only credentials.json is supported
-    if service == 'deezer' and cred_type == 'search':
-        raise ValueError("Search credentials are only supported for Spotify")
-    
-    # Validate data structure
-    required_fields = []
-    allowed_fields = []
-    
-    if cred_type == 'credentials':
-        if service == 'spotify':
-            required_fields = ['username', 'credentials']
-            allowed_fields = required_fields + ['type']
-            data['type'] = 'AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS'
-        else:
-            required_fields = ['arl']
-            allowed_fields = required_fields.copy()
-            # Check for extra fields
-            extra_fields = set(data.keys()) - set(allowed_fields)
-            if extra_fields:
-                raise ValueError(f"Deezer credentials can only contain 'arl'. Extra fields found: {', '.join(extra_fields)}")
-    elif cred_type == 'search':
-        required_fields = ['client_id', 'client_secret']
-        allowed_fields = required_fields.copy()
-        # Check for extra fields
-        extra_fields = set(data.keys()) - set(allowed_fields)
-        if extra_fields:
-            raise ValueError(f"Search credentials can only contain 'client_id' and 'client_secret'. Extra fields found: {', '.join(extra_fields)}")
-    
-    for field in required_fields:
-        if field not in data:
-            raise ValueError(f"Missing required field for {cred_type}: {field}")
-    
-    # Create directory
-    creds_dir = Path('./data/creds') / service / name
-    file_created_now = False
-    dir_created_now = False
+    if not name or not isinstance(name, str):
+        raise ValueError("Credential name must be a non-empty string.")
 
-    if cred_type == 'credentials':
+    current_time = time.time()
+    
+    with _get_db_connection() as conn:
+        cursor = conn.cursor()
+        conn.row_factory = sqlite3.Row
         try:
-            creds_dir.mkdir(parents=True, exist_ok=False)
-            dir_created_now = True
-        except FileExistsError:
-            # Directory already exists, which is fine for creating credentials.json
-            # if it doesn't exist yet, or if we are overwriting (though POST usually means new)
-            pass
-        except Exception as e:
-            raise ValueError(f"Could not create directory {creds_dir}: {e}")
+            if service == 'spotify':
+                required_fields = {'region', 'blob_content'} # client_id/secret are global
+                if not required_fields.issubset(data.keys()):
+                    raise ValueError(f"Missing fields for Spotify. Required: {required_fields}")
 
-        file_path = creds_dir / 'credentials.json'
-        if file_path.exists() and request.method == 'POST': # type: ignore
-             # Safety check for POST to not overwrite if file exists unless it's an edit (PUT)
-             raise FileExistsError(f"Credential file {file_path} already exists. Use PUT to modify.")
-
-        # Write the credential file first
-        try:
-            with open(file_path, 'w') as f:
-                json.dump(data, f, indent=4)
-            file_created_now = True # Mark as created for potential cleanup
-        except Exception as e:
-            if dir_created_now: # Cleanup directory if file write failed
+                blob_path = BLOBS_DIR / name / 'credentials.json'
+                validation_data = {'blob_file_path': str(blob_path)} # Validation uses global API creds
+                
+                blob_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(blob_path, 'w') as f_blob:
+                    if isinstance(data['blob_content'], dict):
+                        json.dump(data['blob_content'], f_blob, indent=4)
+                    else: # assume string
+                        f_blob.write(data['blob_content'])
+                
                 try:
-                    creds_dir.rmdir()
-                except OSError: # rmdir fails if not empty, though it should be
-                    pass
-            raise ValueError(f"Could not write credential file {file_path}: {e}")
-
-        # --- Validation Step ---
-        try:
-            _validate_with_retry(
-                service_name=service,
-                account_name=name,
-                creds_dir_path=creds_dir,
-                cred_file_path=file_path,
-                data_for_validation=data, # 'data' contains the arl for Deezer
-                is_spotify=(service == 'spotify')
-            )
-        except ValueError as val_err: # Catch the specific error from our helper
-            print(f"ERROR: Credential validation failed during creation for {service} account {name}: {val_err}")
-            traceback.print_exc() # Print full traceback here for creation failure context
-            # Clean up the created file and directory if validation fails
-            if file_created_now:
-                try:
-                    file_path.unlink(missing_ok=True)
-                except OSError:
-                    pass # Ignore if somehow already gone
-            if dir_created_now and not any(creds_dir.iterdir()): # Only remove if empty
-                try:
-                    creds_dir.rmdir()
-                except OSError:
-                    pass
-            raise # Re-raise the ValueError from validation
-
-    elif cred_type == 'search': # Spotify only
-        # For search.json, ensure the directory exists (it should if credentials.json exists)
-        if not creds_dir.exists():
-            # This implies credentials.json was not created first, which is an issue.
-            # However, the form logic might allow adding API creds to an existing empty dir.
-            # For now, let's create it if it's missing, assuming API creds can be standalone.
-            try:
-                 creds_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                raise ValueError(f"Could not create directory for search credentials {creds_dir}: {e}")
-
-        file_path = creds_dir / 'search.json'
-        # No specific validation for client_id/secret themselves, they are validated in use.
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=4)
-
-def delete_credential(service, name, cred_type=None):
-    """
-    Deletes an existing credential directory or specific credential file.
-    
-    Args:
-        service (str): 'spotify' or 'deezer'
-        name (str): Name of the credential to delete
-        cred_type (str, optional): If specified ('credentials' or 'search'), only deletes
-                               that specific file. If None, deletes the whole directory.
-        
-    Raises:
-        FileNotFoundError: If the credential directory or specified file does not exist
-    """
-    creds_dir = Path('./data/creds') / service / name
-    
-    if cred_type:
-        if cred_type not in ['credentials', 'search']:
-            raise ValueError("Credential type must be 'credentials' or 'search'")
-        
-        file_path = creds_dir / f'{cred_type}.json'
-        if not file_path.exists():
-            raise FileNotFoundError(f"{cred_type.capitalize()} credential '{name}' not found for {service}")
-        
-        # Delete just the specific file
-        file_path.unlink()
-        
-        # If it was credentials.json and no other credential files remain, also delete the directory
-        if cred_type == 'credentials' and not any(creds_dir.iterdir()):
-            creds_dir.rmdir()
-    else:
-        # Delete the entire directory
-        if not creds_dir.exists():
-            raise FileNotFoundError(f"Credential '{name}' not found for {service}")
-        
-        shutil.rmtree(creds_dir)
-
-def edit_credential(service, name, new_data, cred_type='credentials'):
-    """
-    Edits an existing credential file.
-    
-    Args:
-        service (str): 'spotify' or 'deezer'
-        name (str): Name of the credential to edit
-        new_data (dict): Dictionary containing fields to update
-        cred_type (str): 'credentials' or 'search' - type of credential file to edit
-        
-    Raises:
-        FileNotFoundError: If the credential does not exist
-        ValueError: If new_data contains invalid fields or missing required fields after update
-    """
-    if service not in ['spotify', 'deezer']:
-        raise ValueError("Service must be 'spotify' or 'deezer'")
-    
-    if cred_type not in ['credentials', 'search']:
-        raise ValueError("Credential type must be 'credentials' or 'search'")
-    
-    # For Deezer, only credentials.json is supported
-    if service == 'deezer' and cred_type == 'search':
-        raise ValueError("Search credentials are only supported for Spotify")
-    
-    # Get file path
-    creds_dir = Path('./data/creds') / service / name
-    file_path = creds_dir / f'{cred_type}.json'
-    
-    original_data_str = None # Store original data as string to revert
-    file_existed_before_edit = file_path.exists()
-
-    if file_existed_before_edit:
-        with open(file_path, 'r') as f:
-            original_data_str = f.read()
-        try:
-            data = json.loads(original_data_str)
-        except json.JSONDecodeError:
-            # If existing file is corrupt, treat as if we are creating it anew for edit
-            data = {}
-            original_data_str = None # Can't revert to corrupt data
-    else:
-        # If file doesn't exist, and we're editing (PUT), it's usually an error
-        # unless it's for search.json which can be created during an edit flow.
-        if cred_type == 'credentials':
-            raise FileNotFoundError(f"Cannot edit non-existent credentials file: {file_path}")
-        data = {} # Start with empty data for search.json creation
-
-    # Validate new_data fields (data to be merged)
-    allowed_fields = []
-    if cred_type == 'credentials':
-        if service == 'spotify':
-            allowed_fields = ['username', 'credentials']
-        else:
-            allowed_fields = ['arl']
-    else:  # search.json
-        allowed_fields = ['client_id', 'client_secret']
-    
-    for key in new_data.keys():
-        if key not in allowed_fields:
-            raise ValueError(f"Invalid field '{key}' for {cred_type} credentials")
-    
-    # Update data (merging new_data into existing or empty data)
-    data.update(new_data)
-    
-    # --- Write and Validate Step for 'credentials' type ---
-    if cred_type == 'credentials':
-        try:
-            # Temporarily write new data for validation
-            with open(file_path, 'w') as f:
-                json.dump(data, f, indent=4)
+                    _validate_with_retry('spotify', name, validation_data)
+                    cursor.execute(
+                        "INSERT INTO spotify (name, region, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                        (name, data['region'], current_time, current_time)
+                    )
+                except Exception as e:
+                    if blob_path.exists(): blob_path.unlink() # Cleanup blob
+                    if blob_path.parent.exists() and not any(blob_path.parent.iterdir()): blob_path.parent.rmdir()
+                    raise # Re-raise validation or DB error
             
-            _validate_with_retry(
-                service_name=service,
-                account_name=name,
-                creds_dir_path=creds_dir,
-                cred_file_path=file_path,
-                data_for_validation=data, # 'data' is the merged data with 'arl' for Deezer
-                is_spotify=(service == 'spotify')
-            )
-        except ValueError as val_err: # Catch the specific error from our helper
-            print(f"ERROR: Edited credential validation failed for {service} account {name}: {val_err}")
-            traceback.print_exc() # Print full traceback here for edit failure context
-            # Revert or delete the file
-            if original_data_str is not None:
-                with open(file_path, 'w') as f:
-                    f.write(original_data_str) # Restore original content
-            elif file_existed_before_edit: # file existed but original_data_str is None (corrupt)
-                pass 
-            else: # File didn't exist before this edit attempt, so remove it
-                try:
-                    file_path.unlink(missing_ok=True)
-                except OSError:
-                    pass # Ignore if somehow already gone
-            raise # Re-raise the ValueError from validation
-        except Exception as e: # Catch other potential errors like file IO during temp write
-            print(f"ERROR: Unexpected error during edit/validation for {service} account {name}: {e}")
-            traceback.print_exc()
-            # Attempt revert/delete
-            if original_data_str is not None:
-                with open(file_path, 'w') as f: f.write(original_data_str)
-            elif file_existed_before_edit:
-                pass
-            else:
-                try:
-                    file_path.unlink(missing_ok=True)
-                except OSError: pass
-            raise ValueError(f"Failed to save edited {service} credentials due to: {str(e).splitlines()[-1]}")
+            elif service == 'deezer':
+                required_fields = {'arl', 'region'}
+                if not required_fields.issubset(data.keys()):
+                    raise ValueError(f"Missing fields for Deezer. Required: {required_fields}")
+                
+                validation_data = {'arl': data['arl']}
+                _validate_with_retry('deezer', name, validation_data)
+                
+                cursor.execute(
+                    "INSERT INTO deezer (name, arl, region, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (name, data['arl'], data['region'], current_time, current_time)
+                )
+            conn.commit()
+            logger.info(f"Credential '{name}' for {service} created successfully.")
+            return {"status": "created", "service": service, "name": name}
+        except sqlite3.IntegrityError:
+            raise FileExistsError(f"Credential '{name}' already exists for {service}.")
+        except Exception as e:
+            logger.error(f"Error creating credential {name} for {service}: {e}", exc_info=True)
+            raise ValueError(f"Could not create credential: {e}")
+
+
+def get_credential(service, name):
+    """
+    Retrieves a specific credential by name.
+    For Spotify, returns dict with name, region, and blob_content (from file).
+    For Deezer, returns dict with name, arl, and region.
+    Raises FileNotFoundError if the credential does not exist.
+    """
+    if service not in ['spotify', 'deezer']:
+        raise ValueError("Service must be 'spotify' or 'deezer'")
     
-    # For 'search' type, just write, no specific validation here for client_id/secret
-    elif cred_type == 'search':
-        if not creds_dir.exists(): # Should not happen if we're editing
-             raise FileNotFoundError(f"Credential directory {creds_dir} not found for editing search credentials.")
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=4) # `data` here is the merged data for search
+    with _get_db_connection() as conn:
+        cursor = conn.cursor()
+        conn.row_factory = sqlite3.Row # Ensure row_factory is set for this cursor
+        cursor.execute(f"SELECT * FROM {service} WHERE name = ?", (name,))
+        row = cursor.fetchone()
 
-    # For Deezer: Strip all fields except 'arl' - This should use `data` which is `updated_data`
-    if service == 'deezer' and cred_type == 'credentials':
-        if 'arl' not in data:
-            raise ValueError("Missing 'arl' field for Deezer credential after edit.")
-        data = {'arl': data['arl']}
+        if not row:
+            raise FileNotFoundError(f"No {service} credential found with name '{name}'")
 
-    # Ensure required fields are present
-    required_fields = []
-    if cred_type == 'credentials':
+        data = dict(row)
+
         if service == 'spotify':
-            required_fields = ['username', 'credentials', 'type']
-            data['type'] = 'AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS'
-        else:
-            required_fields = ['arl']
-    else:  # search.json
-        required_fields = ['client_id', 'client_secret']
+            blob_file_path = BLOBS_DIR / name / 'credentials.json'
+            data['blob_file_path'] = str(blob_file_path) # Keep for internal use
+            try:
+                with open(blob_file_path, 'r') as f_blob:
+                    blob_data = json.load(f_blob)
+                data['blob_content'] = blob_data
+            except FileNotFoundError:
+                logger.warning(f"Spotify blob file not found for {name} at {blob_file_path} during get_credential.")
+                data['blob_content'] = None
+            except json.JSONDecodeError:
+                logger.warning(f"Error decoding JSON from Spotify blob file for {name} at {blob_file_path}.")
+                data['blob_content'] = None
+            except Exception as e:
+                logger.error(f"Unexpected error reading Spotify blob for {name}: {e}", exc_info=True)
+                data['blob_content'] = None
+            
+            cleaned_data = {
+                'name': data.get('name'),
+                'region': data.get('region'),
+                'blob_content': data.get('blob_content')
+            }
+            return cleaned_data
+        
+        elif service == 'deezer':
+            cleaned_data = {
+                'name': data.get('name'),
+                'region': data.get('region'),
+                'arl': data.get('arl')
+            }
+            return cleaned_data
+        
+    # Fallback, should not be reached if service is spotify or deezer
+    return None
+
+def list_credentials(service):
+    if service not in ['spotify', 'deezer']:
+        raise ValueError("Service must be 'spotify' or 'deezer'")
     
-    for field in required_fields:
-        if field not in data:
-            raise ValueError(f"Missing required field '{field}' after update for {cred_type}")
+    with _get_db_connection() as conn:
+        cursor = conn.cursor()
+        conn.row_factory = sqlite3.Row
+        cursor.execute(f"SELECT name FROM {service}")
+        return [row['name'] for row in cursor.fetchall()]
+
+def delete_credential(service, name):
+    if service not in ['spotify', 'deezer']:
+        raise ValueError("Service must be 'spotify' or 'deezer'")
     
-    # Save updated data
-    with open(file_path, 'w') as f:
-        json.dump(data, f, indent=4)
+    with _get_db_connection() as conn:
+        cursor = conn.cursor()
+        conn.row_factory = sqlite3.Row
+        cursor.execute(f"DELETE FROM {service} WHERE name = ?", (name,))
+        if cursor.rowcount == 0:
+            raise FileNotFoundError(f"Credential '{name}' not found for {service}.")
+        
+        if service == 'spotify':
+            blob_dir = BLOBS_DIR / name
+            if blob_dir.exists():
+                shutil.rmtree(blob_dir)
+        conn.commit()
+        logger.info(f"Credential '{name}' for {service} deleted.")
+        return {"status": "deleted", "service": service, "name": name}
+
+def edit_credential(service, name, new_data):
+    """
+    Edits an existing credential.
+    new_data for Spotify can include: client_id, client_secret, region, blob_content.
+    new_data for Deezer can include: arl, region.
+    Fields not in new_data remain unchanged.
+    """
+    if service not in ['spotify', 'deezer']:
+        raise ValueError("Service must be 'spotify' or 'deezer'")
+    
+    current_time = time.time()
+    
+    # Fetch existing data first to preserve unchanged fields and for validation backup
+    try:
+        existing_cred = get_credential(service, name) # This will raise FileNotFoundError if not found
+    except FileNotFoundError:
+        raise
+    except Exception as e: # Catch other errors from get_credential
+        raise ValueError(f"Could not retrieve existing credential {name} for edit: {e}")
+
+    updated_fields = new_data.copy()
+    
+    with _get_db_connection() as conn:
+        cursor = conn.cursor()
+        conn.row_factory = sqlite3.Row
+        
+        if service == 'spotify':
+            # Prepare data for DB update
+            db_update_data = {
+                'region': updated_fields.get('region', existing_cred['region']),
+                'updated_at': current_time,
+                'name': name # for WHERE clause
+            }
+            
+            blob_path = Path(existing_cred['blob_file_path']) # Use path from existing
+            original_blob_content = None
+            if blob_path.exists():
+                with open(blob_path, 'r') as f_orig_blob:
+                    original_blob_content = f_orig_blob.read()
+
+            # If blob_content is being updated, write it temporarily for validation
+            if 'blob_content' in updated_fields:
+                blob_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(blob_path, 'w') as f_new_blob:
+                    if isinstance(updated_fields['blob_content'], dict):
+                        json.dump(updated_fields['blob_content'], f_new_blob, indent=4)
+                    else:
+                        f_new_blob.write(updated_fields['blob_content'])
+            
+            validation_data = {'blob_file_path': str(blob_path)}
+
+            try:
+                _validate_with_retry('spotify', name, validation_data)
+                
+                set_clause = ", ".join([f"{key} = ?" for key in db_update_data if key != 'name'])
+                values = [db_update_data[key] for key in db_update_data if key != 'name'] + [name]
+                cursor.execute(f"UPDATE spotify SET {set_clause} WHERE name = ?", tuple(values))
+
+                # If validation passed and blob was in new_data, it's already written.
+                # If blob_content was NOT in new_data, the existing blob (if any) remains.
+            except Exception as e:
+                # Revert blob if it was changed and validation failed
+                if 'blob_content' in updated_fields and original_blob_content is not None:
+                    with open(blob_path, 'w') as f_revert_blob:
+                        f_revert_blob.write(original_blob_content)
+                elif 'blob_content' in updated_fields and original_blob_content is None and blob_path.exists():
+                    # If new blob was written but there was no original to revert to, delete the new one.
+                    blob_path.unlink()
+                raise # Re-raise validation or DB error
+
+        elif service == 'deezer':
+            db_update_data = {
+                'arl': updated_fields.get('arl', existing_cred['arl']),
+                'region': updated_fields.get('region', existing_cred['region']),
+                'updated_at': current_time,
+                'name': name # for WHERE clause
+            }
+            
+            validation_data = {'arl': db_update_data['arl']}
+            _validate_with_retry('deezer', name, validation_data) # Validation happens before DB write for Deezer
+
+            set_clause = ", ".join([f"{key} = ?" for key in db_update_data if key != 'name'])
+            values = [db_update_data[key] for key in db_update_data if key != 'name'] + [name]
+            cursor.execute(f"UPDATE deezer SET {set_clause} WHERE name = ?", tuple(values))
+
+        if cursor.rowcount == 0: # Should not happen if get_credential succeeded
+            raise FileNotFoundError(f"Credential '{name}' for {service} disappeared during edit.")
+        
+        conn.commit()
+        logger.info(f"Credential '{name}' for {service} updated successfully.")
+        return {"status": "updated", "service": service, "name": name}
+
+# --- Helper for credential file path (mainly for Spotify blob) ---
+def get_spotify_blob_path(account_name: str) -> Path:
+    return BLOBS_DIR / account_name / 'credentials.json'
+
+# It's good practice to call init_credentials_db() when the app starts.
+# This can be done in the main application setup. For now, defining it here.
+# If this script is run directly for setup, you could add:
+# if __name__ == '__main__':
+#     init_credentials_db()
+#     print("Credentials database initialized.")
