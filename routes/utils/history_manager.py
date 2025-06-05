@@ -9,13 +9,40 @@ logger = logging.getLogger(__name__)
 HISTORY_DIR = Path('./data/history')
 HISTORY_DB_FILE = HISTORY_DIR / 'download_history.db'
 
+EXPECTED_COLUMNS = {
+    'task_id': 'TEXT PRIMARY KEY',
+    'download_type': 'TEXT',
+    'item_name': 'TEXT',
+    'item_artist': 'TEXT',
+    'item_album': 'TEXT',
+    'item_url': 'TEXT',
+    'spotify_id': 'TEXT',
+    'status_final': 'TEXT', # 'COMPLETED', 'ERROR', 'CANCELLED'
+    'error_message': 'TEXT',
+    'timestamp_added': 'REAL',
+    'timestamp_completed': 'REAL',
+    'original_request_json': 'TEXT',
+    'last_status_obj_json': 'TEXT',
+    'service_used': 'TEXT',
+    'quality_profile': 'TEXT',
+    'convert_to': 'TEXT',
+    'bitrate': 'TEXT'
+}
+
 def init_history_db():
-    """Initializes the download history database and creates the table if it doesn't exist."""
+    """Initializes the download history database, creates the table if it doesn't exist,
+    and adds any missing columns to an existing table."""
+    conn = None
     try:
         HISTORY_DIR.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(HISTORY_DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("""
+
+        # Create table if it doesn't exist (idempotent)
+        # The primary key constraint is handled by the initial CREATE TABLE.
+        # If 'task_id' is missing, it cannot be added as PRIMARY KEY to an existing table
+        # without complex migrations. We assume 'task_id' will exist if the table exists.
+        create_table_sql = f"""
             CREATE TABLE IF NOT EXISTS download_history (
                 task_id TEXT PRIMARY KEY,
                 download_type TEXT,
@@ -24,7 +51,7 @@ def init_history_db():
                 item_album TEXT,
                 item_url TEXT,
                 spotify_id TEXT,
-                status_final TEXT, -- 'COMPLETED', 'ERROR', 'CANCELLED'
+                status_final TEXT,
                 error_message TEXT,
                 timestamp_added REAL,
                 timestamp_completed REAL,
@@ -35,9 +62,48 @@ def init_history_db():
                 convert_to TEXT,
                 bitrate TEXT
             )
-        """)
+        """
+        cursor.execute(create_table_sql)
         conn.commit()
-        logger.info(f"Download history database initialized at {HISTORY_DB_FILE}")
+
+        # Check for missing columns and add them
+        cursor.execute("PRAGMA table_info(download_history)")
+        existing_columns_info = cursor.fetchall()
+        existing_column_names = {col[1] for col in existing_columns_info}
+
+        added_columns = False
+        for col_name, col_type in EXPECTED_COLUMNS.items():
+            if col_name not in existing_column_names:
+                if 'PRIMARY KEY' in col_type.upper() and col_name == 'task_id':
+                    # This case should be handled by CREATE TABLE, but as a safeguard:
+                    # If task_id is somehow missing and table exists, this is a problem.
+                    # Adding it as PK here is complex and might fail if data exists.
+                    # For now, we assume CREATE TABLE handles the PK.
+                    # If we were to add it, it would be 'ALTER TABLE download_history ADD COLUMN task_id TEXT;'
+                    # and then potentially a separate step to make it PK if table is empty, which is non-trivial.
+                    logger.warning(f"Column '{col_name}' is part of PRIMARY KEY and was expected to be created by CREATE TABLE. Skipping explicit ADD COLUMN.")
+                    continue
+
+                # For other columns, just add them.
+                # Remove PRIMARY KEY from type definition if present, as it's only for table creation.
+                col_type_for_add = col_type.replace(' PRIMARY KEY', '').strip()
+                try:
+                    cursor.execute(f"ALTER TABLE download_history ADD COLUMN {col_name} {col_type_for_add}")
+                    logger.info(f"Added missing column '{col_name} {col_type_for_add}' to download_history table.")
+                    added_columns = True
+                except sqlite3.OperationalError as alter_e:
+                    # This might happen if a column (e.g. task_id) without "PRIMARY KEY" is added by this loop
+                    # but the initial create table already made it a primary key.
+                    # Or other more complex scenarios.
+                    logger.warning(f"Could not add column '{col_name}': {alter_e}. It might already exist or there's a schema mismatch.")
+
+
+        if added_columns:
+            conn.commit()
+            logger.info(f"Download history table schema updated at {HISTORY_DB_FILE}")
+        else:
+            logger.info(f"Download history database schema is up-to-date at {HISTORY_DB_FILE}")
+
     except sqlite3.Error as e:
         logger.error(f"Error initializing download history database: {e}", exc_info=True)
     finally:

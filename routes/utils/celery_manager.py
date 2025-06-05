@@ -24,6 +24,8 @@ from .celery_tasks import (
 from .celery_config import get_config_params
 # Import history manager
 from .history_manager import init_history_db
+# Import credentials manager for DB init
+from .credentials import init_credentials_db
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -174,6 +176,8 @@ class CeleryManager:
         
         # Initialize history database
         init_history_db()
+        # Initialize credentials database
+        init_credentials_db()
         
         # Clean up stale tasks BEFORE starting/restarting workers
         self._cleanup_stale_tasks()

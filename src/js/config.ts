@@ -1,45 +1,41 @@
 import { downloadQueue } from './queue.js';
 
-// Interfaces for validator data
-interface SpotifyValidatorData {
-  username: string;
-  credentials?: string; // Credentials might be optional if only username is used as an identifier
+// Updated Interfaces for validator data
+interface SpotifyFormData {
+  accountName: string;      // Formerly username, maps to 'name' in backend
+  authBlob: string;         // Formerly credentials, maps to 'blob_content' in backend
+  accountRegion?: string;   // Maps to 'region' in backend
 }
 
-interface SpotifySearchValidatorData {
-  client_id: string;
-  client_secret: string;
-}
-
-interface DeezerValidatorData {
+interface DeezerFormData {
+  accountName: string;      // Maps to 'name' in backend
   arl: string;
+  accountRegion?: string;   // Maps to 'region' in backend
 }
 
+// Global service configuration object
 const serviceConfig: Record<string, any> = {
   spotify: {
     fields: [
-      { id: 'username', label: 'Username', type: 'text' },
-      { id: 'credentials', label: 'Credentials', type: 'text' } // Assuming this is password/token
+      { id: 'accountName', label: 'Account Name', type: 'text' },
+      { id: 'accountRegion', label: 'Region (ISO 3166-1 alpha-2)', type: 'text', placeholder: 'E.g., US, DE, GB (Optional)'},
+      { id: 'authBlob', label: 'Auth Blob (JSON content)', type: 'textarea', rows: 5 }
     ],
-    validator: (data: SpotifyValidatorData) => ({ // Typed data
-      username: data.username,
-      credentials: data.credentials
+    validator: (data: SpotifyFormData) => ({ 
+      name: data.accountName,
+      region: data.accountRegion || null, // Send null if empty, backend might have default
+      blob_content: data.authBlob
     }),
-    // Adding search credentials fields
-    searchFields: [
-      { id: 'client_id', label: 'Client ID', type: 'text' },
-      { id: 'client_secret', label: 'Client Secret', type: 'password' }
-    ],
-    searchValidator: (data: SpotifySearchValidatorData) => ({ // Typed data
-      client_id: data.client_id,
-      client_secret: data.client_secret
-    })
   },
   deezer: {
     fields: [
-      { id: 'arl', label: 'ARL', type: 'text' }
+      { id: 'accountName', label: 'Account Name', type: 'text' },
+      { id: 'accountRegion', label: 'Region (ISO 3166-1 alpha-2)', type: 'text', placeholder: 'E.g., US, DE, FR (Optional)'},
+      { id: 'arl', label: 'ARL Token', type: 'text' }
     ],
-    validator: (data: DeezerValidatorData) => ({ // Typed data
+    validator: (data: DeezerFormData) => ({ 
+      name: data.accountName,
+      region: data.accountRegion || null, // Send null if empty
       arl: data.arl
     })
   }
@@ -68,6 +64,9 @@ const CONVERSION_FORMATS: Record<string, string[]> = {
 let credentialsFormCard: HTMLElement | null = null;
 let showAddAccountFormBtn: HTMLElement | null = null;
 let cancelAddAccountBtn: HTMLElement | null = null;
+
+// Ensure this is defined, typically at the top with other DOM element getters if used frequently
+let spotifyApiConfigStatusDiv: HTMLElement | null = null;
 
 // Helper function to manage visibility of form and add button
 function setFormVisibility(showForm: boolean) {
@@ -245,6 +244,7 @@ async function initConfig() {
   await updateAccountSelectors();
   loadCredentials(currentService);
   updateFormFields();
+  await loadSpotifyApiConfig();
 }
 
 function setupServiceTabs() {
@@ -262,6 +262,7 @@ function setupServiceTabs() {
 
 function setupEventListeners() {
   (document.getElementById('credentialForm') as HTMLFormElement | null)?.addEventListener('submit', handleCredentialSubmit);
+  (document.getElementById('saveSpotifyApiConfigBtn') as HTMLButtonElement | null)?.addEventListener('click', saveSpotifyApiConfig);
 
   // Config change listeners
   (document.getElementById('defaultServiceSelect') as HTMLSelectElement | null)?.addEventListener('change', function() {
@@ -471,22 +472,12 @@ function renderCredentialsList(service: string, credentials: any[]) {
     const credItem = document.createElement('div');
     credItem.className = 'credential-item';
     
-    const hasSearchCreds = credData.search && Object.keys(credData.search).length > 0;
-    
     credItem.innerHTML = `
       <div class="credential-info">
         <span class="credential-name">${credData.name}</span>
-        ${service === 'spotify' ? 
-          `<div class="search-credentials-status ${hasSearchCreds ? 'has-api' : 'no-api'}">
-            ${hasSearchCreds ? 'API Configured' : 'No API Credentials'}
-          </div>` : ''}
       </div>
       <div class="credential-actions">
         <button class="edit-btn" data-name="${credData.name}" data-service="${service}">Edit Account</button>
-        ${service === 'spotify' ? 
-          `<button class="edit-search-btn" data-name="${credData.name}" data-service="${service}">
-            ${hasSearchCreds ? 'Edit API' : 'Add API'}
-          </button>` : ''}
         <button class="delete-btn" data-name="${credData.name}" data-service="${service}">Delete</button>
       </div>
     `;
@@ -505,12 +496,6 @@ function renderCredentialsList(service: string, credentials: any[]) {
       handleEditCredential(e as MouseEvent);
     });
   });
-
-  if (service === 'spotify') {
-    list.querySelectorAll('.edit-search-btn').forEach(btn => {
-      btn.addEventListener('click', handleEditSearchCredential as EventListener);
-    });
-  }
 }
 
 async function handleDeleteCredential(e: Event) {
@@ -557,33 +542,49 @@ async function handleDeleteCredential(e: Event) {
 async function handleEditCredential(e: MouseEvent) {
   const target = e.target as HTMLElement;
   const service = target.dataset.service;
-  const name = target.dataset.name;
+  const name = target.dataset.name; // This is the name of the credential being edited
 
   try {
     (document.querySelector(`[data-service="${service}"]`) as HTMLElement | null)?.click();
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    setFormVisibility(true); // Show form for editing, will hide add button
+    setFormVisibility(true); 
 
     const response = await fetch(`/api/credentials/${service}/${name}`);
     if (!response.ok) {
       throw new Error(`Failed to load credential: ${response.statusText}`);
     }
     
-    const data = await response.json();
+    const data = await response.json(); // data = {name, region, blob_content/arl}
 
-    currentCredential = name ? name : null;
-    const credentialNameInput = document.getElementById('credentialName') as HTMLInputElement | null;
-    if (credentialNameInput) {
-        credentialNameInput.value = name || '';
-        credentialNameInput.disabled = true;
+    currentCredential = name ? name : null; // Set the global currentCredential to the one being edited
+
+    // Populate the dynamic fields created by updateFormFields
+    // including 'accountName', 'accountRegion', and 'authBlob' or 'arl'.
+    if (serviceConfig[service!] && serviceConfig[service!].fields) {
+      serviceConfig[service!].fields.forEach((fieldConf: { id: string; }) => {
+        const element = document.getElementById(fieldConf.id) as HTMLInputElement | HTMLTextAreaElement | null;
+        if (element) {
+          if (fieldConf.id === 'accountName') {
+            element.value = data.name || name || ''; // Use data.name from fetched, fallback to clicked name
+            (element as HTMLInputElement).disabled = true; // Disable editing of account name
+          } else if (fieldConf.id === 'accountRegion') {
+            element.value = data.region || '';
+          } else if (fieldConf.id === 'authBlob' && service === 'spotify') {
+            // data.blob_content might be an object or string. Ensure textarea gets string.
+            element.value = typeof data.blob_content === 'object' ? JSON.stringify(data.blob_content, null, 2) : (data.blob_content || '');
+          } else if (fieldConf.id === 'arl' && service === 'deezer') {
+            element.value = data.arl || '';
+          }
+          // Add more specific population if other fields are introduced
+        }
+      });
     }
+
     (document.getElementById('formTitle') as HTMLElement | null)!.textContent = `Edit ${service!.charAt(0).toUpperCase() + service!.slice(1)} Account`;
     (document.getElementById('submitCredentialBtn') as HTMLElement | null)!.textContent = 'Update Account';
     
-    // Show regular fields
-    populateFormFields(service!, data);
-    toggleSearchFieldsVisibility(false);
+    toggleSearchFieldsVisibility(false); // Ensure old per-account search fields are hidden
   } catch (error: any) {
     showConfigError(error.message);
   }
@@ -592,150 +593,94 @@ async function handleEditCredential(e: MouseEvent) {
 async function handleEditSearchCredential(e: Event) {
   const target = e.target as HTMLElement;
   const service = target.dataset.service;
-  const name = target.dataset.name;
+  // const name = target.dataset.name; // Account name, not used here anymore
 
-  try {
-    if (service !== 'spotify') {
-      throw new Error('Search credentials are only available for Spotify');
-    }
-
-    setFormVisibility(true); // Show form for editing search creds, will hide add button
-
-    (document.querySelector(`[data-service="${service}"]`) as HTMLElement | null)?.click();
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    isEditingSearch = true;
-    currentCredential = name ? name : null;
-    const credentialNameInput = document.getElementById('credentialName') as HTMLInputElement | null;
-    if (credentialNameInput) {
-        credentialNameInput.value = name || '';
-        credentialNameInput.disabled = true;
-    }
-    (document.getElementById('formTitle')as HTMLElement | null)!.textContent = `Spotify API Credentials for ${name}`;
-    (document.getElementById('submitCredentialBtn') as HTMLElement | null)!.textContent = 'Save API Credentials';
-
-    // Try to load existing search credentials
-    try {
-      const searchResponse = await fetch(`/api/credentials/${service}/${name}?type=search`);
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json();
-        // Populate search fields
-        serviceConfig[service].searchFields.forEach((field: { id: string; }) => {
-          const element = document.getElementById(field.id) as HTMLInputElement | null;
-          if (element) element.value = searchData[field.id] || '';
-        });
-      } else {
-        // Clear search fields if no existing search credentials
-        serviceConfig[service].searchFields.forEach((field: { id: string; }) => {
-          const element = document.getElementById(field.id) as HTMLInputElement | null;
-          if (element) element.value = '';
-        });
-      }
-    } catch (error) {
-      // Clear search fields if there was an error
-      serviceConfig[service].searchFields.forEach((field: { id: string; }) => {
-        const element = document.getElementById(field.id) as HTMLInputElement | null;
-        if (element) element.value = '';
-      });
-    }
-
-    // Hide regular account fields, show search fields
-    toggleSearchFieldsVisibility(true);
-  } catch (error: any) {
-    showConfigError(error.message);
+  if (service === 'spotify') {
+    showConfigError("Spotify API credentials are now managed globally in the 'Global Spotify API Credentials' section.");
+    // Optionally, scroll to or highlight the global section
+    const globalSection = document.querySelector('.global-spotify-api-config') as HTMLElement | null;
+    if (globalSection) globalSection.scrollIntoView({ behavior: 'smooth' });
+  } else {
+    // If this function were ever used for other services, that logic would go here.
+    console.warn(`handleEditSearchCredential called for unhandled service: ${service} or function is obsolete.`);
   }
+  setFormVisibility(false); // Ensure the main account form is hidden if it was opened.
 }
 
 function toggleSearchFieldsVisibility(showSearchFields: boolean) {
   const serviceFieldsDiv = document.getElementById('serviceFields') as HTMLElement | null;
-  const searchFieldsDiv = document.getElementById('searchFields') as HTMLElement | null;
+  const searchFieldsDiv = document.getElementById('searchFields') as HTMLElement | null; // This div might be removed from HTML if not used by other services
   
-  if (showSearchFields) {
-    // Hide regular fields and remove 'required' attribute
-    if(serviceFieldsDiv) serviceFieldsDiv.style.display = 'none';
-    // Remove required attribute from service fields
-    serviceConfig[currentService].fields.forEach((field: { id: string }) => {
-      const input = document.getElementById(field.id) as HTMLInputElement | null;
-      if (input) input.removeAttribute('required');
-    });
-    
-    // Show search fields and add 'required' attribute
-    if(searchFieldsDiv) searchFieldsDiv.style.display = 'block';
-    // Make search fields required
-    if (currentService === 'spotify' && serviceConfig[currentService].searchFields) {
-      serviceConfig[currentService].searchFields.forEach((field: { id: string }) => {
-        const input = document.getElementById(field.id) as HTMLInputElement | null;
-        if (input) input.setAttribute('required', '');
-      });
-    }
-  } else {
-    // Show regular fields and add 'required' attribute
-    if(serviceFieldsDiv) serviceFieldsDiv.style.display = 'block';
-    // Make service fields required
+  // Simplified: Always show serviceFields, always hide (old) searchFields in this form context.
+  // The new global Spotify API fields are in a separate card and handled by different functions.
+  if(serviceFieldsDiv) serviceFieldsDiv.style.display = 'block';
+  if(searchFieldsDiv) searchFieldsDiv.style.display = 'none'; 
+
+  // Ensure required attributes are set correctly for visible service fields
+  if (serviceConfig[currentService] && serviceConfig[currentService].fields) {
     serviceConfig[currentService].fields.forEach((field: { id: string }) => {
       const input = document.getElementById(field.id) as HTMLInputElement | null;
       if (input) input.setAttribute('required', '');
     });
-    
-    // Hide search fields and remove 'required' attribute
-    if(searchFieldsDiv) searchFieldsDiv.style.display = 'none';
-    // Remove required from search fields
-    if (currentService === 'spotify' && serviceConfig[currentService].searchFields) {
-      serviceConfig[currentService].searchFields.forEach((field: { id: string }) => {
-        const input = document.getElementById(field.id) as HTMLInputElement | null;
-        if (input) input.removeAttribute('required');
-      });
-    }
+  }
+
+  // Ensure required attributes are removed from (old) search fields as they are hidden
+  // This is mainly for cleanup if the searchFieldsDiv still exists for some reason.
+  if (currentService === 'spotify' && serviceConfig[currentService] && serviceConfig[currentService].searchFields) { // This condition will no longer be true for spotify
+    serviceConfig[currentService].searchFields.forEach((field: { id: string }) => {
+      const input = document.getElementById(field.id) as HTMLInputElement | null;
+      if (input) input.removeAttribute('required');
+    });
   }
 }
 
 function updateFormFields() {
   const serviceFieldsDiv = document.getElementById('serviceFields') as HTMLElement | null;
-  const searchFieldsDiv = document.getElementById('searchFields') as HTMLElement | null;
   
-  // Clear any existing fields
   if(serviceFieldsDiv) serviceFieldsDiv.innerHTML = '';
-  if(searchFieldsDiv) searchFieldsDiv.innerHTML = '';
 
-  // Add regular account fields
-  serviceConfig[currentService].fields.forEach((field: { className: string; label: string; type: string; id: string; }) => {
-    const fieldDiv = document.createElement('div');
-    fieldDiv.className = 'form-group';
-    fieldDiv.innerHTML = `
-      <label>${field.label}:</label>
-      <input type="${field.type}" 
-             id="${field.id}" 
-             name="${field.id}" 
-             required
-             ${field.type === 'password' ? 'autocomplete="new-password"' : ''}>
-    `;
-    serviceFieldsDiv?.appendChild(fieldDiv);
-  });
-
-  // Add search fields for Spotify
-  if (currentService === 'spotify' && serviceConfig[currentService].searchFields) {
-    serviceConfig[currentService].searchFields.forEach((field: { className: string; label: string; type: string; id: string; }) => {
+  if (serviceConfig[currentService] && serviceConfig[currentService].fields) {
+    serviceConfig[currentService].fields.forEach((field: { id: string; label: string; type: string; placeholder?: string; rows?: number; }) => {
       const fieldDiv = document.createElement('div');
       fieldDiv.className = 'form-group';
+      
+      let inputElementHTML = '';
+      if (field.type === 'textarea') {
+        inputElementHTML = `<textarea 
+          id="${field.id}" 
+          name="${field.id}" 
+          rows="${field.rows || 3}" 
+          class="form-input" 
+          placeholder="${field.placeholder || ''}" 
+          required></textarea>`;
+      } else {
+        inputElementHTML = `<input 
+          type="${field.type}" 
+          id="${field.id}" 
+          name="${field.id}" 
+          class="form-input" 
+          placeholder="${field.placeholder || ''}" 
+          ${field.type === 'password' ? 'autocomplete="new-password"' : ''} 
+          required>`;
+      }
+      // Region field is optional, so remove 'required' if id is 'accountRegion'
+      if (field.id === 'accountRegion') {
+        inputElementHTML = inputElementHTML.replace(' required', '');
+      }
+
       fieldDiv.innerHTML = `
-        <label>${field.label}:</label>
-        <input type="${field.type}" 
-               id="${field.id}" 
-               name="${field.id}" 
-               required
-               ${field.type === 'password' ? 'autocomplete="new-password"' : ''}>
+        <label for="${field.id}">${field.label}:</label>
+        ${inputElementHTML}
       `;
-      searchFieldsDiv?.appendChild(fieldDiv);
+      serviceFieldsDiv?.appendChild(fieldDiv);
     });
   }
 
-  // Reset form title and button text
   (document.getElementById('formTitle') as HTMLElement | null)!.textContent = `Add New ${currentService.charAt(0).toUpperCase() + currentService.slice(1)} Account`;
   (document.getElementById('submitCredentialBtn') as HTMLElement | null)!.textContent = 'Save Account';
   
-  // Initially show regular fields, hide search fields
-  toggleSearchFieldsVisibility(false);
-  isEditingSearch = false;
+  toggleSearchFieldsVisibility(false); 
+  isEditingSearch = false; 
 }
 
 function populateFormFields(service: string, data: Record<string, string>) {
@@ -748,81 +693,82 @@ function populateFormFields(service: string, data: Record<string, string>) {
 async function handleCredentialSubmit(e: Event) {
   e.preventDefault();
   const service = (document.querySelector('.tab-button.active') as HTMLElement | null)?.dataset.service;
-  const nameInput = document.getElementById('credentialName') as HTMLInputElement | null;
-  const name = nameInput?.value.trim();
+  
+  // Get the account name from the 'accountName' field within the dynamically generated serviceFields
+  const accountNameInput = document.getElementById('accountName') as HTMLInputElement | null;
+  const accountNameValue = accountNameInput?.value.trim();
 
   try {
-    if (!currentCredential && !name) {
-      throw new Error('Credential name is required');
+    // If we are editing (currentCredential is set), the name comes from currentCredential.
+    // If we are creating a new one, the name comes from the form's 'accountName' field.
+    if (!currentCredential && !accountNameValue) {
+      // Ensure accountNameInput is focused if it's empty during new credential creation
+      if(accountNameInput && !accountNameValue) accountNameInput.focus();
+      throw new Error('Account Name is required');
     }
     if (!service) {
       throw new Error('Service not selected');
     }
 
-    const endpointName = currentCredential || name;
+    // For POST (new), endpointName is from form. For PUT (edit), it's from currentCredential.
+    const endpointName = currentCredential || accountNameValue;
+    if (!endpointName) {
+        // This should ideally not be reached if the above check for accountNameValue is done correctly.
+        throw new Error("Account name could not be determined.");
+    }
+
     let method: string, data: any, endpoint: string;
 
-    if (isEditingSearch && service === 'spotify') {
-      // Handle search credentials
-      const formData: Record<string, string> = {};
-      let isValid = true;
-      let firstInvalidField: HTMLInputElement | null = null;
-      
-      // Manually validate search fields
-      serviceConfig[service!].searchFields.forEach((field: { id: string; }) => {
-        const input = document.getElementById(field.id) as HTMLInputElement | null;
-        const value = input ? input.value.trim() : '';
-        formData[field.id] = value;
-        
-        if (!value) {
-          isValid = false;
-          if (!firstInvalidField && input) firstInvalidField = input;
-        }
-      });
-      
-      if (!isValid) {
-        if (firstInvalidField) (firstInvalidField as HTMLInputElement).focus();
-        throw new Error('All fields are required');
-      }
+    const formData: Record<string, string> = {};
+    let isValid = true;
+    let firstInvalidField: HTMLInputElement | HTMLTextAreaElement | null = null;
+    
+    const currentServiceFields = serviceConfig[service!]?.fields as Array<{id: string, label: string, type: string}> | undefined;
 
-      data = serviceConfig[service!].searchValidator(formData);
-      endpoint = `/api/credentials/${service}/${endpointName}?type=search`;
-
-      // Check if search credentials already exist for this account
-      const checkResponse = await fetch(endpoint);
-      method = checkResponse.ok ? 'PUT' : 'POST';
+    if (currentServiceFields) {
+        currentServiceFields.forEach((field: { id: string; }) => {
+          const input = document.getElementById(field.id) as HTMLInputElement | HTMLTextAreaElement | null;
+          const value = input ? input.value.trim() : '';
+          formData[field.id] = value;
+          
+          const isRequired = input?.hasAttribute('required');
+          if (isRequired && !value) {
+            isValid = false;
+            if (!firstInvalidField && input) firstInvalidField = input;
+          }
+        });
     } else {
-      // Handle regular account credentials
-      const formData: Record<string, string> = {};
-      let isValid = true;
-      let firstInvalidField: HTMLInputElement | null = null;
-      
-      // Manually validate account fields
-      serviceConfig[service!].fields.forEach((field: { id: string; }) => {
-        const input = document.getElementById(field.id) as HTMLInputElement | null;
-        const value = input ? input.value.trim() : '';
-        formData[field.id] = value;
-        
-        if (!value) {
-          isValid = false;
-          if (!firstInvalidField && input) firstInvalidField = input;
-        }
-      });
-      
-      if (!isValid) {
-        if (firstInvalidField) (firstInvalidField as HTMLInputElement).focus();
-        throw new Error('All fields are required');
-      }
-
-      data = serviceConfig[service!].validator(formData);
-      endpoint = `/api/credentials/${service}/${endpointName}`;
-      method = currentCredential ? 'PUT' : 'POST';
+        throw new Error(`No fields configured for service: ${service}`);
     }
+    
+    if (!isValid) {
+      if (firstInvalidField) {
+        const nonNullInvalidField = firstInvalidField as HTMLInputElement | HTMLTextAreaElement;
+        nonNullInvalidField.focus();
+        const fieldName = (nonNullInvalidField as HTMLInputElement).labels?.[0]?.textContent || nonNullInvalidField.id || 'Unknown field';
+        throw new Error(`Field '${fieldName}' is required.`);
+      } else {
+        throw new Error('All required fields must be filled, but a specific invalid field was not identified.');
+      }
+    }
+
+    // The validator in serviceConfig now expects fields like 'accountName', 'accountRegion', etc.
+    data = serviceConfig[service!].validator(formData); 
+    
+    // If it's a new credential and the validator didn't explicitly set 'name' from 'accountName',
+    // (though it should: serviceConfig.spotify.validator expects data.accountName and sets 'name')
+    // we ensure the 'name' in the payload matches accountNameValue if it's a new POST.
+    // For PUT, the name is part of the URL and shouldn't be in the body unless changing it is allowed.
+    // The current validators *do* map e.g. data.accountName to data.name in the output object.
+    // So, `data` should already have the correct `name` field from `accountName` form field.
+
+    endpoint = `/api/credentials/${service}/${endpointName}`;
+    method = currentCredential ? 'PUT' : 'POST';
 
     const response = await fetch(endpoint, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data) // Data should contain {name, region, blob_content/arl}
     });
 
     if (!response.ok) {
@@ -831,16 +777,13 @@ async function handleCredentialSubmit(e: Event) {
     }
 
     await updateAccountSelectors();
-    await saveConfig();
-    loadCredentials(service!);
+    loadCredentials(service!); 
     
-    // Show success message
-    showConfigSuccess(isEditingSearch ? 'API credentials saved successfully' : 'Account saved successfully');
+    showConfigSuccess('Account saved successfully');
     
-    // Add a delay before hiding the form
     setTimeout(() => {
-      setFormVisibility(false); // Hide form and show add button on successful submission
-    }, 2000); // 2 second delay
+      setFormVisibility(false); 
+    }, 2000); 
   } catch (error: any) {
     showConfigError(error.message);
   }
@@ -849,26 +792,25 @@ async function handleCredentialSubmit(e: Event) {
 function resetForm() {
   currentCredential = null;
   isEditingSearch = false;
-  const nameInput = document.getElementById('credentialName') as HTMLInputElement | null;
-  if (nameInput) {
-    nameInput.value = '';
-    nameInput.disabled = false;
-  }
+  // The static 'credentialName' input is gone. Resetting the form should clear dynamic fields.
   (document.getElementById('credentialForm') as HTMLFormElement | null)?.reset();
+
+  // Enable the accountName field again if it was disabled during an edit operation
+  const accountNameInput = document.getElementById('accountName') as HTMLInputElement | null;
+  if (accountNameInput) {
+    accountNameInput.disabled = false;
+  }
   
-  // Reset conversion dropdowns to ensure bitrate is updated correctly
   const convertToSelect = document.getElementById('convertToSelect') as HTMLSelectElement | null;
   if (convertToSelect) {
-      convertToSelect.value = ''; // Reset to 'No Conversion'
-      updateBitrateOptions(''); // Update bitrate for 'No Conversion'
+      convertToSelect.value = ''; 
+      updateBitrateOptions(''); 
   }
 
-  // Reset form title and button text
   const serviceName = currentService.charAt(0).toUpperCase() + currentService.slice(1);
   (document.getElementById('formTitle') as HTMLElement | null)!.textContent = `Add New ${serviceName} Account`;
   (document.getElementById('submitCredentialBtn') as HTMLElement | null)!.textContent = 'Save Account';
   
-  // Show regular account fields, hide search fields
   toggleSearchFieldsVisibility(false);
 }
 
@@ -1179,5 +1121,97 @@ function updateBitrateOptions(selectedFormat: string) {
     option.textContent = 'N/A';
     bitrateSelect.appendChild(option);
     bitrateSelect.value = '';
+  }
+}
+
+// Function to load global Spotify API credentials
+async function loadSpotifyApiConfig() {
+  const clientIdInput = document.getElementById('globalSpotifyClientId') as HTMLInputElement | null;
+  const clientSecretInput = document.getElementById('globalSpotifyClientSecret') as HTMLInputElement | null;
+  spotifyApiConfigStatusDiv = document.getElementById('spotifyApiConfigStatus') as HTMLElement | null; // Assign here or ensure it's globally available
+
+  if (!clientIdInput || !clientSecretInput || !spotifyApiConfigStatusDiv) {
+    console.error("Global Spotify API config form elements not found.");
+    if(spotifyApiConfigStatusDiv) spotifyApiConfigStatusDiv.textContent = 'Error: Form elements missing.';
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/credentials/spotify_api_config');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Failed to load Spotify API config, server error.' }));
+      throw new Error(errorData.error || `HTTP error ${response.status}`);
+    }
+    const data = await response.json();
+    clientIdInput.value = data.client_id || '';
+    clientSecretInput.value = data.client_secret || '';
+    if (data.warning) {
+        spotifyApiConfigStatusDiv.textContent = data.warning;
+        spotifyApiConfigStatusDiv.className = 'status-message warning';
+    } else if (data.client_id && data.client_secret) {
+        spotifyApiConfigStatusDiv.textContent = 'Current API credentials loaded.';
+        spotifyApiConfigStatusDiv.className = 'status-message success';
+    } else {
+        spotifyApiConfigStatusDiv.textContent = 'Global Spotify API credentials are not set.';
+        spotifyApiConfigStatusDiv.className = 'status-message neutral';
+    }
+  } catch (error: any) {
+    console.error('Error loading Spotify API config:', error);
+    if(spotifyApiConfigStatusDiv) {
+        spotifyApiConfigStatusDiv.textContent = `Error loading config: ${error.message}`;
+        spotifyApiConfigStatusDiv.className = 'status-message error';
+    }
+  }
+}
+
+// Function to save global Spotify API credentials
+async function saveSpotifyApiConfig() {
+  const clientIdInput = document.getElementById('globalSpotifyClientId') as HTMLInputElement | null;
+  const clientSecretInput = document.getElementById('globalSpotifyClientSecret') as HTMLInputElement | null;
+  // spotifyApiConfigStatusDiv should be already assigned by loadSpotifyApiConfig or be a global var
+  if (!spotifyApiConfigStatusDiv) { // Re-fetch if null, though it should not be if load ran.
+    spotifyApiConfigStatusDiv = document.getElementById('spotifyApiConfigStatus') as HTMLElement | null;
+  }
+
+  if (!clientIdInput || !clientSecretInput || !spotifyApiConfigStatusDiv) {
+    console.error("Global Spotify API config form elements not found for saving.");
+    if(spotifyApiConfigStatusDiv) spotifyApiConfigStatusDiv.textContent = 'Error: Form elements missing.';
+    return;
+  }
+
+  const client_id = clientIdInput.value.trim();
+  const client_secret = clientSecretInput.value.trim();
+
+  if (!client_id || !client_secret) {
+    spotifyApiConfigStatusDiv.textContent = 'Client ID and Client Secret cannot be empty.';
+    spotifyApiConfigStatusDiv.className = 'status-message error';
+    if(!client_id) clientIdInput.focus(); else clientSecretInput.focus();
+    return;
+  }
+
+  try {
+    spotifyApiConfigStatusDiv.textContent = 'Saving...';
+    spotifyApiConfigStatusDiv.className = 'status-message neutral';
+
+    const response = await fetch('/api/credentials/spotify_api_config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id, client_secret })
+    });
+
+    const responseData = await response.json(); // Try to parse JSON regardless of ok status for error messages
+
+    if (!response.ok) {
+      throw new Error(responseData.error || `Failed to save Spotify API config. Status: ${response.status}`);
+    }
+
+    spotifyApiConfigStatusDiv.textContent = responseData.message || 'Spotify API credentials saved successfully!';
+    spotifyApiConfigStatusDiv.className = 'status-message success';
+  } catch (error: any) {
+    console.error('Error saving Spotify API config:', error);
+    if(spotifyApiConfigStatusDiv) {
+        spotifyApiConfigStatusDiv.textContent = `Error saving: ${error.message}`;
+        spotifyApiConfigStatusDiv.className = 'status-message error';
+    }
   }
 }

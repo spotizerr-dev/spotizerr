@@ -6,6 +6,7 @@ import logging
 from flask import Blueprint, Response, request, url_for
 from routes.utils.celery_queue_manager import download_queue_manager, get_config_params
 from routes.utils.get_info import get_spotify_info
+from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
 from routes.utils.celery_tasks import get_last_task_status, ProgressState
 
 from deezspot.easy_spoty import Spo
@@ -19,36 +20,42 @@ def log_json(message_dict):
     print(json.dumps(message_dict))
 
 
-def get_artist_discography(url, main, album_type='album,single,compilation,appears_on', progress_callback=None):
+def get_artist_discography(url, main_spotify_account_name, album_type='album,single,compilation,appears_on', progress_callback=None):
     """
     Validate the URL, extract the artist ID, and retrieve the discography.
+    Uses global Spotify API client_id/secret for Spo initialization.
+    Args:
+        url (str): Spotify artist URL.
+        main_spotify_account_name (str): Name of the Spotify account (for context/logging, not API keys for Spo.__init__).
+        album_type (str): Types of albums to fetch.
+        progress_callback: Optional callback for progress.
     """
     if not url:
         log_json({"status": "error", "message": "No artist URL provided."})
         raise ValueError("No artist URL provided.")
 
-    # This will raise an exception if the link is invalid.
-    link_is_valid(link=url)
+    link_is_valid(link=url) # This will raise an exception if the link is invalid.
     
-    # Initialize Spotify API with credentials
-    spotify_client_id = None
-    spotify_client_secret = None
-    search_creds_path = Path(f'./data/creds/spotify/{main}/search.json')
-    if search_creds_path.exists():
-        try:
-            with open(search_creds_path, 'r') as f:
-                search_creds = json.load(f)
-                spotify_client_id = search_creds.get('client_id')
-                spotify_client_secret = search_creds.get('client_secret')
-        except Exception as e:
-            log_json({"status": "error", "message": f"Error loading Spotify search credentials: {e}"})
-            raise
+    client_id, client_secret = _get_global_spotify_api_creds()
+    
+    if not client_id or not client_secret:
+        log_json({"status": "error", "message": "Global Spotify API client_id or client_secret not configured."})
+        raise ValueError("Global Spotify API credentials are not configured.")
 
-    # Initialize the Spotify client with credentials
-    if spotify_client_id and spotify_client_secret:
-        Spo.__init__(spotify_client_id, spotify_client_secret)
+    if not main_spotify_account_name:
+        # This is a warning now, as API keys are global.
+        logger.warning("main_spotify_account_name not provided for get_artist_discography context. Using global API keys.")
     else:
-        raise ValueError("No Spotify credentials found")
+        # Check if account exists for context, good for consistency
+        try:
+            get_credential('spotify', main_spotify_account_name)
+            logger.debug(f"Spotify account context '{main_spotify_account_name}' exists for get_artist_discography.")
+        except FileNotFoundError:
+            logger.warning(f"Spotify account '{main_spotify_account_name}' provided for discography context not found.")
+        except Exception as e:
+            logger.warning(f"Error checking Spotify account '{main_spotify_account_name}' for discography context: {e}")
+
+    Spo.__init__(client_id, client_secret) # Initialize with global API keys
 
     try:
         artist_id = get_ids(url)
@@ -58,6 +65,11 @@ def get_artist_discography(url, main, album_type='album,single,compilation,appea
         raise ValueError(msg)
 
     try:
+        # The progress_callback is not a standard param for Spo.get_artist
+        # If Spo.get_artist is meant to be Spo.get_artist_discography, that would take limit/offset
+        # Assuming it's Spo.get_artist which takes artist_id and album_type.
+        # If progress_callback was for a different Spo method, this needs review.
+        # For now, removing progress_callback from this specific call as Spo.get_artist doesn't use it.
         discography = Spo.get_artist(artist_id, album_type=album_type)
         return discography
     except Exception as fetch_error:

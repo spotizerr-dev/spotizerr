@@ -318,43 +318,61 @@
         </div>
       </div>
 
-      <div class="accounts-section">
-        <div class="service-tabs">
-          <button class="tab-button active" data-service="spotify">Spotify</button>
-          <button class="tab-button" data-service="deezer">Deezer</button>
-        </div>
+      <div class="master-accounts-config-section">
+        <h2 class="section-title">Accounts configuration</h2>
 
-        <!-- Wrapper for the list and the add button -->
-        <div class="credentials-list-wrapper card">
-          <div class="credentials-list-items">
-            <!-- Dynamic credential items will be rendered here by JavaScript -->
-            <!-- "No credentials" message will also be rendered here -->
+        <!-- Global Spotify API Credentials Card: MOVED HERE -->
+        <div class="global-api-keys-config card"> <!-- Changed class to global-api-keys-config -->
+          <h2 class="section-title">Global Spotify API Credentials</h2>
+          <div class="config-item">
+            <label for="globalSpotifyClientId">Client ID:</label>
+            <input type="text" id="globalSpotifyClientId" class="form-input" placeholder="Enter your Spotify Client ID">
           </div>
-          <div class="add-account-item">
-            <button id="showAddAccountFormBtn" class="btn-add-account-styled" type="button">
-              <img src="{{ url_for('static', filename='images/plus-circle.svg') }}" alt="Add" /> Add New Account
-            </button>
+          <div class="config-item">
+            <label for="globalSpotifyClientSecret">Client Secret:</label>
+            <input type="password" id="globalSpotifyClientSecret" class="form-input" placeholder="Enter your Spotify Client Secret">
           </div>
+          <div class="config-item">
+            <button id="saveSpotifyApiConfigBtn" class="btn btn-primary">Save</button>
+          </div>
+          <div id="spotifyApiConfigStatus" class="status-message" style="margin-top: 10px;"></div>
         </div>
+        <!-- End Global Spotify API Credentials Card -->
 
-        <div class="credentials-form card">
-          <h2 id="formTitle" class="section-title">Add New Spotify Account</h2>
-          <form id="credentialForm">
-            <div class="config-item">
-              <label>Name:</label>
-              <input type="text" id="credentialName" class="form-input" required />
+        <div class="accounts-section">
+          <div class="service-tabs">
+            <button class="tab-button active" data-service="spotify">Spotify</button>
+            <button class="tab-button" data-service="deezer">Deezer</button>
+          </div>
+
+          <!-- Wrapper for the list and the add button -->
+          <div class="credentials-list-wrapper card">
+            <div class="credentials-list-items">
+              <!-- Dynamic credential items will be rendered here by JavaScript -->
+              <!-- "No credentials" message will also be rendered here -->
             </div>
-            <div id="serviceFields"></div>
-            <div id="searchFields" style="display: none;"></div>
-            <button type="submit" id="submitCredentialBtn" class="btn btn-primary save-btn">Save Account</button>
-            <button type="button" id="cancelAddAccountBtn" class="btn btn-secondary cancel-btn btn-cancel-icon" style="margin-left: 10px;" title="Cancel">
-              <img src="{{ url_for('static', filename='images/cross.svg') }}" alt="Cancel" />
-            </button>
-          </form>
-          <div id="configSuccess" class="success"></div>
-          <div id="configError" class="error"></div>
+            <div class="add-account-item">
+              <button id="showAddAccountFormBtn" class="btn-add-account-styled" type="button">
+                <img src="{{ url_for('static', filename='images/plus-circle.svg') }}" alt="Add" /> Add New Account
+              </button>
+            </div>
+          </div>
+
+          <div class="credentials-form card">
+            <h2 id="formTitle" class="section-title">Add New Spotify Account</h2>
+            <form id="credentialForm">
+              <div id="serviceFields"></div>
+              <div id="searchFields" style="display: none;"></div>
+              <button type="submit" id="submitCredentialBtn" class="btn btn-primary save-btn">Save Account</button>
+              <button type="button" id="cancelAddAccountBtn" class="btn btn-secondary cancel-btn btn-cancel-icon" style="margin-left: 10px;" title="Cancel">
+                <img src="{{ url_for('static', filename='images/cross.svg') }}" alt="Cancel" />
+              </button>
+            </form>
+            <div id="configSuccess" class="success"></div>
+            <div id="configError" class="error"></div>
+          </div>
         </div>
-      </div>
+      </div> <!-- End of accounts-section -->
     </div>
   </div>
 

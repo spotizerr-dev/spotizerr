@@ -14,6 +14,101 @@ ARTISTS_DB_PATH = DB_DIR / 'artists.db'
 # Config path for watch.json is managed in routes.utils.watch.manager now
 # CONFIG_PATH = Path('./data/config/watch.json') # Removed
 
+# Expected column definitions
+EXPECTED_WATCHED_PLAYLISTS_COLUMNS = {
+    'spotify_id': 'TEXT PRIMARY KEY',
+    'name': 'TEXT',
+    'owner_id': 'TEXT',
+    'owner_name': 'TEXT',
+    'total_tracks': 'INTEGER',
+    'link': 'TEXT',
+    'snapshot_id': 'TEXT',
+    'last_checked': 'INTEGER',
+    'added_at': 'INTEGER',
+    'is_active': 'INTEGER DEFAULT 1'
+}
+
+EXPECTED_PLAYLIST_TRACKS_COLUMNS = {
+    'spotify_track_id': 'TEXT PRIMARY KEY',
+    'title': 'TEXT',
+    'artist_names': 'TEXT',
+    'album_name': 'TEXT',
+    'album_artist_names': 'TEXT',
+    'track_number': 'INTEGER',
+    'album_spotify_id': 'TEXT',
+    'duration_ms': 'INTEGER',
+    'added_at_playlist': 'TEXT',
+    'added_to_db': 'INTEGER',
+    'is_present_in_spotify': 'INTEGER DEFAULT 1',
+    'last_seen_in_spotify': 'INTEGER'
+}
+
+EXPECTED_WATCHED_ARTISTS_COLUMNS = {
+    'spotify_id': 'TEXT PRIMARY KEY',
+    'name': 'TEXT',
+    'link': 'TEXT',
+    'total_albums_on_spotify': 'INTEGER', # Number of albums found via API
+    'last_checked': 'INTEGER',
+    'added_at': 'INTEGER',
+    'is_active': 'INTEGER DEFAULT 1',
+    'genres': 'TEXT', # Comma-separated
+    'popularity': 'INTEGER',
+    'image_url': 'TEXT'
+}
+
+EXPECTED_ARTIST_ALBUMS_COLUMNS = {
+    'album_spotify_id': 'TEXT PRIMARY KEY',
+    'artist_spotify_id': 'TEXT', # Foreign key to watched_artists
+    'name': 'TEXT',
+    'album_group': 'TEXT', # album, single, compilation, appears_on
+    'album_type': 'TEXT', # album, single, compilation
+    'release_date': 'TEXT',
+    'release_date_precision': 'TEXT', # year, month, day
+    'total_tracks': 'INTEGER',
+    'link': 'TEXT',
+    'image_url': 'TEXT',
+    'added_to_db': 'INTEGER',
+    'last_seen_on_spotify': 'INTEGER', # Timestamp when last confirmed via API
+    'download_task_id': 'TEXT',
+    'download_status': 'INTEGER DEFAULT 0', # 0: Not Queued, 1: Queued/In Progress, 2: Downloaded, 3: Error
+    'is_fully_downloaded_managed_by_app': 'INTEGER DEFAULT 0' # 0: No, 1: Yes (app has marked all its tracks as downloaded)
+}
+
+def _ensure_table_schema(cursor: sqlite3.Cursor, table_name: str, expected_columns: dict, table_description: str):
+    """
+    Ensures the given table has all expected columns, adding them if necessary.
+    """
+    try:
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        existing_columns_info = cursor.fetchall()
+        existing_column_names = {col[1] for col in existing_columns_info}
+
+        added_columns_to_this_table = False
+        for col_name, col_type in expected_columns.items():
+            if col_name not in existing_column_names:
+                if 'PRIMARY KEY' in col_type.upper() and existing_columns_info: # Only warn if table already exists
+                    logger.warning(
+                        f"Column '{col_name}' is part of PRIMARY KEY for {table_description} '{table_name}' "
+                        f"and was expected to be created by CREATE TABLE. Skipping explicit ADD COLUMN. "
+                        f"Manual schema review might be needed if this table was not empty."
+                    )
+                    continue
+
+                col_type_for_add = col_type.replace(' PRIMARY KEY', '').strip()
+                try:
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type_for_add}")
+                    logger.info(f"Added missing column '{col_name} {col_type_for_add}' to {table_description} table '{table_name}'.")
+                    added_columns_to_this_table = True
+                except sqlite3.OperationalError as alter_e:
+                    logger.warning(
+                        f"Could not add column '{col_name}' to {table_description} table '{table_name}': {alter_e}. "
+                        f"It might already exist with a different definition or there's another schema mismatch."
+                    )
+        return added_columns_to_this_table
+    except sqlite3.Error as e:
+        logger.error(f"Error ensuring schema for {table_description} table '{table_name}': {e}", exc_info=True)
+        return False
+
 def _get_playlists_db_connection():
     DB_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(PLAYLISTS_DB_PATH, timeout=10)
@@ -27,7 +122,7 @@ def _get_artists_db_connection():
     return conn
 
 def init_playlists_db():
-    """Initializes the playlists database and creates the main watched_playlists table if it doesn't exist."""
+    """Initializes the playlists database and creates/updates the main watched_playlists table."""
     try:
         with _get_playlists_db_connection() as conn:
             cursor = conn.cursor()
@@ -45,15 +140,17 @@ def init_playlists_db():
                     is_active INTEGER DEFAULT 1
                 )
             """)
-            conn.commit()
-            logger.info(f"Playlists database initialized successfully at {PLAYLISTS_DB_PATH}")
+            # Ensure schema
+            if _ensure_table_schema(cursor, 'watched_playlists', EXPECTED_WATCHED_PLAYLISTS_COLUMNS, "watched playlists"):
+                conn.commit()
+            logger.info(f"Playlists database initialized/updated successfully at {PLAYLISTS_DB_PATH}")
     except sqlite3.Error as e:
         logger.error(f"Error initializing watched_playlists table: {e}", exc_info=True)
         raise
 
 def _create_playlist_tracks_table(playlist_spotify_id: str):
-    """Creates a table for a specific playlist to store its tracks if it doesn't exist in playlists.db."""
-    table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}" # Sanitize table name
+    """Creates or updates a table for a specific playlist to store its tracks in playlists.db."""
+    table_name = f"playlist_{playlist_spotify_id.replace('-', '_').replace(' ', '_')}" # Sanitize table name
     try:
         with _get_playlists_db_connection() as conn: # Use playlists connection
             cursor = conn.cursor()
@@ -73,8 +170,10 @@ def _create_playlist_tracks_table(playlist_spotify_id: str):
                     last_seen_in_spotify INTEGER -- Timestamp when last confirmed in Spotify playlist
                 )
             """)
-            conn.commit()
-            logger.info(f"Tracks table '{table_name}' created or already exists in {PLAYLISTS_DB_PATH}.")
+            # Ensure schema
+            if _ensure_table_schema(cursor, table_name, EXPECTED_PLAYLIST_TRACKS_COLUMNS, f"playlist tracks ({playlist_spotify_id})"):
+                conn.commit()
+            logger.info(f"Tracks table '{table_name}' created/updated or already exists in {PLAYLISTS_DB_PATH}.")
     except sqlite3.Error as e:
         logger.error(f"Error creating playlist tracks table {table_name} in {PLAYLISTS_DB_PATH}: {e}", exc_info=True)
         raise
@@ -388,50 +487,66 @@ def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db:
 # --- Artist Watch Database Functions ---
 
 def init_artists_db():
-    """Initializes the artists database and creates the watched_artists table if it doesn't exist."""
+    """Initializes the artists database and creates/updates the main watched_artists table."""
     try:
         with _get_artists_db_connection() as conn:
             cursor = conn.cursor()
+            # Note: total_albums_on_spotify, genres, popularity, image_url added to EXPECTED_WATCHED_ARTISTS_COLUMNS
+            # and will be added by _ensure_table_schema if missing.
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS watched_artists (
                     spotify_id TEXT PRIMARY KEY,
                     name TEXT,
-                    total_albums_on_spotify INTEGER, 
+                    link TEXT,
+                    total_albums_on_spotify INTEGER, -- Number of albums found via API on last full check
                     last_checked INTEGER,
                     added_at INTEGER,
                     is_active INTEGER DEFAULT 1,
-                    last_known_status TEXT, 
-                    last_task_id TEXT 
+                    genres TEXT,          -- Comma-separated list of genres
+                    popularity INTEGER,   -- Artist popularity (0-100)
+                    image_url TEXT        -- URL of the artist's image
                 )
             """)
-            conn.commit()
-            logger.info(f"Artists database initialized successfully at {ARTISTS_DB_PATH}")
+            # Ensure schema
+            if _ensure_table_schema(cursor, 'watched_artists', EXPECTED_WATCHED_ARTISTS_COLUMNS, "watched artists"):
+                conn.commit()
+            logger.info(f"Artists database initialized/updated successfully at {ARTISTS_DB_PATH}")
     except sqlite3.Error as e:
         logger.error(f"Error initializing watched_artists table in {ARTISTS_DB_PATH}: {e}", exc_info=True)
         raise
 
 def _create_artist_albums_table(artist_spotify_id: str):
-    """Creates a table for a specific artist to store its albums if it doesn't exist in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    """Creates or updates a table for a specific artist to store their albums in artists.db."""
+    table_name = f"artist_{artist_spotify_id.replace('-', '_').replace(' ', '_')}" # Sanitize table name
     try:
-        with _get_artists_db_connection() as conn:
+        with _get_artists_db_connection() as conn: # Use artists connection
             cursor = conn.cursor()
+            # Note: Several columns including artist_spotify_id, release_date_precision, image_url,
+            # last_seen_on_spotify, download_task_id, download_status, is_fully_downloaded_managed_by_app
+            # are part of EXPECTED_ARTIST_ALBUMS_COLUMNS and will be added by _ensure_table_schema.
             cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     album_spotify_id TEXT PRIMARY KEY,
+                    artist_spotify_id TEXT, 
                     name TEXT,
                     album_group TEXT, 
                     album_type TEXT, 
                     release_date TEXT,
+                    release_date_precision TEXT,
                     total_tracks INTEGER,
-                    added_to_db_at INTEGER, 
-                    is_download_initiated INTEGER DEFAULT 0, 
-                    task_id TEXT, 
-                    last_checked_for_tracks INTEGER 
+                    link TEXT,
+                    image_url TEXT,
+                    added_to_db INTEGER, 
+                    last_seen_on_spotify INTEGER,
+                    download_task_id TEXT,
+                    download_status INTEGER DEFAULT 0,
+                    is_fully_downloaded_managed_by_app INTEGER DEFAULT 0 
                 )
             """)
-            conn.commit()
-            logger.info(f"Albums table '{table_name}' for artist {artist_spotify_id} created or exists in {ARTISTS_DB_PATH}.")
+            # Ensure schema for the specific artist's album table
+            if _ensure_table_schema(cursor, table_name, EXPECTED_ARTIST_ALBUMS_COLUMNS, f"artist albums ({artist_spotify_id})"):
+                conn.commit()
+            logger.info(f"Albums table '{table_name}' created/updated or already exists in {ARTISTS_DB_PATH}.")
     except sqlite3.Error as e:
         logger.error(f"Error creating artist albums table {table_name} in {ARTISTS_DB_PATH}: {e}", exc_info=True)
         raise
