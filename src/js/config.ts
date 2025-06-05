@@ -65,6 +65,10 @@ let credentialsFormCard: HTMLElement | null = null;
 let showAddAccountFormBtn: HTMLElement | null = null;
 let cancelAddAccountBtn: HTMLElement | null = null;
 
+// Hint element references
+let spotifyRegionHint: HTMLElement | null = null;
+let deezerRegionHint: HTMLElement | null = null;
+
 // Ensure this is defined, typically at the top with other DOM element getters if used frequently
 let spotifyApiConfigStatusDiv: HTMLElement | null = null;
 
@@ -171,6 +175,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     credentialsFormCard = document.querySelector('.credentials-form.card');
     showAddAccountFormBtn = document.getElementById('showAddAccountFormBtn');
     cancelAddAccountBtn = document.getElementById('cancelAddAccountBtn');
+
+    // Get hint elements
+    spotifyRegionHint = document.getElementById('spotifyRegionHint');
+    deezerRegionHint = document.getElementById('deezerRegionHint');
 
     if (credentialsFormCard && showAddAccountFormBtn) {
       // Initially hide form, show add button (default state handled by setFormVisibility if called)
@@ -681,6 +689,21 @@ function updateFormFields() {
   
   toggleSearchFieldsVisibility(false); 
   isEditingSearch = false; 
+
+  // Show/hide region hints based on current service
+  if (spotifyRegionHint && deezerRegionHint) {
+    if (currentService === 'spotify') {
+      spotifyRegionHint.style.display = 'block';
+      deezerRegionHint.style.display = 'none';
+    } else if (currentService === 'deezer') {
+      spotifyRegionHint.style.display = 'none';
+      deezerRegionHint.style.display = 'block';
+    } else {
+      // Fallback: hide both if service is unrecognized
+      spotifyRegionHint.style.display = 'none';
+      deezerRegionHint.style.display = 'none';
+    }
+  }
 }
 
 function populateFormFields(service: string, data: Record<string, string>) {

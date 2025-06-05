@@ -362,6 +362,14 @@
             <h2 id="formTitle" class="section-title">Add New Spotify Account</h2>
             <form id="credentialForm">
               <div id="serviceFields"></div>
+              <!-- Region Hints START -->
+              <div id="spotifyRegionHint" class="setting-description" style="display:none; margin-left: 10px; margin-top: -5px; margin-bottom:15px; font-size: 0.9em;">
+                <small>Region not matching your account may lead to issues. Check it <a href="https://www.spotify.com/mx/account/profile/" target="_blank" rel="noopener noreferrer">here</a>.</small>
+              </div>
+              <div id="deezerRegionHint" class="setting-description" style="display:none; margin-left: 10px; margin-top: -5px; margin-bottom:15px; font-size: 0.9em;">
+                <small>Region not matching your account may lead to issues. Check it <a href="https://www.deezer.com/account/country_selector" target="_blank" rel="noopener noreferrer">here</a>.</small>
+              </div>
+              <!-- Region Hints END -->
               <div id="searchFields" style="display: none;"></div>
               <button type="submit" id="submitCredentialBtn" class="btn btn-primary save-btn">Save Account</button>
               <button type="button" id="cancelAddAccountBtn" class="btn btn-secondary cancel-btn btn-cancel-icon" style="margin-left: 10px;" title="Cancel">
