@@ -80,7 +80,6 @@ def init_credentials_db():
     try:
         with _get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.row_factory = sqlite3.Row # Apply row_factory here as well for consistency
             # Spotify Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS spotify (
@@ -90,8 +89,7 @@ def init_credentials_db():
                     updated_at REAL
                 )
             """)
-            if _ensure_table_schema(cursor, "spotify", EXPECTED_SPOTIFY_TABLE_COLUMNS):
-                conn.commit()
+            _ensure_table_schema(cursor, "spotify", EXPECTED_SPOTIFY_TABLE_COLUMNS)
             
             # Deezer Table
             cursor.execute("""
@@ -103,8 +101,7 @@ def init_credentials_db():
                     updated_at REAL
                 )
             """)
-            if _ensure_table_schema(cursor, "deezer", EXPECTED_DEEZER_TABLE_COLUMNS):
-                conn.commit()
+            _ensure_table_schema(cursor, "deezer", EXPECTED_DEEZER_TABLE_COLUMNS)
             
             # Ensure global search.json exists, create if not
             if not GLOBAL_SEARCH_JSON_PATH.exists():

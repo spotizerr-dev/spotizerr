@@ -5,6 +5,7 @@ from routes.utils.credentials import (
     create_credential,
     delete_credential,
     edit_credential,
+    init_credentials_db,
     # Import new utility functions for global Spotify API creds
     _get_global_spotify_api_creds,
     save_global_spotify_api_creds
@@ -14,6 +15,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 credentials_bp = Blueprint('credentials', __name__)
+
+# Initialize the database and tables when the blueprint is loaded
+init_credentials_db()
 
 @credentials_bp.route('/spotify_api_config', methods=['GET', 'PUT'])
 def handle_spotify_api_config():
