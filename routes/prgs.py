@@ -21,16 +21,15 @@ prgs_bp = Blueprint("prgs", __name__, url_prefix="/api/prgs")
 
 
 @prgs_bp.route("/<task_id>", methods=["GET"])
-def get_prg_file(task_id):
+def get_task_details(task_id):
     """
     Return a JSON object with the resource type, its name (title),
     the last progress update, and, if available, the original request parameters.
 
-    This function works with both the old PRG file system (for backward compatibility)
-    and the new task ID based system.
+    This function works with the new task ID based system.
 
     Args:
-        task_id: Either a task UUID from Celery or a PRG filename from the old system
+        task_id: A task UUID from Celery
     """
     # Only support new task IDs
     task_info = get_task_info(task_id)
@@ -88,13 +87,12 @@ def get_prg_file(task_id):
 
 
 @prgs_bp.route("/delete/<task_id>", methods=["DELETE"])
-def delete_prg_file(task_id):
+def delete_task(task_id):
     """
     Delete a task's information and history.
-    Works with both the old PRG file system and the new task ID based system.
 
     Args:
-        task_id: Either a task UUID from Celery or a PRG filename from the old system
+        task_id: A task UUID from Celery
     """
     # Only support new task IDs
     task_info = get_task_info(task_id)
@@ -107,7 +105,7 @@ def delete_prg_file(task_id):
 
 
 @prgs_bp.route("/list", methods=["GET"])
-def list_prg_files():
+def list_tasks():
     """
     Retrieve a list of all tasks in the system.
     Returns a detailed list of task objects including status and metadata.
