@@ -251,8 +251,8 @@ if __name__ == "__main__":
     # Set file permissions for log files if needed
     try:
         os.chmod(log_handler.baseFilename, 0o666)
-    except:
-        logging.warning("Could not set permissions on log file")
+    except (OSError, FileNotFoundError) as e:
+        logging.warning(f"Could not set permissions on log file: {str(e)}")
 
     # Log application startup
     logging.info("=== Spotizerr Application Starting ===")

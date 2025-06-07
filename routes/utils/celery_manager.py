@@ -1,26 +1,9 @@
-import os
-import json
-import signal
 import subprocess
 import logging
 import time
-import atexit
-from pathlib import Path
 import threading
-import queue
-import sys
-import uuid
 
 # Import Celery task utilities
-from .celery_tasks import (
-    ProgressState,
-    get_task_info,
-    get_last_task_status,
-    store_task_status,
-    get_all_tasks as get_all_celery_tasks_info,
-    cleanup_stale_errors,
-    delayed_delete_task_data,
-)
 from .celery_config import get_config_params, MAX_CONCURRENT_DL
 
 # Configure logging

@@ -1,9 +1,7 @@
 import time
 import json
-import uuid
 import logging
 import traceback
-from datetime import datetime
 from celery import Celery, Task, states
 from celery.signals import (
     task_prerun,
@@ -14,17 +12,13 @@ from celery.signals import (
     setup_logging,
 )
 from celery.exceptions import Retry
-import os  # Added for path operations
 from pathlib import Path  # Added for path operations
 
-# Configure logging
-logger = logging.getLogger(__name__)
 
 # Setup Redis and Celery
 from routes.utils.celery_config import (
     REDIS_URL,
     REDIS_BACKEND,
-    REDIS_PASSWORD,
     get_config_params,
 )
 
@@ -37,6 +31,12 @@ from routes.utils.watch.db import (
 # Import history manager function
 from .history_manager import add_entry_to_history
 
+# Create Redis connection for storing task data that's not part of the Celery result backend
+import redis
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Initialize Celery app
 celery_app = Celery(
     "routes.utils.celery_tasks", broker=REDIS_URL, backend=REDIS_BACKEND
@@ -45,8 +45,6 @@ celery_app = Celery(
 # Load Celery config
 celery_app.config_from_object("routes.utils.celery_config")
 
-# Create Redis connection for storing task data that's not part of the Celery result backend
-import redis
 
 redis_client = redis.Redis.from_url(REDIS_URL)
 
