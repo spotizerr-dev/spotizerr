@@ -46,7 +46,7 @@ def setup_logging():
 
     # Log formatting
     log_format = logging.Formatter(
-        "%(asctime)s [%(processName)s:%(threadName)s] [%(name)s] [%(levelname)s] - %(message)s",
+        "%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
