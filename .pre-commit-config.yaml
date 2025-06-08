@@ -4,23 +4,34 @@ repos:
       rev: v5.0.0
       hooks:
           - id: check-symlinks
+            exclude: ^spotizerr-ui/
           - id: trailing-whitespace
+            exclude: ^spotizerr-ui/
           - id: mixed-line-ending
             args: [--fix=lf]
+            exclude: ^spotizerr-ui/
           - id: check-yaml
-            exclude: 'mkdocs.yml'
+            exclude: 'mkdocs.yml|^spotizerr-ui/'
           - id: check-toml
+            exclude: ^spotizerr-ui/
           - id: check-json
+            exclude: ^spotizerr-ui/
           - id: check-ast
+            exclude: ^spotizerr-ui/
           - id: debug-statements
+            exclude: ^spotizerr-ui/
           - id: check-merge-conflict
+            exclude: ^spotizerr-ui/
           - id: check-shebang-scripts-are-executable
+            exclude: ^spotizerr-ui/
           - id: check-added-large-files
             args: [--maxkb=10000]
+            exclude: ^spotizerr-ui/
     - repo: https://github.com/python-jsonschema/check-jsonschema
       rev: '0.33.0'
       hooks:
           - id: check-github-workflows
+            exclude: ^spotizerr-ui/
     - repo: https://github.com/astral-sh/ruff-pre-commit
       # Ruff version.
       rev: v0.11.13
@@ -29,13 +40,16 @@ repos:
           - id: ruff
             types_or: [python, pyi, jupyter]
             args: [--fix]
+            exclude: ^spotizerr-ui/
           # Run the formatter.
           - id: ruff-format
             types_or: [python, pyi, jupyter]
+            exclude: ^spotizerr-ui/
     - repo: https://github.com/pre-commit/mirrors-mypy
       rev: 'v1.16.0'
       hooks:
           - id: mypy
             args: [--no-strict-optional, --ignore-missing-imports]
+            exclude: ^spotizerr-ui/
             # NOTE: you might need to add some deps here:
             additional_dependencies: [waitress==3.0.2, types-waitress]

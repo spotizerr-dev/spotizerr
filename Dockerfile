@@ -4,7 +4,7 @@ FROM python:3.12-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies, including Node.js and npm (for pnpm)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gosu \
@@ -15,23 +15,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY requirements.txt .
+# Install pnpm globally
+RUN npm install -g pnpm
 
+# --- Backend Python Dependencies ---
+# Copy only the requirements file to leverage Docker cache
+COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# --- Frontend Node.js Dependencies ---
+# Copy package manager files to leverage Docker cache
+COPY spotizerr-ui/package.json spotizerr-ui/pnpm-lock.yaml ./spotizerr-ui/
+# Install frontend dependencies
+RUN cd spotizerr-ui && pnpm install --frozen-lockfile
+
+# --- Application Code & Frontend Build ---
+# Copy the rest of the application code
 COPY . .
+# Build the frontend application
+RUN cd spotizerr-ui && pnpm build
 
-# Install TypeScript globally
-RUN npm install -g typescript
-
-# Compile TypeScript
-# tsc will use tsconfig.json from the current directory (/app)
-# It will read from /app/src/js and output to /app/static/js
-RUN tsc
-
+# --- Final Container Setup ---
 # Create necessary directories with proper permissions
 RUN mkdir -p downloads data/config data/creds data/watch data/history logs/tasks && \
     chmod -R 777 downloads data logs
