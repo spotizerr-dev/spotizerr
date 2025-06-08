@@ -71,7 +71,7 @@ interface StatusData {
   retry_count?: number;
   max_retries?: number; // from config potentially
   seconds_left?: number;
-  prg_file?: string;
+  task_id?: string;
   url?: string;
   reason?: string; // for skipped
   parent?: ParentInfo;
@@ -100,7 +100,7 @@ interface StatusData {
 interface QueueEntry {
   item: QueueItem;
   type: string;
-  prgFile: string;
+  taskId: string;
   requestUrl: string | null;
   element: HTMLElement;
   lastStatus: StatusData;
@@ -196,13 +196,13 @@ export class DownloadQueue {
     // const storedVisibleCount = localStorage.getItem("downloadQueueVisibleCount");
     // this.visibleCount = storedVisibleCount ? parseInt(storedVisibleCount, 10) : 10;
 
-    // Load the cached status info (object keyed by prgFile) - This is also redundant
+    // Load the cached status info (object keyed by taskId) - This is also redundant
     // this.queueCache = JSON.parse(localStorage.getItem("downloadQueueCache") || "{}");
 
     // Wait for initDOM to complete before setting up event listeners and loading existing PRG files.
     this.initDOM().then(() => {
       this.initEventListeners();
-      this.loadExistingPrgFiles();
+      this.loadExistingTasks();
       // Start periodic sync
       setInterval(() => this.periodicSyncWithServer(), 10000); // Sync every 10 seconds
     });
@@ -278,8 +278,8 @@ export class DownloadQueue {
       cancelAllBtn.addEventListener('click', () => {
         for (const queueId in this.queueEntries) {
           const entry = this.queueEntries[queueId];
-          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
-          if (entry && !entry.hasEnded && entry.prgFile) {
+          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
+          if (entry && !entry.hasEnded && entry.taskId) {
             // Mark as cancelling visually
             if (entry.element) {
               entry.element.classList.add('cancelling');
@@ -289,7 +289,7 @@ export class DownloadQueue {
             }
 
             // Cancel each active download
-            fetch(`/api/${entry.type}/download/cancel?prg_file=${entry.prgFile}`)
+            fetch(`/api/${entry.type}/download/cancel?task_id=${entry.taskId}`)
               .then(response => response.json())
               .then(data => {
                 // API returns status 'cancelled' when cancellation succeeds
@@ -388,9 +388,9 @@ export class DownloadQueue {
   /**
    * Adds a new download entry.
    */
-  addDownload(item: QueueItem, type: string, prgFile: string, requestUrl: string | null = null, startMonitoring: boolean = false): string {
+  addDownload(item: QueueItem, type: string, taskId: string, requestUrl: string | null = null, startMonitoring: boolean = false): string {
     const queueId = this.generateQueueId();
-    const entry = this.createQueueEntry(item, type, prgFile, queueId, requestUrl);
+    const entry = this.createQueueEntry(item, type, taskId, queueId, requestUrl);
     this.queueEntries[queueId] = entry;
     // Re-render and update which entries are processed.
     this.updateQueueOrder();
@@ -417,17 +417,17 @@ export class DownloadQueue {
 
     // Show a preparing message for new entries
     if (entry.isNew) {
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
       if (logElement) {
         logElement.textContent = "Initializing download...";
       }
     }
 
-    console.log(`Starting monitoring for ${entry.type} with PRG file: ${entry.prgFile}`);
+    console.log(`Starting monitoring for ${entry.type} with task ID: ${entry.taskId}`);
 
     // For backward compatibility, first try to get initial status from the REST API
     try {
-      const response = await fetch(`/api/prgs/${entry.prgFile}`);
+      const response = await fetch(`/api/prgs/${entry.taskId}`);
       if (response.ok) {
         const data: StatusData = await response.json(); // Add type to data
 
@@ -464,7 +464,7 @@ export class DownloadQueue {
           entry.status = data.last_line.status || 'unknown'; // Ensure status is not undefined
 
           // Update status message without recreating the element
-          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+          const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
           if (logElement) {
             const statusMessage = this.getStatusMessage(data.last_line);
             logElement.textContent = statusMessage;
@@ -474,7 +474,7 @@ export class DownloadQueue {
           this.applyStatusClasses(entry, data.last_line);
 
           // Save updated status to cache, ensuring we preserve parent data
-          this.queueCache[entry.prgFile] = {
+          this.queueCache[entry.taskId] = {
             ...data.last_line,
             // Ensure parent data is preserved
             parent: data.last_line.parent || entry.lastStatus?.parent
@@ -540,11 +540,11 @@ export class DownloadQueue {
   /**
    * Creates a new queue entry. It checks localStorage for any cached info.
    */
-  createQueueEntry(item: QueueItem, type: string, prgFile: string, queueId: string, requestUrl: string | null): QueueEntry {
+  createQueueEntry(item: QueueItem, type: string, taskId: string, queueId: string, requestUrl: string | null): QueueEntry {
     console.log(`Creating queue entry with initial type: ${type}`);
 
     // Get cached data if it exists
-    const cachedData: StatusData | undefined = this.queueCache[prgFile]; // Add type
+    const cachedData: StatusData | undefined = this.queueCache[taskId]; // Add type
 
     // If we have cached data, use it to determine the true type and item properties
     if (cachedData) {
@@ -588,9 +588,9 @@ export class DownloadQueue {
     const entry: QueueEntry = { // Add type to entry
       item,
       type,
-      prgFile,
+      taskId,
       requestUrl, // for potential retry
-      element: this.createQueueItem(item, type, prgFile, queueId),
+      element: this.createQueueItem(item, type, taskId, queueId),
       lastStatus: {
         // Initialize with basic item metadata for immediate display
         type,
@@ -615,7 +615,7 @@ export class DownloadQueue {
       realTimeStallDetector: { count: 0, lastStatusJson: '' } // For detecting stalled real_time downloads
     };
 
-    // If cached info exists for this PRG file, use it.
+    // If cached info exists for this task, use it.
     if (cachedData) {
       entry.lastStatus = cachedData;
       const logEl = entry.element.querySelector('.log') as HTMLElement | null;
@@ -640,7 +640,7 @@ export class DownloadQueue {
   /**
  * Returns an HTML element for the queue entry with modern UI styling.
  */
-createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string): HTMLElement {
+createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): HTMLElement {
   // Track whether this is a multi-track item (album or playlist)
   const isMultiTrack = type === 'album' || type === 'playlist';
   const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
@@ -664,26 +664,26 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         ${displayArtist ? `<div class="artist">${displayArtist}</div>` : ''}
         <div class="type ${type}">${displayType}</div>
       </div>
-      <button class="cancel-btn" data-prg="${prgFile}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
+      <button class="cancel-btn" data-taskid="${taskId}" data-type="${type}" data-queueid="${queueId}" title="Cancel Download">
         <img src="/static/images/skull-head.svg" alt="Cancel Download" style="width: 16px; height: 16px;">
       </button>
     </div>
 
     <div class="queue-item-status">
-      <div class="log" id="log-${queueId}-${prgFile}">${defaultMessage}</div>
+      <div class="log" id="log-${queueId}-${taskId}">${defaultMessage}</div>
 
       <!-- Error details container (hidden by default) -->
-      <div class="error-details" id="error-details-${queueId}-${prgFile}" style="display: none;"></div>
+      <div class="error-details" id="error-details-${queueId}-${taskId}" style="display: none;"></div>
 
       <div class="progress-container">
         <!-- Track-level progress bar for single track or current track in multi-track items -->
-        <div class="track-progress-bar-container" id="track-progress-container-${queueId}-${prgFile}">
-          <div class="track-progress-bar" id="track-progress-bar-${queueId}-${prgFile}"
+        <div class="track-progress-bar-container" id="track-progress-container-${queueId}-${taskId}">
+          <div class="track-progress-bar" id="track-progress-bar-${queueId}-${taskId}"
                role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;"></div>
         </div>
 
         <!-- Time elapsed for real-time downloads -->
-        <div class="time-elapsed" id="time-elapsed-${queueId}-${prgFile}"></div>
+        <div class="time-elapsed" id="time-elapsed-${queueId}-${taskId}"></div>
       </div>
     </div>`;
 
@@ -693,10 +693,10 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     <div class="overall-progress-container">
       <div class="overall-progress-header">
         <span class="overall-progress-label">Overall Progress</span>
-        <span class="overall-progress-count" id="progress-count-${queueId}-${prgFile}">0/0</span>
+        <span class="overall-progress-count" id="progress-count-${queueId}-${taskId}">0/0</span>
       </div>
       <div class="overall-progress-bar-container">
-        <div class="overall-progress-bar" id="overall-bar-${queueId}-${prgFile}"
+        <div class="overall-progress-bar" id="overall-bar-${queueId}-${taskId}"
              role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;"></div>
       </div>
     </div>`;
@@ -745,7 +745,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       case 'error':
         entry.element.classList.add('error');
         // Hide error-details to prevent duplicate error display
-        const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+        const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
         if (errorDetailsContainer) {
           errorDetailsContainer.style.display = 'none';
         }
@@ -755,7 +755,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         entry.element.classList.add('complete');
         // Hide error details if present
         if (entry.element) {
-          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
           if (errorDetailsContainer) {
             errorDetailsContainer.style.display = 'none';
           }
@@ -765,7 +765,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         entry.element.classList.add('cancelled');
         // Hide error details if present
         if (entry.element) {
-          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+          const errorDetailsContainer = entry.element.querySelector(`#error-details-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
           if (errorDetailsContainer) {
             errorDetailsContainer.style.display = 'none';
           }
@@ -778,8 +778,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     const btn = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null; // Add types and null check
     if (!btn) return; // Guard clause
     btn.style.display = 'none';
-    const { prg, type, queueid } = btn.dataset;
-    if (!prg || !type || !queueid) return; // Guard against undefined dataset properties
+    const { taskid, type, queueid } = btn.dataset;
+    if (!taskid || !type || !queueid) return; // Guard against undefined dataset properties
 
     try {
       // Get the queue item element
@@ -790,13 +790,13 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       }
 
       // Show cancellation in progress
-      const logElement = document.getElementById(`log-${queueid}-${prg}`) as HTMLElement | null;
+      const logElement = document.getElementById(`log-${queueid}-${taskid}`) as HTMLElement | null;
       if (logElement) {
         logElement.textContent = "Cancelling...";
       }
 
       // First cancel the download
-      const response = await fetch(`/api/${type}/download/cancel?prg_file=${prg}`);
+      const response = await fetch(`/api/${type}/download/cancel?task_id=${taskid}`);
       const data = await response.json();
       // API returns status 'cancelled' when cancellation succeeds
       if (data.status === "cancelled" || data.status === "cancel") {
@@ -813,7 +813,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
           // Mark as cancelled in the cache to prevent re-loading on page refresh
           entry.status = "cancelled";
-          this.queueCache[prg] = { status: "cancelled" };
+          this.queueCache[taskid] = { status: "cancelled" };
           localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
 
           // Immediately remove the item from the UI
@@ -924,7 +924,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     // This is important for items that become visible after "Show More" or other UI changes
     Object.values(this.queueEntries).forEach(entry => {
       if (this.isEntryVisible(entry.uniqueId) && !entry.hasEnded && !this.pollingIntervals[entry.uniqueId]) {
-        console.log(`updateQueueOrder: Ensuring polling for visible/active entry ${entry.uniqueId} (${entry.prgFile})`);
+        console.log(`updateQueueOrder: Ensuring polling for visible/active entry ${entry.uniqueId} (${entry.taskId})`);
         this.setupPollingInterval(entry.uniqueId);
       }
     });
@@ -995,8 +995,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       delete this.queueEntries[queueId];
 
       // Remove the cached info
-      if (this.queueCache[entry.prgFile]) {
-        delete this.queueCache[entry.prgFile];
+      if (this.queueCache[entry.taskId]) {
+        delete this.queueCache[entry.taskId];
         localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
       }
 
@@ -1025,13 +1025,13 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
     // Find the queue item this status belongs to
     let queueItem: QueueEntry | null = null;
-    const prgFile = data.prg_file || Object.keys(this.queueCache).find(key =>
+    const taskId = data.task_id || Object.keys(this.queueCache).find(key =>
       this.queueCache[key].status === data.status && this.queueCache[key].type === data.type
     );
 
-    if (prgFile) {
+    if (taskId) {
       const queueId = Object.keys(this.queueEntries).find(id =>
-        this.queueEntries[id].prgFile === prgFile
+        this.queueEntries[id].taskId === taskId
       );
       if (queueId) {
         queueItem = this.queueEntries[queueId];
@@ -1408,17 +1408,17 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
       const retryData: StatusData = await retryResponse.json(); // Add type
 
-      if (retryData.prg_file) {
-        const newPrgFile = retryData.prg_file;
+      if (retryData.task_id) {
+        const newTaskId = retryData.task_id;
 
-        // Clean up the old entry from UI, memory, cache, and server (PRG file)
+        // Clean up the old entry from UI, memory, cache, and server (task file)
         // logElement and retryBtn are part of the old entry's DOM structure and will be removed.
         await this.cleanupEntry(queueId);
 
         // Add the new download entry. This will create a new element, start monitoring, etc.
-        this.addDownload(originalItem, apiTypeForNewEntry, newPrgFile, requestUrlForNewEntry, true);
+        this.addDownload(originalItem, apiTypeForNewEntry, newTaskId, requestUrlForNewEntry, true);
 
-        // The old setTimeout block for deleting oldPrgFile is no longer needed as cleanupEntry handles it.
+        // The old setTimeout block for deleting old task file is no longer needed as cleanupEntry handles it.
       } else {
         if (errorMessageDiv) errorMessageDiv.textContent = 'Retry failed: invalid response from server.';
         const currentEntry = this.queueEntries[queueId]; // Check if old entry still exists
@@ -1574,8 +1574,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
           // Make queue visible
           this.toggleVisibility(true);
 
-          // Just load existing PRG files as a fallback
-          await this.loadExistingPrgFiles();
+          // Just load existing task files as a fallback
+          await this.loadExistingTasks();
 
           // Force start monitoring for all loaded entries
           for (const queueId in this.queueEntries) {
@@ -1590,12 +1590,12 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       }
 
       // Handle single-file downloads (tracks, albums, playlists)
-      if ('prg_file' in data && data.prg_file) { // Type guard
-        console.log(`Adding ${type} PRG file: ${data.prg_file}`);
+      if ('task_id' in data && data.task_id) { // Type guard
+        console.log(`Adding ${type} task with ID: ${data.task_id}`);
 
         // Store the initial metadata in the cache so it's available
         // even before the first status update
-        this.queueCache[data.prg_file] = {
+        this.queueCache[data.task_id] = {
           type,
           status: 'initializing',
           name: item.name || 'Unknown',
@@ -1606,7 +1606,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         };
 
         // Use direct monitoring for all downloads for consistency
-        const queueId = this.addDownload(item, type, data.prg_file, apiUrl, true);
+        const queueId = this.addDownload(item, type, data.task_id, apiUrl, true);
 
         // Make queue visible to show progress if not already visible
         if (this.config && !this.config.downloadQueueVisible) { // Add null check for config
@@ -1624,9 +1624,9 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
   }
 
   /**
-   * Loads existing PRG files from the /api/prgs/list endpoint and adds them as queue entries.
+   * Loads existing task files from the /api/prgs/list endpoint and adds them as queue entries.
    */
-  async loadExistingPrgFiles() {
+  async loadExistingTasks() {
     try {
       // Clear existing queue entries first to avoid duplicates when refreshing
       for (const queueId in this.queueEntries) {
@@ -1646,23 +1646,23 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       const terminalStates = ['complete', 'done', 'cancelled', 'ERROR_AUTO_CLEANED', 'ERROR_RETRIED', 'cancel', 'interrupted', 'error'];
 
       for (const taskData of existingTasks) {
-        const prgFile = taskData.task_id; // Use task_id as prgFile identifier
+        const taskId = taskData.task_id; // Use task_id as taskId identifier
         const lastStatus = taskData.last_status_obj;
         const originalRequest = taskData.original_request || {};
 
         // Skip adding to UI if the task is already in a terminal state
         if (lastStatus && terminalStates.includes(lastStatus.status)) {
-          console.log(`Skipping UI addition for terminal task ${prgFile}, status: ${lastStatus.status}`);
+          console.log(`Skipping UI addition for terminal task ${taskId}, status: ${lastStatus.status}`);
           // Also ensure it's cleaned from local cache if it was there
-          if (this.queueCache[prgFile]) {
-            delete this.queueCache[prgFile];
+          if (this.queueCache[taskId]) {
+            delete this.queueCache[taskId];
           }
           continue;
         }
 
         let itemType = taskData.type || originalRequest.type || 'unknown';
         let dummyItem: QueueItem = {
-          name: taskData.name || originalRequest.name || prgFile,
+          name: taskData.name || originalRequest.name || taskId,
           artist: taskData.artist || originalRequest.artist || '',
           type: itemType,
           url: originalRequest.url || lastStatus?.url || '',
@@ -1680,29 +1680,25 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
             dummyItem = {
               name: parent.title || 'Unknown Album',
               artist: parent.artist || 'Unknown Artist',
-              type: 'album',
-              url: parent.url || '',
+              type: 'album', url: parent.url || '',
               total_tracks: parent.total_tracks || lastStatus.total_tracks,
-              parent: parent
-            };
+              parent: parent };
           } else if (parent.type === 'playlist') {
             itemType = 'playlist';
             dummyItem = {
               name: parent.name || 'Unknown Playlist',
               owner: parent.owner || 'Unknown Creator',
-              type: 'playlist',
-              url: parent.url || '',
+              type: 'playlist', url: parent.url || '',
               total_tracks: parent.total_tracks || lastStatus.total_tracks,
-              parent: parent
-            };
+              parent: parent };
           }
         }
 
         let retryCount = 0;
         if (lastStatus && lastStatus.retry_count) {
           retryCount = lastStatus.retry_count;
-        } else if (prgFile.includes('_retry')) {
-            const retryMatch = prgFile.match(/_retry(\d+)/);
+        } else if (taskId.includes('_retry')) {
+            const retryMatch = taskId.match(/_retry(\d+)/);
             if (retryMatch && retryMatch[1]) {
               retryCount = parseInt(retryMatch[1], 10);
             }
@@ -1711,7 +1707,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         const requestUrl = originalRequest.url ? `/api/${itemType}/download/${originalRequest.url.split('/').pop()}?name=${encodeURIComponent(dummyItem.name || '')}&artist=${encodeURIComponent(dummyItem.artist || '')}` : null;
 
         const queueId = this.generateQueueId();
-        const entry = this.createQueueEntry(dummyItem, itemType, prgFile, queueId, requestUrl);
+        const entry = this.createQueueEntry(dummyItem, itemType, taskId, queueId, requestUrl);
         entry.retryCount = retryCount;
 
         if (lastStatus) {
@@ -1719,7 +1715,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
           if (lastStatus.parent) {
             entry.parentInfo = lastStatus.parent;
           }
-          this.queueCache[prgFile] = lastStatus; // Cache the last known status
+          this.queueCache[taskId] = lastStatus; // Cache the last known status
           this.applyStatusClasses(entry, lastStatus);
 
           const logElement = entry.element.querySelector('.log') as HTMLElement | null;
@@ -1734,7 +1730,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       this.updateQueueOrder();
       this.startMonitoringActiveEntries();
     } catch (error) {
-      console.error("Error loading existing PRG files:", error);
+      console.error("Error loading existing task files:", error);
     }
   }
 
@@ -1792,8 +1788,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
   setupPollingInterval(queueId: string) { // Add type
     console.log(`Setting up polling for ${queueId}`);
     const entry = this.queueEntries[queueId];
-    if (!entry || !entry.prgFile) {
-      console.warn(`No entry or prgFile for ${queueId}`);
+    if (!entry || !entry.taskId) {
+      console.warn(`No entry or taskId for ${queueId}`);
       return;
     }
 
@@ -1813,7 +1809,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       this.pollingIntervals[queueId] = intervalId as unknown as number; // Cast to number via unknown
     } catch (error) {
       console.error(`Error creating polling for ${queueId}:`, error);
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
       if (logElement) {
         logElement.textContent = `Error with download: ${(error as Error).message}`; // Cast to Error
         entry.element.classList.add('error');
@@ -1823,13 +1819,13 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
   async fetchDownloadStatus(queueId: string) { // Add type
     const entry = this.queueEntries[queueId];
-    if (!entry || !entry.prgFile) {
-      console.warn(`No entry or prgFile for ${queueId}`);
+    if (!entry || !entry.taskId) {
+      console.warn(`No entry or taskId for ${queueId}`);
       return;
     }
 
     try {
-      const response = await fetch(`/api/prgs/${entry.prgFile}`);
+      const response = await fetch(`/api/prgs/${entry.taskId}`);
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`);
       }
@@ -1929,7 +1925,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       console.error(`Error fetching status for ${queueId}:`, error);
 
       // Show error in log
-      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+      const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
       if (logElement) {
         logElement.textContent = `Error updating status: ${(error as Error).message}`; // Cast to Error
       }
@@ -2010,7 +2006,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
         const STALL_THRESHOLD = 600; // Approx 5 minutes (600 polls * 0.5s/poll)
         if (detector.count >= STALL_THRESHOLD) {
-            console.warn(`Download ${queueId} (${entry.prgFile}) appears stalled in real_time state. Metrics: ${detector.lastStatusJson}. Stall count: ${detector.count}. Forcing error.`);
+            console.warn(`Download ${queueId} (${entry.taskId}) appears stalled in real_time state. Metrics: ${detector.lastStatusJson}. Stall count: ${detector.count}. Forcing error.`);
             statusData.status = 'error';
             statusData.error = 'Download stalled (no progress updates for 5 minutes)';
             statusData.can_retry = true; // Allow manual retry for stalled items
@@ -2045,7 +2041,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
     // Update log message - but only if we're not handling a track update for an album/playlist
     // That case is handled separately in updateItemMetadata to ensure we show the right track info
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
     if (logElement && status !== 'error' && !(statusData.type === 'track' && statusData.parent &&
         (entry.type === 'album' || entry.type === 'playlist'))) {
       logElement.textContent = message;
@@ -2076,12 +2072,12 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       if (cancelBtn) cancelBtn.style.display = 'none';
 
       // Hide progress bars for errored items
-      const trackProgressContainer = entry.element.querySelector(`#track-progress-container-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+      const trackProgressContainer = entry.element.querySelector(`#track-progress-container-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
       if (trackProgressContainer) trackProgressContainer.style.display = 'none';
       const overallProgressContainer = entry.element.querySelector('.overall-progress-container') as HTMLElement | null;
       if (overallProgressContainer) overallProgressContainer.style.display = 'none';
       // Hide time elapsed for errored items
-      const timeElapsedContainer = entry.element.querySelector(`#time-elapsed-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+      const timeElapsedContainer = entry.element.querySelector(`#time-elapsed-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
       if (timeElapsedContainer) timeElapsedContainer.style.display = 'none';
 
       // Extract error details
@@ -2094,7 +2090,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
       console.log(`Error for ${entry.type} download. Can retry: ${!!entry.requestUrl}. Retry URL: ${entry.requestUrl}`);
 
-      const errorLogElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null; // Use a different variable name
+      const errorLogElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null; // Use a different variable name
       if (errorLogElement) { // Check errorLogElement
         let errorMessageElement = errorLogElement.querySelector('.error-message') as HTMLElement | null;
 
@@ -2158,7 +2154,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
     }
 
     // Cache the status for potential page reloads
-    this.queueCache[entry.prgFile] = statusData;
+    this.queueCache[entry.taskId] = statusData;
     localStorage.setItem("downloadQueueCache", JSON.stringify(this.queueCache));
   }
 
@@ -2212,8 +2208,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
   // Update real-time progress for track downloads
   updateRealTimeProgress(entry: QueueEntry, statusData: StatusData) { // Add types
     // Get track progress bar
-    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
-    const timeElapsedEl = entry.element.querySelector('#time-elapsed-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
+    const timeElapsedEl = entry.element.querySelector('#time-elapsed-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
 
     if (trackProgressBar && statusData.progress !== undefined) {
       // Update track progress bar
@@ -2242,8 +2238,8 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
   // Update progress for single track downloads
   updateSingleTrackProgress(entry: QueueEntry, statusData: StatusData) { // Add types
     // Get track progress bar and other UI elements
-    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
     const titleElement = entry.element.querySelector('.title') as HTMLElement | null;
     const artistElement = entry.element.querySelector('.artist') as HTMLElement | null;
     let progress = 0; // Declare progress here
@@ -2348,7 +2344,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       trackProgressBar.setAttribute('aria-valuenow', safeProgress.toString()); // Use string
 
       // Make sure progress bar is visible
-      const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
+      const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
       if (trackProgressContainer) {
         trackProgressContainer.style.display = 'block';
       }
@@ -2365,10 +2361,10 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
   // Update progress for multi-track downloads (albums and playlists)
   updateMultiTrackProgress(entry: QueueEntry, statusData: StatusData) { // Add types
     // Get progress elements
-    const progressCounter = document.getElementById(`progress-count-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
-    const overallProgressBar = document.getElementById(`overall-bar-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
-    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
-    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.prgFile}`) as HTMLElement | null;
+    const progressCounter = document.getElementById(`progress-count-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
+    const overallProgressBar = document.getElementById(`overall-bar-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
+    const trackProgressBar = entry.element.querySelector('#track-progress-bar-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
+    const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
     const titleElement = entry.element.querySelector('.title') as HTMLElement | null;
     const artistElement = entry.element.querySelector('.artist') as HTMLElement | null;
     let progress = 0; // Declare progress here for this function's scope
@@ -2465,7 +2461,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
         // Update the track-level progress bar
         if (trackProgressBar) {
           // Make sure progress bar container is visible
-          const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.prgFile) as HTMLElement | null;
+          const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
           if (trackProgressContainer) {
             trackProgressContainer.style.display = 'block';
           }
@@ -2641,7 +2637,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
       }
       const serverTasks: any[] = await response.json();
 
-      const localTaskPrgFiles = new Set(Object.values(this.queueEntries).map(entry => entry.prgFile));
+      const localTaskPrgFiles = new Set(Object.values(this.queueEntries).map(entry => entry.taskId));
       const serverTaskPrgFiles = new Set(serverTasks.map(task => task.task_id));
 
       const terminalStates = ['complete', 'done', 'cancelled', 'ERROR_AUTO_CLEANED', 'ERROR_RETRIED', 'cancel', 'interrupted', 'error'];
@@ -2654,7 +2650,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
         if (terminalStates.includes(lastStatus?.status)) {
           // If server says it's terminal, and we have it locally, ensure it's cleaned up
-          const localEntry = Object.values(this.queueEntries).find(e => e.prgFile === taskId);
+          const localEntry = Object.values(this.queueEntries).find(e => e.taskId === taskId);
           if (localEntry && !localEntry.hasEnded) {
             console.log(`Periodic sync: Server task ${taskId} is terminal (${lastStatus.status}), cleaning up local entry.`);
             // Use a status object for handleDownloadCompletion
@@ -2713,7 +2709,7 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
           }
         } else {
           // Task exists locally, check if status needs update from server list
-          const localEntry = Object.values(this.queueEntries).find(e => e.prgFile === taskId);
+          const localEntry = Object.values(this.queueEntries).find(e => e.taskId === taskId);
           if (localEntry && lastStatus && JSON.stringify(localEntry.lastStatus) !== JSON.stringify(lastStatus)) {
             if (!localEntry.hasEnded) {
               console.log(`Periodic sync: Updating status for existing task ${taskId} from ${localEntry.lastStatus?.status} to ${lastStatus.status}`);
@@ -2727,16 +2723,16 @@ createQueueItem(item: QueueItem, type: string, prgFile: string, queueId: string)
 
       // 2. Remove local tasks that are no longer on the server or are now terminal on server
       for (const localEntry of Object.values(this.queueEntries)) {
-        if (!serverTaskPrgFiles.has(localEntry.prgFile)) {
+        if (!serverTaskPrgFiles.has(localEntry.taskId)) {
           if (!localEntry.hasEnded) {
-             console.log(`Periodic sync: Local task ${localEntry.prgFile} not found on server. Assuming completed/cleaned. Removing.`);
+             console.log(`Periodic sync: Local task ${localEntry.taskId} not found on server. Assuming completed/cleaned. Removing.`);
              this.cleanupEntry(localEntry.uniqueId);
           }
         } else {
-          const serverEquivalent = serverTasks.find(st => st.task_id === localEntry.prgFile);
+          const serverEquivalent = serverTasks.find(st => st.task_id === localEntry.taskId);
           if (serverEquivalent && serverEquivalent.last_status_obj && terminalStates.includes(serverEquivalent.last_status_obj.status)) {
             if (!localEntry.hasEnded) {
-              console.log(`Periodic sync: Local task ${localEntry.prgFile} is now terminal on server (${serverEquivalent.last_status_obj.status}). Cleaning up.`);
+              console.log(`Periodic sync: Local task ${localEntry.taskId} is now terminal on server (${serverEquivalent.last_status_obj.status}). Cleaning up.`);
               this.handleDownloadCompletion(localEntry, localEntry.uniqueId, serverEquivalent.last_status_obj);
             }
           }

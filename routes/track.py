@@ -127,7 +127,7 @@ def handle_download(track_id):
         )
 
     return Response(
-        json.dumps({"prg_file": task_id}),  # prg_file is the old name for task_id
+        json.dumps({"task_id": task_id}),
         status=202,
         mimetype="application/json",
     )
@@ -136,18 +136,18 @@ def handle_download(track_id):
 @track_bp.route("/download/cancel", methods=["GET"])
 def cancel_download():
     """
-    Cancel a running track download process by its process id (prg file name).
+    Cancel a running track download process by its task id.
     """
-    prg_file = request.args.get("prg_file")
-    if not prg_file:
+    task_id = request.args.get("task_id")
+    if not task_id:
         return Response(
-            json.dumps({"error": "Missing process id (prg_file) parameter"}),
+            json.dumps({"error": "Missing task id (task_id) parameter"}),
             status=400,
             mimetype="application/json",
         )
 
     # Use the queue manager's cancellation method.
-    result = download_queue_manager.cancel_task(prg_file)
+    result = download_queue_manager.cancel_task(task_id)
     status_code = 200 if result.get("status") == "cancelled" else 404
 
     return Response(json.dumps(result), status=status_code, mimetype="application/json")

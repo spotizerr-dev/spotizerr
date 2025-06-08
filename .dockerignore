@@ -24,3 +24,4 @@ logs/
 .env
 .venv
 data
+tests/
