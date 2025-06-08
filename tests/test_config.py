@@ -26,7 +26,7 @@ def test_update_main_config(base_url, reset_config):
     new_settings = {
         "maxConcurrentDownloads": 5,
         "spotifyQuality": "HIGH",
-        "deezerQuality": "FLAC",
+        "deezerQuality": "MP3_128",
         "customDirFormat": "%artist%/%album%",
         "customTrackFormat": "%tracknum% %title%",
         "save_cover": False,
