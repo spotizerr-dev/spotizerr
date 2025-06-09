@@ -366,8 +366,8 @@ def retry_task(task_id):
         # Update service settings
         if service == "spotify":
             if fallback_enabled:
-                task_info["main"] = config_params.get("deezer", "")
-                task_info["fallback"] = config_params.get("spotify", "")
+                task_info["main"] = config_params.get("spotify", "")
+                task_info["fallback"] = config_params.get("deezer", "")
                 task_info["quality"] = config_params.get("deezerQuality", "MP3_128")
                 task_info["fall_quality"] = config_params.get(
                     "spotifyQuality", "NORMAL"
@@ -1335,8 +1335,8 @@ def download_track(self, **task_data):
         # Determine service parameters
         if service == "spotify":
             if fallback_enabled:
-                main = config_params.get("deezer", "")
-                fallback = config_params.get("spotify", "")
+                main = config_params.get("spotify", "")
+                fallback = config_params.get("deezer", "")
                 quality = config_params.get("deezerQuality", "MP3_128")
                 fall_quality = config_params.get("spotifyQuality", "NORMAL")
             else:
@@ -1421,8 +1421,8 @@ def download_album(self, **task_data):
         # Determine service parameters
         if service == "spotify":
             if fallback_enabled:
-                main = config_params.get("deezer", "")
-                fallback = config_params.get("spotify", "")
+                main = config_params.get("spotify", "")
+                fallback = config_params.get("deezer", "")
                 quality = config_params.get("deezerQuality", "MP3_128")
                 fall_quality = config_params.get("spotifyQuality", "NORMAL")
             else:
@@ -1507,8 +1507,8 @@ def download_playlist(self, **task_data):
         # Determine service parameters
         if service == "spotify":
             if fallback_enabled:
-                main = config_params.get("deezer", "")
-                fallback = config_params.get("spotify", "")
+                main = config_params.get("spotify", "")
+                fallback = config_params.get("deezer", "")
                 quality = config_params.get("deezerQuality", "MP3_128")
                 fall_quality = config_params.get("spotifyQuality", "NORMAL")
             else:

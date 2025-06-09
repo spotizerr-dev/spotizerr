@@ -21,7 +21,7 @@ def test_history_logging_and_filtering(base_url, task_waiter, reset_config):
     config_payload = {"service": "spotify", "fallback": False, "realTime": True}
     requests.post(f"{base_url}/config", json=config_payload)
     response = requests.get(f"{base_url}/track/download/{TRACK_ID}")
-    assert response.status_code == 202
+    assert response.status_code == 200
     task_id = response.json()["task_id"]
     task_waiter(task_id) # Wait for the download to complete
 

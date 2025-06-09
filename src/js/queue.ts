@@ -1,4 +1,3 @@
-// --- MODIFIED: Custom URLSearchParams class that does not encode anything ---
 class CustomURLSearchParams {
   params: Record<string, string>;
   constructor() {
@@ -13,7 +12,6 @@ class CustomURLSearchParams {
       .join('&');
   }
 }
-// --- END MODIFIED ---
 
 // Interfaces for complex objects
 interface QueueItem {
