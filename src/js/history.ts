@@ -114,15 +114,19 @@ document.addEventListener('DOMContentLoaded', () => {
             // Construct Quality display string
             const qualityCell = row.insertCell();
             let qualityDisplay = entry.quality_profile || 'N/A';
-            if (entry.convert_to) {
+            
+            // Check if convert_to exists and is not "None"
+            if (entry.convert_to && entry.convert_to !== "None") {
                 qualityDisplay = `${entry.convert_to.toUpperCase()}`;
-                if (entry.bitrate) {
+                // Check if bitrate exists and is not "None"
+                if (entry.bitrate && entry.bitrate !== "None") {
                     qualityDisplay += ` ${entry.bitrate}k`;
                 }
                 qualityDisplay += ` (${entry.quality_profile || 'Original'})`;
-            } else if (entry.bitrate) { // Case where convert_to might not be set, but bitrate is (e.g. for OGG Vorbis quality settings)
-                 qualityDisplay = `${entry.bitrate}k (${entry.quality_profile || 'Profile'})`;
+            } else if (entry.bitrate && entry.bitrate !== "None") { // Case where convert_to might not be set, but bitrate is (e.g. for OGG Vorbis quality settings)
+                qualityDisplay = `${entry.bitrate}k (${entry.quality_profile || 'Profile'})`;
             }
+            // If both are "None" or null, it will just use the quality_profile value set above
             qualityCell.textContent = qualityDisplay;
 
             const statusCell = row.insertCell();
