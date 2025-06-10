@@ -38,6 +38,71 @@ tr:nth-child(even) {
     background-color: #222;
 }
 
+/* Parent and child track styling */
+.parent-task-row {
+    background-color: #282828 !important;
+    font-weight: bold;
+}
+
+.child-track-row {
+    background-color: #1a1a1a !important;
+    font-size: 0.9em;
+}
+
+.child-track-indent {
+    color: #1DB954;
+    margin-right: 5px;
+}
+
+/* Track status styling */
+.track-status-successful {
+    color: #1DB954;
+    font-weight: bold;
+}
+
+.track-status-skipped {
+    color: #FFD700;
+    font-weight: bold;
+}
+
+.track-status-failed {
+    color: #FF4136;
+    font-weight: bold;
+}
+
+/* Track counts display */
+.track-counts {
+    margin-left: 10px;
+    font-size: 0.85em;
+}
+
+.track-count.success {
+    color: #1DB954;
+}
+
+.track-count.skipped {
+    color: #FFD700;
+}
+
+.track-count.failed {
+    color: #FF4136;
+}
+
+/* Back button */
+#back-to-history {
+    margin-right: 15px;
+    padding: 5px 10px;
+    background-color: #333;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#back-to-history:hover {
+    background-color: #444;
+}
+
 .pagination {
     margin-top: 20px;
     text-align: center;
@@ -63,6 +128,7 @@ tr:nth-child(even) {
     display: flex;
     gap: 15px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .filters label, .filters select, .filters input {
@@ -77,9 +143,16 @@ tr:nth-child(even) {
     border-radius: 4px;
 }
 
+.checkbox-filter {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
 .status-COMPLETED { color: #1DB954; font-weight: bold; }
 .status-ERROR { color: #FF4136; font-weight: bold; }
 .status-CANCELLED { color: #AAAAAA; }
+.status-skipped { color: #FFD700; font-weight: bold; }
 
 .error-message-toggle {
     cursor: pointer;
@@ -97,8 +170,8 @@ tr:nth-child(even) {
     font-size: 0.9em;
 }
 
-/* Styling for the Details icon button in the table */
-.details-btn {
+/* Styling for the buttons in the table */
+.btn-icon {
     background-color: transparent; /* Or a subtle color like #282828 */
     border: none;
     border-radius: 50%; /* Make it circular */
@@ -108,14 +181,23 @@ tr:nth-child(even) {
     align-items: center;
     justify-content: center;
     transition: background-color 0.2s ease;
+    margin-right: 5px;
 }
 
-.details-btn img {
+.btn-icon img {
     width: 16px; /* Icon size */
     height: 16px;
     filter: invert(1); /* Make icon white if it's dark, adjust if needed */
 }
 
-.details-btn:hover {
+.btn-icon:hover {
     background-color: #333; /* Darker on hover */
+}
+
+.details-btn:hover img {
+    filter: invert(0.8) sepia(1) saturate(5) hue-rotate(175deg); /* Make icon blue on hover */
+}
+
+.tracks-btn:hover img {
+    filter: invert(0.8) sepia(1) saturate(5) hue-rotate(90deg); /* Make icon green on hover */
 }

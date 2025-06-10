@@ -6,12 +6,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const limitSelect = document.getElementById('limit-select') as HTMLSelectElement | null;
     const statusFilter = document.getElementById('status-filter') as HTMLSelectElement | null;
     const typeFilter = document.getElementById('type-filter') as HTMLSelectElement | null;
+    const trackFilter = document.getElementById('track-filter') as HTMLSelectElement | null;
+    const hideChildTracksCheckbox = document.getElementById('hide-child-tracks') as HTMLInputElement | null;
 
     let currentPage = 1;
     let limit = 25;
     let totalEntries = 0;
     let currentSortBy = 'timestamp_completed';
     let currentSortOrder = 'DESC';
+    let currentParentTaskId: string | null = null;
 
     async function fetchHistory(page = 1) {
         if (!historyTableBody || !prevButton || !nextButton || !pageInfo || !limitSelect || !statusFilter || !typeFilter) {
@@ -30,6 +33,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeVal) {
             apiUrl += `&download_type=${typeVal}`;
         }
+        
+        // Add track status filter if present
+        if (trackFilter && trackFilter.value) {
+            apiUrl += `&track_status=${trackFilter.value}`;
+        }
+        
+        // Add parent task filter if viewing a specific parent's tracks
+        if (currentParentTaskId) {
+            apiUrl += `&parent_task_id=${currentParentTaskId}`;
+        }
+        
+        // Add hide child tracks filter if checkbox is checked
+        if (hideChildTracksCheckbox && hideChildTracksCheckbox.checked) {
+            apiUrl += `&hide_child_tracks=true`;
+        }
 
         try {
             const response = await fetch(apiUrl);
@@ -42,10 +60,13 @@ document.addEventListener('DOMContentLoaded', () => {
             currentPage = Math.floor(offset / limit) + 1;
             updatePagination();
             updateSortIndicators();
+            
+            // Update page title if viewing tracks for a parent
+            updatePageTitle();
         } catch (error) {
             console.error('Error fetching history:', error);
             if (historyTableBody) {
-                historyTableBody.innerHTML = '<tr><td colspan="9">Error loading history.</td></tr>';
+                historyTableBody.innerHTML = '<tr><td colspan="10">Error loading history.</td></tr>';
             }
         }
     }
@@ -55,17 +76,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         historyTableBody.innerHTML = ''; // Clear existing rows
         if (!entries || entries.length === 0) {
-            historyTableBody.innerHTML = '<tr><td colspan="9">No history entries found.</td></tr>';
+            historyTableBody.innerHTML = '<tr><td colspan="10">No history entries found.</td></tr>';
             return;
         }
 
         entries.forEach(entry => {
             const row = historyTableBody.insertRow();
-            row.insertCell().textContent = entry.item_name || 'N/A';
+            
+            // Add class for parent/child styling
+            if (entry.parent_task_id) {
+                row.classList.add('child-track-row');
+            } else if (entry.download_type === 'album' || entry.download_type === 'playlist') {
+                row.classList.add('parent-task-row');
+            }
+            
+            // Item name with indentation for child tracks
+            const nameCell = row.insertCell();
+            if (entry.parent_task_id) {
+                nameCell.innerHTML = `<span class="child-track-indent">└─ </span>${entry.item_name || 'N/A'}`;
+            } else {
+                nameCell.textContent = entry.item_name || 'N/A';
+            }
+            
             row.insertCell().textContent = entry.item_artist || 'N/A';
-            row.insertCell().textContent = entry.download_type ? entry.download_type.charAt(0).toUpperCase() + entry.download_type.slice(1) : 'N/A';
+            
+            // Type cell - show track status for child tracks
+            const typeCell = row.insertCell();
+            if (entry.parent_task_id && entry.track_status) {
+                typeCell.textContent = entry.track_status;
+                typeCell.classList.add(`track-status-${entry.track_status.toLowerCase()}`);
+            } else {
+                typeCell.textContent = entry.download_type ? entry.download_type.charAt(0).toUpperCase() + entry.download_type.slice(1) : 'N/A';
+            }
+            
             row.insertCell().textContent = entry.service_used || 'N/A';
+            
             // Construct Quality display string
+            const qualityCell = row.insertCell();
             let qualityDisplay = entry.quality_profile || 'N/A';
             if (entry.convert_to) {
                 qualityDisplay = `${entry.convert_to.toUpperCase()}`;
@@ -76,22 +123,47 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (entry.bitrate) { // Case where convert_to might not be set, but bitrate is (e.g. for OGG Vorbis quality settings)
                  qualityDisplay = `${entry.bitrate}k (${entry.quality_profile || 'Profile'})`;
             }
-            row.insertCell().textContent = qualityDisplay;
+            qualityCell.textContent = qualityDisplay;
 
             const statusCell = row.insertCell();
             statusCell.textContent = entry.status_final || 'N/A';
-            statusCell.className = `status-${entry.status_final}`;
+            statusCell.className = `status-${entry.status_final?.toLowerCase() || 'unknown'}`;
 
             row.insertCell().textContent = entry.timestamp_added ? new Date(entry.timestamp_added * 1000).toLocaleString() : 'N/A';
             row.insertCell().textContent = entry.timestamp_completed ? new Date(entry.timestamp_completed * 1000).toLocaleString() : 'N/A';
 
-            const detailsCell = row.insertCell();
+            const actionsCell = row.insertCell();
+            
+            // Add details button
             const detailsButton = document.createElement('button');
             detailsButton.innerHTML = `<img src="/static/images/info.svg" alt="Details">`;
             detailsButton.className = 'details-btn btn-icon';
             detailsButton.title = 'Show Details';
             detailsButton.onclick = () => showDetailsModal(entry);
-            detailsCell.appendChild(detailsButton);
+            actionsCell.appendChild(detailsButton);
+            
+            // Add view tracks button for album/playlist entries with child tracks
+            if (!entry.parent_task_id && (entry.download_type === 'album' || entry.download_type === 'playlist') && 
+                (entry.total_successful > 0 || entry.total_skipped > 0 || entry.total_failed > 0)) {
+                const viewTracksButton = document.createElement('button');
+                viewTracksButton.innerHTML = `<img src="/static/images/list.svg" alt="Tracks">`;
+                viewTracksButton.className = 'tracks-btn btn-icon';
+                viewTracksButton.title = 'View Tracks';
+                viewTracksButton.setAttribute('data-task-id', entry.task_id);
+                viewTracksButton.onclick = () => viewTracksForParent(entry.task_id);
+                actionsCell.appendChild(viewTracksButton);
+                
+                // Add track counts display
+                const trackCountsSpan = document.createElement('span');
+                trackCountsSpan.className = 'track-counts';
+                trackCountsSpan.title = `Successful: ${entry.total_successful || 0}, Skipped: ${entry.total_skipped || 0}, Failed: ${entry.total_failed || 0}`;
+                trackCountsSpan.innerHTML = `
+                    <span class="track-count success">${entry.total_successful || 0}</span> / 
+                    <span class="track-count skipped">${entry.total_skipped || 0}</span> / 
+                    <span class="track-count failed">${entry.total_failed || 0}</span>
+                `;
+                actionsCell.appendChild(trackCountsSpan);
+            }
 
             if (entry.status_final === 'ERROR' && entry.error_message) {
                 const errorSpan = document.createElement('span');
@@ -105,10 +177,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         errorDetailsDiv = document.createElement('div');
                         errorDetailsDiv.className = 'error-details';
                         const newCell = row.insertCell(); // This will append to the end of the row
-                        newCell.colSpan = 9; // Span across all columns
+                        newCell.colSpan = 10; // Span across all columns
                         newCell.appendChild(errorDetailsDiv);
-                        // Visually, this new cell will be after the 'Details' button cell.
-                        // To make it appear as part of the status cell or below the row, more complex DOM manipulation or CSS would be needed.
                     }
                     errorDetailsDiv.textContent = entry.error_message;
                     // Toggle display by directly manipulating the style of the details div
@@ -127,26 +197,91 @@ document.addEventListener('DOMContentLoaded', () => {
         prevButton.disabled = currentPage === 1;
         nextButton.disabled = currentPage === totalPages;
     }
+    
+    function updatePageTitle() {
+        const titleElement = document.getElementById('history-title');
+        if (!titleElement) return;
+        
+        if (currentParentTaskId) {
+            titleElement.textContent = 'Download History - Viewing Tracks';
+            
+            // Add back button
+            if (!document.getElementById('back-to-history')) {
+                const backButton = document.createElement('button');
+                backButton.id = 'back-to-history';
+                backButton.className = 'btn btn-secondary';
+                backButton.innerHTML = '&larr; Back to All History';
+                backButton.onclick = () => {
+                    currentParentTaskId = null;
+                    updatePageTitle();
+                    fetchHistory(1);
+                };
+                titleElement.parentNode?.insertBefore(backButton, titleElement);
+            }
+        } else {
+            titleElement.textContent = 'Download History';
+            
+            // Remove back button if it exists
+            const backButton = document.getElementById('back-to-history');
+            if (backButton) {
+                backButton.remove();
+            }
+        }
+    }
 
     function showDetailsModal(entry: any) {
-        const details = `Task ID: ${entry.task_id}\n` +
-                        `Type: ${entry.download_type}\n` +
-                        `Name: ${entry.item_name}\n` +
-                        `Artist: ${entry.item_artist}\n` +
-                        `Album: ${entry.item_album || 'N/A'}\n` +
-                        `URL: ${entry.item_url}\n` +
-                        `Spotify ID: ${entry.spotify_id || 'N/A'}\n` +
-                        `Service Used: ${entry.service_used || 'N/A'}\n` +
-                        `Quality Profile (Original): ${entry.quality_profile || 'N/A'}\n` +
-                        `ConvertTo: ${entry.convert_to || 'N/A'}\n` +
-                        `Bitrate: ${entry.bitrate ? entry.bitrate + 'k' : 'N/A'}\n` +
-                        `Status: ${entry.status_final}\n` +
-                        `Error: ${entry.error_message || 'None'}\n` +
-                        `Added: ${new Date(entry.timestamp_added * 1000).toLocaleString()}\n` +
-                        `Completed/Ended: ${new Date(entry.timestamp_completed * 1000).toLocaleString()}\n\n` +
-                        `Original Request: ${JSON.stringify(JSON.parse(entry.original_request_json || '{}'), null, 2)}\n\n` +
-                        `Last Status Object: ${JSON.stringify(JSON.parse(entry.last_status_obj_json || '{}'), null, 2)}`;
+        // Create more detailed modal content with new fields
+        let details = `Task ID: ${entry.task_id}\n` +
+                      `Type: ${entry.download_type}\n` +
+                      `Name: ${entry.item_name}\n` +
+                      `Artist: ${entry.item_artist}\n` +
+                      `Album: ${entry.item_album || 'N/A'}\n` +
+                      `URL: ${entry.item_url || 'N/A'}\n` +
+                      `Spotify ID: ${entry.spotify_id || 'N/A'}\n` +
+                      `Service Used: ${entry.service_used || 'N/A'}\n` +
+                      `Quality Profile (Original): ${entry.quality_profile || 'N/A'}\n` +
+                      `ConvertTo: ${entry.convert_to || 'N/A'}\n` +
+                      `Bitrate: ${entry.bitrate ? entry.bitrate + 'k' : 'N/A'}\n` +
+                      `Status: ${entry.status_final}\n` +
+                      `Error: ${entry.error_message || 'None'}\n` +
+                      `Added: ${new Date(entry.timestamp_added * 1000).toLocaleString()}\n` +
+                      `Completed/Ended: ${new Date(entry.timestamp_completed * 1000).toLocaleString()}\n`;
+                      
+        // Add track-specific details if this is a track
+        if (entry.parent_task_id) {
+            details += `Parent Task ID: ${entry.parent_task_id}\n` +
+                       `Track Status: ${entry.track_status || 'N/A'}\n`;
+        }
+        
+        // Add summary details if this is a parent task
+        if (entry.total_successful !== null || entry.total_skipped !== null || entry.total_failed !== null) {
+            details += `\nTrack Summary:\n` +
+                       `Successful: ${entry.total_successful || 0}\n` +
+                       `Skipped: ${entry.total_skipped || 0}\n` +
+                       `Failed: ${entry.total_failed || 0}\n`;
+        }
+        
+        details += `\nOriginal Request: ${JSON.stringify(JSON.parse(entry.original_request_json || '{}'), null, 2)}\n\n` +
+                   `Last Status Object: ${JSON.stringify(JSON.parse(entry.last_status_obj_json || '{}'), null, 2)}`;
+                   
+        // Try to parse and display summary if available
+        if (entry.summary_json) {
+            try {
+                const summary = JSON.parse(entry.summary_json);
+                details += `\nSummary: ${JSON.stringify(summary, null, 2)}`;
+            } catch (e) {
+                console.error('Error parsing summary JSON:', e);
+            }
+        }
+        
         alert(details);
+    }
+    
+    // Function to view tracks for a parent task
+    async function viewTracksForParent(taskId: string) {
+        currentParentTaskId = taskId;
+        currentPage = 1;
+        fetchHistory(1);
     }
 
     document.querySelectorAll('th[data-sort]').forEach(headerCell => {
@@ -174,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Event listeners for pagination and filters
     prevButton?.addEventListener('click', () => fetchHistory(currentPage - 1));
     nextButton?.addEventListener('click', () => fetchHistory(currentPage + 1));
     limitSelect?.addEventListener('change', (e) => {
@@ -182,6 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     statusFilter?.addEventListener('change', () => fetchHistory(1));
     typeFilter?.addEventListener('change', () => fetchHistory(1));
+    trackFilter?.addEventListener('change', () => fetchHistory(1));
+    hideChildTracksCheckbox?.addEventListener('change', () => fetchHistory(1));
 
     // Initial fetch
     fetchHistory();

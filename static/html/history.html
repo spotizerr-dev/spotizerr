@@ -19,7 +19,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Download History</h1>
+        <h1 id="history-title">Download History</h1>
 
         <div class="filters">
             <label for="status-filter">Status:</label>
@@ -38,6 +38,19 @@
                 <option value="playlist">Playlist</option>
                 <option value="artist">Artist</option>
             </select>
+            
+            <label for="track-filter">Track Status:</label>
+            <select id="track-filter">
+                <option value="">All</option>
+                <option value="SUCCESSFUL">Successful</option>
+                <option value="SKIPPED">Skipped</option>
+                <option value="FAILED">Failed</option>
+            </select>
+            
+            <div class="checkbox-filter">
+                <input type="checkbox" id="hide-child-tracks" />
+                <label for="hide-child-tracks">Hide Individual Tracks</label>
+            </div>
         </div>
 
         <table>
@@ -45,13 +58,13 @@
                 <tr>
                     <th data-sort="item_name">Name</th>
                     <th data-sort="item_artist">Artist</th>
-                    <th data-sort="download_type">Type</th>
+                    <th data-sort="download_type">Type/Status</th>
                     <th data-sort="service_used">Service</th>
                     <th data-sort="quality_profile">Quality</th>
                     <th data-sort="status_final">Status</th>
                     <th data-sort="timestamp_added">Date Added</th>
                     <th data-sort="timestamp_completed">Date Completed/Ended</th>
-                    <th>Details</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="history-table-body">

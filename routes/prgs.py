@@ -76,13 +76,21 @@ def get_task_details(task_id):
 
     last_status = get_last_task_status(task_id)
     status_count = len(get_task_status(task_id))
+
+    # Default to the full last_status object, then check for the raw callback
+    last_line_content = last_status
+    if last_status and "raw_callback" in last_status:
+        last_line_content = last_status["raw_callback"]
+
     response = {
         "original_url": dynamic_original_url,
-        "last_line": last_status,
+        "last_line": last_line_content,
         "timestamp": time.time(),
         "task_id": task_id,
         "status_count": status_count,
     }
+    if last_status and last_status.get("summary"):
+        response["summary"] = last_status["summary"]
     return jsonify(response)
 
 
@@ -122,33 +130,34 @@ def list_tasks():
             last_status = get_last_task_status(task_id)
 
             if task_info and last_status:
-                detailed_tasks.append(
-                    {
-                        "task_id": task_id,
-                        "type": task_info.get(
-                            "type", task_summary.get("type", "unknown")
-                        ),
-                        "name": task_info.get(
-                            "name", task_summary.get("name", "Unknown")
-                        ),
-                        "artist": task_info.get(
-                            "artist", task_summary.get("artist", "")
-                        ),
-                        "download_type": task_info.get(
-                            "download_type",
-                            task_summary.get("download_type", "unknown"),
-                        ),
-                        "status": last_status.get(
-                            "status", "unknown"
-                        ),  # Keep summary status for quick access
-                        "last_status_obj": last_status,  # Full last status object
-                        "original_request": task_info.get("original_request", {}),
-                        "created_at": task_info.get("created_at", 0),
-                        "timestamp": last_status.get(
-                            "timestamp", task_info.get("created_at", 0)
-                        ),
-                    }
-                )
+                task_details = {
+                    "task_id": task_id,
+                    "type": task_info.get(
+                        "type", task_summary.get("type", "unknown")
+                    ),
+                    "name": task_info.get(
+                        "name", task_summary.get("name", "Unknown")
+                    ),
+                    "artist": task_info.get(
+                        "artist", task_summary.get("artist", "")
+                    ),
+                    "download_type": task_info.get(
+                        "download_type",
+                        task_summary.get("download_type", "unknown"),
+                    ),
+                    "status": last_status.get(
+                        "status", "unknown"
+                    ),  # Keep summary status for quick access
+                    "last_status_obj": last_status,  # Full last status object
+                    "original_request": task_info.get("original_request", {}),
+                    "created_at": task_info.get("created_at", 0),
+                    "timestamp": last_status.get(
+                        "timestamp", task_info.get("created_at", 0)
+                    ),
+                }
+                if last_status.get("summary"):
+                    task_details["summary"] = last_status["summary"]
+                detailed_tasks.append(task_details)
             elif (
                 task_info
             ):  # If last_status is somehow missing, still provide some info

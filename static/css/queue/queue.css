@@ -573,6 +573,85 @@
     margin-top: 8px;
 }
 
+/* ----------------------------- */
+/* DOWNLOAD SUMMARY ICONS        */
+/* ----------------------------- */
+
+/* Base styles for all summary icons */
+.summary-icon {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    margin-right: 4px;
+    margin-top: -2px;
+}
+
+/* Download summary formatting */
+.download-summary {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 5px;
+}
+
+.summary-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.summary-line span {
+    display: flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+/* Specific icon background colors */
+.summary-line span:nth-child(2) {
+    background: rgba(29, 185, 84, 0.1); /* Success background */
+}
+
+.summary-line span:nth-child(3) {
+    background: rgba(230, 126, 34, 0.1); /* Skip background */
+}
+
+.summary-line span:nth-child(4) {
+    background: rgba(255, 85, 85, 0.1); /* Failed background */
+}
+
+/* Failed tracks list styling */
+.failed-tracks-title {
+    color: #ff5555;
+    font-weight: 600;
+    margin: 10px 0 5px;
+    font-size: 13px;
+}
+
+.failed-tracks-list {
+    list-style-type: none;
+    padding-left: 10px;
+    margin: 0;
+    font-size: 12px;
+    color: #b3b3b3;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.failed-tracks-list li {
+    padding: 3px 0;
+    position: relative;
+}
+
+.failed-tracks-list li::before {
+    content: "•";
+    color: #ff5555;
+    position: absolute;
+    left: -10px;
+}
+
 /* Base styles for error buttons */
 .error-buttons button {
     border: none;

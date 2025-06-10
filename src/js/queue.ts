@@ -46,35 +46,49 @@ interface ParentInfo {
 }
 
 interface StatusData {
-  type?: string;
-  status?: string;
-  name?: string;
-  song?: string;
-  music?: string;
-  title?: string;
-  artist?: string;
-  artist_name?: string;
-  album?: string;
-  owner?: string;
-  total_tracks?: number | string;
-  current_track?: number | string;
-  parsed_current_track?: string; // Make sure these are handled if they are strings
-  parsed_total_tracks?: string;  // Make sure these are handled if they are strings
-  progress?: number | string; // Can be string initially
-  percentage?: number | string; // Can be string initially
-  percent?: number | string; // Can be string initially
-  time_elapsed?: number;
-  error?: string;
-  can_retry?: boolean;
-  retry_count?: number;
-  max_retries?: number; // from config potentially
-  seconds_left?: number;
-  task_id?: string;
+  type?: 'track' | 'album' | 'playlist' | 'episode' | string;
+  status?: 'initializing' | 'skipped' | 'retrying' | 'real-time' | 'error' | 'done' | 'processing' | 'queued' | 'progress' | 'track_progress' | 'complete' | 'cancelled' | 'cancel' | 'interrupted' | string;
+
+  // --- Standardized Fields ---
   url?: string;
-  reason?: string; // for skipped
+  convert_to?: string;
+  bitrate?: string;
+
+  // Item metadata
+  song?: string;
+  artist?: string;
+  album?: string;
+  title?: string; // for album
+  name?: string;  // for playlist/track
+  owner?: string; // for playlist
   parent?: ParentInfo;
+
+  // Progress indicators
+  current_track?: number | string;
+  total_tracks?: number | string;
+  progress?: number | string; // 0-100
+  time_elapsed?: number; // ms
+
+  // Status-specific details
+  reason?: string; // for 'skipped'
+  error?: string; // for 'error', 'retrying'
+  retry_count?: number;
+  seconds_left?: number;
+  summary?: {
+    successful_tracks?: string[];
+    skipped_tracks?: string[];
+    failed_tracks?: { track: string; reason: string }[];
+    total_successful?: number;
+    total_skipped?: number;
+    total_failed?: number;
+  };
+
+  // --- Fields for internal FE logic or from API wrapper ---
+  task_id?: string;
+  can_retry?: boolean;
+  max_retries?: number; // from config
   original_url?: string;
-  position?: number; // For queued items
+  position?: number;
   original_request?: {
     url?: string;
     retry_url?: string;
@@ -87,11 +101,12 @@ interface StatusData {
     display_type?: string;
     display_artist?: string;
     service?: string;
-    [key: string]: any; // For other potential original_request params
+    [key: string]: any;
   };
-  event?: string; // from SSE
+  event?: string;
   overall_progress?: number;
-  display_type?: string; // from PRG data
+  display_type?: string;
+
   [key: string]: any; // Allow other properties
 }
 
@@ -229,26 +244,20 @@ export class DownloadQueue {
     // Load initial config from the server.
     await this.loadConfig();
 
-    // Override the server value with locally persisted queue visibility (if present).
+    // Use localStorage for queue visibility
     const storedVisible = localStorage.getItem("downloadQueueVisible");
-    if (storedVisible !== null) {
-      // Ensure config is not null before assigning
-      if (this.config) {
-        this.config.downloadQueueVisible = storedVisible === "true";
-      }
-    }
+    const isVisible = storedVisible === "true";
 
     const queueSidebar = document.getElementById('downloadQueue');
-    // Ensure config is not null and queueSidebar exists
-    if (this.config && queueSidebar) {
-      queueSidebar.hidden = !this.config.downloadQueueVisible;
-      queueSidebar.classList.toggle('active', !!this.config.downloadQueueVisible);
+    if (queueSidebar) {
+      queueSidebar.hidden = !isVisible;
+      queueSidebar.classList.toggle('active', isVisible);
     }
 
     // Initialize the queue icon based on sidebar visibility
     const queueIcon = document.getElementById('queueIcon');
-    if (queueIcon && this.config) {
-      if (this.config.downloadQueueVisible) {
+    if (queueIcon) {
+      if (isVisible) {
         queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
         queueIcon.setAttribute('aria-expanded', 'true');
         queueIcon.classList.add('queue-icon-active'); // Add red tint class
@@ -326,7 +335,7 @@ export class DownloadQueue {
 
     // Update the queue icon to show X when visible or queue icon when hidden
     const queueIcon = document.getElementById('queueIcon');
-    if (queueIcon && this.config) {
+    if (queueIcon) {
       if (isVisible) {
         // Replace the image with an X and add red tint
         queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
@@ -340,34 +349,9 @@ export class DownloadQueue {
       }
     }
 
-    // Persist the state locally so it survives refreshes.
+    // Only persist the state in localStorage, not on the server
     localStorage.setItem("downloadQueueVisible", String(isVisible));
-
-    try {
-      await this.loadConfig();
-      const updatedConfig = { ...this.config, downloadQueueVisible: isVisible };
-      await this.saveConfig(updatedConfig);
-      this.dispatchEvent('queueVisibilityChanged', { visible: isVisible });
-    } catch (error) {
-      console.error('Failed to save queue visibility:', error);
-      // Revert UI if save failed.
-      queueSidebar.classList.toggle('active', !isVisible);
-      queueSidebar.hidden = isVisible;
-      // Also revert the icon back
-      if (queueIcon && this.config) {
-        if (!isVisible) {
-          queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
-          queueIcon.setAttribute('aria-expanded', 'true');
-          queueIcon.classList.add('queue-icon-active'); // Add red tint class
-        } else {
-          queueIcon.innerHTML = '<img src="/static/images/cross.svg" alt="Close queue" class="queue-x">';
-          queueIcon.setAttribute('aria-expanded', 'true');
-          queueIcon.classList.add('queue-icon-active'); // Add red tint class
-        }
-      }
-      this.dispatchEvent('queueVisibilityChanged', { visible: !isVisible });
-      this.showError('Failed to save queue visibility');
-    }
+    this.dispatchEvent('queueVisibilityChanged', { visible: isVisible });
 
     if (isVisible) {
       // If the queue is now visible, ensure all visible items are being polled.
@@ -644,7 +628,7 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
   const defaultMessage = (type === 'playlist') ? 'Reading track list' : 'Initializing download...';
 
   // Use display values if available, or fall back to standard fields
-  const displayTitle = item.name || item.music || item.song || 'Unknown';
+  const displayTitle = item.name || item.song || 'Unknown';
   const displayArtist = item.artist || '';
   const displayType = type.charAt(0).toUpperCase() + type.slice(1);
 
@@ -1037,9 +1021,9 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     }
 
     // Extract common fields
-    const trackName = data.song || data.music || data.name || data.title ||
+    const trackName = data.song || data.name || data.title ||
                       (queueItem?.item?.name) || 'Unknown';
-    const artist = data.artist || data.artist_name ||
+    const artist = data.artist ||
                    (queueItem?.item?.artist) || '';
     const albumTitle = data.title || data.album || data.parent?.title || data.name ||
                       (queueItem?.item?.name) || '';
@@ -1047,18 +1031,14 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
                         (queueItem?.item?.name) || '';
     const playlistOwner = data.owner || data.parent?.owner ||
                          (queueItem?.item?.owner) || ''; // Add type check if item.owner is object
-    const currentTrack = data.current_track || data.parsed_current_track || '';
-    const totalTracks = data.total_tracks || data.parsed_total_tracks || data.parent?.total_tracks ||
+    const currentTrack = data.current_track || '';
+    const totalTracks = data.total_tracks || data.parent?.total_tracks ||
                        (queueItem?.item?.total_tracks) || '';
 
     // Format percentage for display when available
     let formattedPercentage = '0';
     if (data.progress !== undefined) {
-      formattedPercentage = parseFloat(data.progress as string).toFixed(1); // Cast to string
-    } else if (data.percentage) {
-      formattedPercentage = (parseFloat(data.percentage as string) * 100).toFixed(1); // Cast to string
-    } else if (data.percent) {
-      formattedPercentage = (parseFloat(data.percent as string) * 100).toFixed(1); // Cast to string
+      formattedPercentage = Number(data.progress).toFixed(1);
     }
 
     // Helper for constructing info about the parent item
@@ -1204,11 +1184,37 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
 
       case 'done':
       case 'complete':
-        if (data.type === 'track') {
-          return `Downloaded "${trackName}"${artist ? ` by ${artist}` : ''} successfully${getParentInfo()}`;
-        } else if (data.type === 'album') {
+        // Final summary for album/playlist
+        if (data.summary && (data.type === 'album' || data.type === 'playlist')) {
+          const { total_successful = 0, total_skipped = 0, total_failed = 0, failed_tracks = [] } = data.summary;
+          const name = data.type === 'album' ? (data.title || albumTitle) : (data.name || playlistName);
+          return `Finished ${data.type} "${name}". Success: ${total_successful}, Skipped: ${total_skipped}, Failed: ${total_failed}.`;
+        }
+
+        // Final status for a single track (without a parent)
+        if (data.type === 'track' && !data.parent) {
+          return `Downloaded "${trackName}"${artist ? ` by ${artist}` : ''} successfully`;
+        }
+        
+        // A 'done' status for a track *within* a parent collection is just an intermediate step.
+        if (data.type === 'track' && data.parent) {
+            const parentType = data.parent.type === 'album' ? 'album' : 'playlist';
+            const parentName = data.parent.type === 'album' ? (data.parent.title || '') : (data.parent.name || '');
+            const nextTrack = Number(data.current_track || 0) + 1;
+            const totalTracks = Number(data.total_tracks || 0);
+
+            if (nextTrack > totalTracks) {
+                 return `Finalizing ${parentType} "${parentName}"... (${data.current_track}/${totalTracks} tracks completed)`;
+            } else {
+                 return `Completed track ${data.current_track}/${totalTracks}: "${trackName}" by ${artist}. Preparing next track...`;
+            }
+        }
+
+        // Fallback for album/playlist without summary
+        if (data.type === 'album') {
           return `Downloaded album "${albumTitle}"${artist ? ` by ${artist}` : ''} successfully (${totalTracks} tracks)`;
-        } else if (data.type === 'playlist') {
+        } 
+        if (data.type === 'playlist') {
           return `Downloaded playlist "${playlistName}"${playlistOwner ? ` by ${playlistOwner}` : ''} successfully (${totalTracks} tracks)`;
         }
         return `Downloaded ${data.type} successfully`;
@@ -1276,6 +1282,12 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
 
   /* New Methods to Handle Terminal State, Inactivity and Auto-Retry */
   handleDownloadCompletion(entry: QueueEntry, queueId: string, progress: StatusData | number) { // Add types
+    // SAFETY CHECK: Never mark a track with a parent as completed
+    if (typeof progress !== 'number' && progress.type === 'track' && progress.parent) {
+      console.log(`Prevented completion of track ${progress.song} that is part of ${progress.parent.type}`);
+      return; // Exit early and don't mark as complete
+    }
+    
     // Mark the entry as ended
     entry.hasEnded = true;
 
@@ -1292,10 +1304,11 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     // Stop polling
     this.clearPollingInterval(queueId);
 
-    // Use 3 seconds cleanup delay for completed, 10 seconds for other terminal states like errors
+    // Use 3 seconds cleanup delay for completed, 10 seconds for errors, and 20 seconds for cancelled/skipped
     const cleanupDelay = (progress && typeof progress !== 'number' && (progress.status === 'complete' || progress.status === 'done')) ? 3000 :
+                         (progress && typeof progress !== 'number' && progress.status === 'error') ? 10000 :
                          (progress && typeof progress !== 'number' && (progress.status === 'cancelled' || progress.status === 'cancel' || progress.status === 'skipped')) ? 20000 :
-                         10000; // Default for other errors if not caught by the more specific error handler delay
+                         10000; // Default for other cases if not caught by the more specific conditions
 
     // Clean up after the appropriate delay
     setTimeout(() => {
@@ -1655,7 +1668,7 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
           if (this.queueCache[taskId]) {
             delete this.queueCache[taskId];
           }
-          continue;
+          continue; // Skip adding terminal tasks to UI if not already there
         }
 
         let itemType = taskData.type || originalRequest.type || 'unknown';
@@ -1753,27 +1766,11 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     } catch (error) {
       console.error('Error loading config:', error);
       this.config = { // Initialize with a default structure on error
-        downloadQueueVisible: false,
         maxRetries: 3,
         retryDelaySeconds: 5,
         retry_delay_increase: 5,
         explicitFilter: false
       };
-    }
-  }
-
-  async saveConfig(updatedConfig: AppConfig) { // Add type
-    try {
-      const response = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedConfig)
-      });
-      if (!response.ok) throw new Error('Failed to save config');
-      this.config = await response.json();
-    } catch (error) {
-      console.error('Error saving config:', error);
-      throw error;
     }
   }
 
@@ -1889,6 +1886,15 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
       // Handle terminal states
       if (data.last_line && ['complete', 'error', 'cancelled', 'done'].includes(data.last_line.status || '')) { // Add null check
         console.log(`Terminal state detected: ${data.last_line.status} for ${queueId}`);
+        
+        // SAFETY CHECK: Don't mark track as ended if it has a parent
+        if (data.last_line.type === 'track' && data.last_line.parent) {
+          console.log(`Not marking track ${data.last_line.song} as ended because it has a parent ${data.last_line.parent.type}`);
+          // Still update the UI
+          this.handleStatusUpdate(queueId, data);
+          return;
+        }
+        
         entry.hasEnded = true;
 
         // For cancelled downloads, clean up immediately
@@ -1953,21 +1959,41 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     // Extract the actual status data from the API response
     const statusData: StatusData = data.last_line || {}; // Add type
 
-    // Special handling for track status updates that are part of an album/playlist
-    // We want to keep these for showing the track-by-track progress
-    if (statusData.type === 'track' && statusData.parent) {
-      // If this is a track that's part of our album/playlist, keep it
-      if ((entry.type === 'album' && statusData.parent.type === 'album') ||
-          (entry.type === 'playlist' && statusData.parent.type === 'playlist')) {
-        console.log(`Processing track status update for ${entry.type}: ${statusData.song}`);
-      }
+    // --- Normalize statusData to conform to expected types ---
+    const numericFields = ['current_track', 'total_tracks', 'progress', 'retry_count', 'seconds_left', 'time_elapsed'];
+    for (const field of numericFields) {
+        if (statusData[field] !== undefined && typeof statusData[field] === 'string') {
+            statusData[field] = parseFloat(statusData[field] as string);
+        }
     }
-    // Only skip updates where type doesn't match AND there's no relevant parent relationship
-    else if (statusData.type && entry.type && statusData.type !== entry.type &&
-             (!statusData.parent || statusData.parent.type !== entry.type)) {
-      console.log(`Skipping mismatched type: update=${statusData.type}, entry=${entry.type}`);
-      return;
+
+    const entryType = entry.type;
+    const updateType = statusData.type;
+
+    if (!updateType) {
+        console.warn("Status update received without a 'type'. Ignoring.", statusData);
+        return;
     }
+
+    // --- Filtering logic based on download type ---
+    // A status update is relevant if its type matches the queue entry's type,
+    // OR if it's a 'track' update that belongs to an 'album' or 'playlist' entry.
+    let isRelevantUpdate = false;
+    if (updateType === entryType) {
+        isRelevantUpdate = true;
+    } else if (updateType === 'track' && statusData.parent) {
+        if (entryType === 'album' && statusData.parent.type === 'album') {
+            isRelevantUpdate = true;
+        } else if (entryType === 'playlist' && statusData.parent.type === 'playlist') {
+            isRelevantUpdate = true;
+        }
+    }
+
+    if (!isRelevantUpdate) {
+        console.log(`Skipping status update with type '${updateType}' for entry of type '${entryType}'.`, statusData);
+        return;
+    }
+
 
     // Get primary status
     let status = statusData.status || data.event || 'unknown'; // Define status *before* potential modification
@@ -2062,6 +2088,32 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     // Apply appropriate status classes
     this.applyStatusClasses(entry, statusData); // Pass statusData instead of status string
 
+    if (status === 'done' || status === 'complete') {
+        if (statusData.summary && (entry.type === 'album' || entry.type === 'playlist')) {
+            const { total_successful = 0, total_skipped = 0, total_failed = 0, failed_tracks = [] } = statusData.summary;
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'download-summary';
+            
+            let summaryHTML = `
+                <div class="summary-line">
+                    <strong>Finished:</strong> 
+                    <span><img src="/static/images/check.svg" alt="Success" class="summary-icon"> ${total_successful}</span>
+                    <span><img src="/static/images/skip.svg" alt="Skipped" class="summary-icon"> ${total_skipped}</span>
+                    <span><img src="/static/images/cross.svg" alt="Failed" class="summary-icon"> ${total_failed}</span>
+                </div>
+            `;
+            
+            // Remove the individual failed tracks list
+            // The user only wants to see the count, not the names
+
+            summaryDiv.innerHTML = summaryHTML;
+            if (logElement) {
+                logElement.innerHTML = ''; // Clear previous message
+                logElement.appendChild(summaryDiv);
+            }
+        }
+    }
+
     // Special handling for error status based on new API response format
     if (status === 'error') {
       entry.hasEnded = true;
@@ -2146,9 +2198,23 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     }
 
     // Handle terminal states for non-error cases
-    if (['complete', 'cancel', 'cancelled', 'done', 'skipped'].includes(status)) {
-      entry.hasEnded = true;
-      this.handleDownloadCompletion(entry, queueId, statusData);
+    if (['complete', 'done', 'skipped', 'cancelled', 'cancel'].includes(status)) {
+        // Only mark as ended if the update type matches the entry type.
+        // e.g., an album download is only 'done' when an 'album' status says so,
+        // not when an individual 'track' within it is 'done'.
+        if (statusData.type === entry.type) {
+            entry.hasEnded = true;
+            this.handleDownloadCompletion(entry, queueId, statusData);
+        }
+        // IMPORTANT: Never mark a track as ended if it has a parent
+        else if (statusData.type === 'track' && statusData.parent) {
+            console.log(`Track ${statusData.song} in ${statusData.parent.type} has completed, but not ending the parent download.`);
+            // Update UI but don't trigger completion
+            const logElement = document.getElementById(`log-${entry.uniqueId}-${entry.taskId}`) as HTMLElement | null;
+            if (logElement) {
+                logElement.textContent = this.getStatusMessage(statusData);
+            }
+        }
     }
 
     // Cache the status for potential page reloads
@@ -2211,7 +2277,7 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
 
     if (trackProgressBar && statusData.progress !== undefined) {
       // Update track progress bar
-      const progress = parseFloat(statusData.progress as string); // Cast to string
+      const progress = Number(statusData.progress);
       trackProgressBar.style.width = `${progress}%`;
       trackProgressBar.setAttribute('aria-valuenow', progress.toString()); // Use string
 
@@ -2321,11 +2387,7 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
 
     // Real-time progress for direct track download
     if (statusData.status === 'real-time' && statusData.progress !== undefined) {
-      progress = parseFloat(statusData.progress as string); // Cast to string
-    } else if (statusData.percent !== undefined) {
-      progress = parseFloat(statusData.percent as string) * 100; // Cast to string
-    } else if (statusData.percentage !== undefined) {
-      progress = parseFloat(statusData.percentage as string) * 100; // Cast to string
+      progress = Number(statusData.progress);
     } else if (statusData.status === 'done' || statusData.status === 'complete') {
       progress = 100;
     } else if (statusData.current_track && statusData.total_tracks) {
@@ -2372,6 +2434,44 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
     let totalTracks = 0;
     let trackProgress = 0;
 
+    // SPECIAL CASE: If this is the final 'done' status for the entire album/playlist (not a track)
+    if ((statusData.status === 'done' || statusData.status === 'complete') && 
+        (statusData.type === 'album' || statusData.type === 'playlist') &&
+        statusData.type === entry.type && 
+        statusData.total_tracks) {
+        
+        console.log('Final album/playlist completion. Setting progress to 100%');
+        
+        // Extract total tracks
+        totalTracks = parseInt(String(statusData.total_tracks), 10);
+        // Force current track to equal total tracks for completion
+        currentTrack = totalTracks;
+        
+        // Update counter to show n/n
+        if (progressCounter) {
+            progressCounter.textContent = `${totalTracks}/${totalTracks}`;
+        }
+        
+        // Set progress bar to 100%
+        if (overallProgressBar) {
+            overallProgressBar.style.width = '100%';
+            overallProgressBar.setAttribute('aria-valuenow', '100');
+            overallProgressBar.classList.add('complete');
+        }
+        
+        // Hide track progress or set to complete
+        if (trackProgressBar) {
+            const trackProgressContainer = entry.element.querySelector('#track-progress-container-' + entry.uniqueId + '-' + entry.taskId) as HTMLElement | null;
+            if (trackProgressContainer) {
+                trackProgressContainer.style.display = 'none'; // Optionally hide or set to 100%
+            }
+        }
+        
+        // Store for later use
+        entry.progress = 100;
+        return;
+    }
+
     // Handle track-level updates for album/playlist downloads
     if (statusData.type === 'track' && statusData.parent &&
         (entry.type === 'album' || entry.type === 'playlist')) {
@@ -2399,6 +2499,12 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
       // Get current track and total tracks from the status data
       if (statusData.current_track !== undefined) {
         currentTrack = parseInt(String(statusData.current_track), 10);
+        
+        // For completed tracks, use the track number rather than one less
+        if (statusData.status === 'done' || statusData.status === 'complete') {
+          // The current track is the one that just completed
+          currentTrack = parseInt(String(statusData.current_track), 10);
+        }
 
         // Get total tracks - try from statusData first, then from parent
         if (statusData.total_tracks !== undefined) {
@@ -2412,7 +2518,10 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
 
       // Get track progress for real-time updates
       if (statusData.status === 'real-time' && statusData.progress !== undefined) {
-        trackProgress = parseFloat(statusData.progress as string); // Cast to string
+        trackProgress = Number(statusData.progress); // Cast to number
+      } else if (statusData.status === 'done' || statusData.status === 'complete') {
+        // For a completed track, set trackProgress to 100%
+        trackProgress = 100;
       }
 
       // Update the track progress counter display
@@ -2424,7 +2533,9 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
       if (logElement && statusData.song && statusData.artist) {
         let progressInfo = '';
         if (statusData.status === 'real-time' && trackProgress > 0) {
-          progressInfo = ` - ${trackProgress.toFixed(1)}%`;
+          progressInfo = ` - ${trackProgress}%`;
+        } else if (statusData.status === 'done' || statusData.status === 'complete') {
+          progressInfo = ' - Complete';
         }
         logElement.textContent = `Currently downloading: ${statusData.song} by ${statusData.artist} (${currentTrack}/${totalTracks}${progressInfo})`;
       }
@@ -2432,16 +2543,23 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
       // Calculate and update the overall progress bar
       if (totalTracks > 0) {
         let overallProgress = 0;
-        // Always compute overall based on trackProgress if available, using album/playlist real-time formula
-        if (trackProgress !== undefined) {
+        
+        // For completed tracks, use completed/total
+        if (statusData.status === 'done' || statusData.status === 'complete') {
+          // For completed tracks, this track is fully complete
+          overallProgress = (currentTrack / totalTracks) * 100;
+        }
+        // For in-progress tracks, use the real-time formula
+        else if (trackProgress !== undefined) {
           const completedTracksProgress = (currentTrack - 1) / totalTracks;
           const currentTrackContribution = (1 / totalTracks) * (trackProgress / 100);
           overallProgress = (completedTracksProgress + currentTrackContribution) * 100;
-          console.log(`Overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks}, Progress: ${trackProgress}%)`);
         } else {
+          // Fallback to track count method
           overallProgress = (currentTrack / totalTracks) * 100;
-          console.log(`Overall progress (non-real-time): ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks})`);
         }
+        
+        console.log(`Overall progress: ${overallProgress.toFixed(2)}% (Track ${currentTrack}/${totalTracks}, Progress: ${trackProgress}%)`);
 
         // Update the progress bar
         if (overallProgressBar) {
@@ -2464,23 +2582,36 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
             trackProgressContainer.style.display = 'block';
           }
 
-          if (statusData.status === 'real-time') {
-            // Real-time progress for the current track
-            const safeTrackProgress = Math.max(0, Math.min(100, trackProgress));
-            trackProgressBar.style.width = `${safeTrackProgress}%`;
-            trackProgressBar.setAttribute('aria-valuenow', safeTrackProgress.toString()); // Use string
+          if (statusData.status === 'real-time' || statusData.status === 'real_time') {
+            // For real-time updates, use the track progress for the small green progress bar
+            // This shows download progress for the current track only
+            const safeProgress = isNaN(trackProgress) ? 0 : Math.max(0, Math.min(100, trackProgress));
+            trackProgressBar.style.width = `${safeProgress}%`;
+            trackProgressBar.setAttribute('aria-valuenow', String(safeProgress));
             trackProgressBar.classList.add('real-time');
 
-            if (safeTrackProgress >= 100) {
+            if (safeProgress >= 100) {
               trackProgressBar.classList.add('complete');
             } else {
               trackProgressBar.classList.remove('complete');
             }
-          } else {
-            // Indeterminate progress animation for non-real-time updates
+          } else if (statusData.status === 'done' || statusData.status === 'complete') {
+            // For completed tracks, show 100%
+            trackProgressBar.style.width = '100%';
+            trackProgressBar.setAttribute('aria-valuenow', '100');
+            trackProgressBar.classList.add('complete');
+          } else if (['progress', 'processing'].includes(statusData.status || '')) {
+            // For non-real-time progress updates, show an indeterminate-style progress
+            // by using a pulsing animation via CSS
             trackProgressBar.classList.add('progress-pulse');
             trackProgressBar.style.width = '100%';
-            trackProgressBar.setAttribute('aria-valuenow', "50"); // Use string
+            trackProgressBar.setAttribute('aria-valuenow', String(50)); // indicate in-progress
+          } else {
+            // For other status updates, use current track position
+            trackProgressBar.classList.remove('progress-pulse');
+            const trackPositionPercent = currentTrack > 0 ? 100 : 0;
+            trackProgressBar.style.width = `${trackPositionPercent}%`;
+            trackProgressBar.setAttribute('aria-valuenow', String(trackPositionPercent));
           }
         }
 
@@ -2523,18 +2654,21 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
       totalTracks = parseInt(parts[1], 10);
     }
 
+    // For completed albums/playlists, ensure current track equals total tracks
+    if ((statusData.status === 'done' || statusData.status === 'complete') && 
+        (statusData.type === 'album' || statusData.type === 'playlist') &&
+        statusData.type === entry.type && 
+        totalTracks > 0) {
+      currentTrack = totalTracks;
+    }
+
     // Get track progress for real-time downloads
     if (statusData.status === 'real-time' && statusData.progress !== undefined) {
       // For real-time downloads, progress comes as a percentage value (0-100)
-      trackProgress = parseFloat(statusData.progress as string); // Cast to string
-    } else if (statusData.percent !== undefined) {
-      // Handle percent values (0-1)
-      trackProgress = parseFloat(statusData.percent as string) * 100; // Cast to string
-    } else if (statusData.percentage !== undefined) {
-      // Handle percentage values (0-1)
-      trackProgress = parseFloat(statusData.percentage as string) * 100; // Cast to string
+      trackProgress = Number(statusData.progress); // Cast to number
     } else if (statusData.status === 'done' || statusData.status === 'complete') {
       progress = 100;
+      trackProgress = 100; // Also set trackProgress to 100% for completed status
     } else if (statusData.current_track && statusData.total_tracks) {
       // If we don't have real-time progress but do have track position
       progress = (parseInt(statusData.current_track as string, 10) / parseInt(statusData.total_tracks as string, 10)) * 100; // Cast to string
@@ -2730,6 +2864,18 @@ createQueueItem(item: QueueItem, type: string, taskId: string, queueId:string): 
           const serverEquivalent = serverTasks.find(st => st.task_id === localEntry.taskId);
           if (serverEquivalent && serverEquivalent.last_status_obj && terminalStates.includes(serverEquivalent.last_status_obj.status)) {
             if (!localEntry.hasEnded) {
+              // Don't clean up if this is a track with a parent
+              if (serverEquivalent.last_status_obj.type === 'track' && serverEquivalent.last_status_obj.parent) {
+                console.log(`Periodic sync: Not cleaning up track ${serverEquivalent.last_status_obj.song} with parent ${serverEquivalent.last_status_obj.parent.type}`);
+                continue;
+              }
+              
+              // Only clean up if the types match (e.g., don't clean up an album when a track is done)
+              if (serverEquivalent.last_status_obj.type !== localEntry.type) {
+                console.log(`Periodic sync: Not cleaning up ${localEntry.type} entry due to ${serverEquivalent.last_status_obj.type} status update`);
+                continue;
+              }
+              
               console.log(`Periodic sync: Local task ${localEntry.taskId} is now terminal on server (${serverEquivalent.last_status_obj.status}). Cleaning up.`);
               this.handleDownloadCompletion(localEntry, localEntry.uniqueId, serverEquivalent.last_status_obj);
             }
