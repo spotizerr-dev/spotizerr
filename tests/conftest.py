@@ -11,7 +11,7 @@ load_dotenv()
 # --- Environment-based secrets for testing ---
 SPOTIFY_API_CLIENT_ID = os.environ.get("SPOTIFY_API_CLIENT_ID", "your_spotify_client_id")
 SPOTIFY_API_CLIENT_SECRET = os.environ.get("SPOTIFY_API_CLIENT_SECRET", "your_spotify_client_secret")
-SPOTIFY_BLOB_CONTENT_STR = os.environ.get("SPOTIFY_BLOB_CONTENT_STR", '{}')
+SPOTIFY_BLOB_CONTENT_STR = os.environ.get("SPOTIFY_BLOB_CONTENT", '{}')
 try:
     SPOTIFY_BLOB_CONTENT = json.loads(SPOTIFY_BLOB_CONTENT_STR)
 except json.JSONDecodeError:
@@ -46,12 +46,12 @@ def wait_for_task(base_url, task_id, timeout=600):
             
             response.raise_for_status() # Raise an exception for bad status codes
             
-            statuses = response.json()
-            if not statuses:
+            data = response.json()
+            if not data or not data.get("last_line"):
                 time.sleep(1)
                 continue
             
-            last_status = statuses[-1]
+            last_status = data["last_line"]
             status = last_status.get("status")
             
             # More verbose logging for debugging during tests

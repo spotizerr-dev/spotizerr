@@ -124,6 +124,10 @@ def download_playlist(
                             "spotify", main
                         )  # For blob path
                         blob_file_path = spotify_main_creds.get("blob_file_path")
+                        if blob_file_path is None:
+                            raise ValueError(
+                                f"Spotify credentials for account '{main}' don't contain a blob_file_path. Please check your credentials configuration."
+                            )
                         if not Path(blob_file_path).exists():
                             raise FileNotFoundError(
                                 f"Spotify credentials blob file not found at {blob_file_path} for account '{main}'"
@@ -180,6 +184,10 @@ def download_playlist(
 
                 spotify_main_creds = get_credential("spotify", main)  # For blob path
                 blob_file_path = spotify_main_creds.get("blob_file_path")
+                if blob_file_path is None:
+                    raise ValueError(
+                        f"Spotify credentials for account '{main}' don't contain a blob_file_path. Please check your credentials configuration."
+                    )
                 if not Path(blob_file_path).exists():
                     raise FileNotFoundError(
                         f"Spotify credentials blob file not found at {blob_file_path} for account '{main}'"

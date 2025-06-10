@@ -2,6 +2,7 @@ import sqlite3
 import json
 import time
 import logging
+import uuid
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,12 @@ EXPECTED_COLUMNS = {
     "quality_profile": "TEXT",
     "convert_to": "TEXT",
     "bitrate": "TEXT",
+    "parent_task_id": "TEXT",  # Reference to parent task for individual tracks
+    "track_status": "TEXT",    # 'SUCCESSFUL', 'SKIPPED', 'FAILED'
+    "summary_json": "TEXT",    # JSON string of the summary object from task
+    "total_successful": "INTEGER", # Count of successful tracks
+    "total_skipped": "INTEGER",   # Count of skipped tracks
+    "total_failed": "INTEGER",    # Count of failed tracks
 }
 
 
@@ -61,7 +68,13 @@ def init_history_db():
                 service_used TEXT,
                 quality_profile TEXT,
                 convert_to TEXT,
-                bitrate TEXT
+                bitrate TEXT,
+                parent_task_id TEXT,
+                track_status TEXT,
+                summary_json TEXT,
+                total_successful INTEGER,
+                total_skipped INTEGER,
+                total_failed INTEGER
             )
         """
         cursor.execute(create_table_sql)
@@ -102,6 +115,27 @@ def init_history_db():
                     # This might happen if a column (e.g. task_id) without "PRIMARY KEY" is added by this loop
                     # but the initial create table already made it a primary key.
                     # Or other more complex scenarios.
+                    logger.warning(
+                        f"Could not add column '{col_name}': {alter_e}. It might already exist or there's a schema mismatch."
+                    )
+
+        # Add additional columns for summary data if they don't exist
+        for col_name, col_type in {
+            "summary_json": "TEXT",
+            "total_successful": "INTEGER",
+            "total_skipped": "INTEGER", 
+            "total_failed": "INTEGER"
+        }.items():
+            if col_name not in existing_column_names and col_name not in EXPECTED_COLUMNS:
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE download_history ADD COLUMN {col_name} {col_type}"
+                    )
+                    logger.info(
+                        f"Added missing column '{col_name} {col_type}' to download_history table."
+                    )
+                    added_columns = True
+                except sqlite3.OperationalError as alter_e:
                     logger.warning(
                         f"Could not add column '{col_name}': {alter_e}. It might already exist or there's a schema mismatch."
                     )
@@ -148,6 +182,12 @@ def add_entry_to_history(history_data: dict):
         "quality_profile",
         "convert_to",
         "bitrate",
+        "parent_task_id",
+        "track_status",
+        "summary_json",
+        "total_successful",
+        "total_skipped",
+        "total_failed",
     ]
     # Ensure all keys are present, filling with None if not
     for key in required_keys:
@@ -164,8 +204,9 @@ def add_entry_to_history(history_data: dict):
                 item_url, spotify_id, status_final, error_message,
                 timestamp_added, timestamp_completed, original_request_json,
                 last_status_obj_json, service_used, quality_profile,
-                convert_to, bitrate
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                convert_to, bitrate, parent_task_id, track_status,
+                summary_json, total_successful, total_skipped, total_failed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 history_data["task_id"],
@@ -185,6 +226,12 @@ def add_entry_to_history(history_data: dict):
                 history_data["quality_profile"],
                 history_data["convert_to"],
                 history_data["bitrate"],
+                history_data["parent_task_id"],
+                history_data["track_status"],
+                history_data["summary_json"],
+                history_data["total_successful"],
+                history_data["total_skipped"],
+                history_data["total_failed"],
             ),
         )
         conn.commit()
@@ -239,8 +286,16 @@ def get_history_entries(
             for column, value in filters.items():
                 # Basic security: ensure column is a valid one (alphanumeric + underscore)
                 if column.replace("_", "").isalnum():
-                    where_clauses.append(f"{column} = ?")
-                    params.append(value)
+                    # Special case for 'NOT_NULL' value for parent_task_id
+                    if column == "parent_task_id" and value == "NOT_NULL":
+                        where_clauses.append(f"{column} IS NOT NULL")
+                    # Regular case for NULL value
+                    elif value is None:
+                        where_clauses.append(f"{column} IS NULL")
+                    # Regular case for exact match
+                    else:
+                        where_clauses.append(f"{column} = ?")
+                        params.append(value)
 
         if where_clauses:
             where_sql = " WHERE " + " AND ".join(where_clauses)
@@ -266,6 +321,11 @@ def get_history_entries(
             "quality_profile",
             "convert_to",
             "bitrate",
+            "parent_task_id",
+            "track_status",
+            "total_successful",
+            "total_skipped",
+            "total_failed",
         ]
         if sort_by not in valid_sort_columns:
             sort_by = "timestamp_completed"  # Default sort
@@ -290,6 +350,157 @@ def get_history_entries(
     finally:
         if conn:
             conn.close()
+
+
+def add_track_entry_to_history(track_name, artist_name, parent_task_id, track_status, parent_history_data=None):
+    """Adds a track-specific entry to the history database.
+    
+    Args:
+        track_name (str): The name of the track
+        artist_name (str): The artist name
+        parent_task_id (str): The ID of the parent task (album or playlist)
+        track_status (str): The status of the track ('SUCCESSFUL', 'SKIPPED', 'FAILED')
+        parent_history_data (dict, optional): The history data of the parent task
+    
+    Returns:
+        str: The task_id of the created track entry
+    """
+    # Generate a unique ID for this track entry
+    track_task_id = f"{parent_task_id}_track_{uuid.uuid4().hex[:8]}"
+    
+    # Create a copy of parent data or initialize empty dict
+    track_history_data = {}
+    if parent_history_data:
+        # Copy relevant fields from parent
+        for key in EXPECTED_COLUMNS:
+            if key in parent_history_data and key not in ['task_id', 'item_name', 'item_artist']:
+                track_history_data[key] = parent_history_data[key]
+    
+    # Set track-specific fields
+    track_history_data.update({
+        "task_id": track_task_id,
+        "download_type": "track",
+        "item_name": track_name,
+        "item_artist": artist_name,
+        "parent_task_id": parent_task_id,
+        "track_status": track_status,
+        "status_final": "COMPLETED" if track_status == "SUCCESSFUL" else 
+                        "SKIPPED" if track_status == "SKIPPED" else "ERROR",
+        "timestamp_completed": time.time()
+    })
+    
+    # Extract track URL if possible (from last_status_obj_json)
+    if parent_history_data and parent_history_data.get("last_status_obj_json"):
+        try:
+            last_status = json.loads(parent_history_data["last_status_obj_json"])
+            
+            # Try to match track name in the tracks lists to find URL
+            track_key = f"{track_name} - {artist_name}"
+            if "raw_callback" in last_status and last_status["raw_callback"].get("url"):
+                track_history_data["item_url"] = last_status["raw_callback"].get("url")
+                
+                # Extract Spotify ID from URL if possible
+                url = last_status["raw_callback"].get("url", "")
+                if url and "spotify.com" in url:
+                    try:
+                        spotify_id = url.split("/")[-1]
+                        if spotify_id and len(spotify_id) == 22 and spotify_id.isalnum():
+                            track_history_data["spotify_id"] = spotify_id
+                    except Exception:
+                        pass
+        except (json.JSONDecodeError, KeyError, AttributeError) as e:
+            logger.warning(f"Could not extract track URL for {track_name}: {e}")
+    
+    # Add entry to history
+    add_entry_to_history(track_history_data)
+    
+    return track_task_id
+
+def add_tracks_from_summary(summary_data, parent_task_id, parent_history_data=None):
+    """Processes a summary object from a completed task and adds individual track entries.
+    
+    Args:
+        summary_data (dict): The summary data containing track lists
+        parent_task_id (str): The ID of the parent task
+        parent_history_data (dict, optional): The history data of the parent task
+    
+    Returns:
+        dict: Summary of processed tracks
+    """
+    processed = {
+        "successful": 0,
+        "skipped": 0,
+        "failed": 0
+    }
+    
+    if not summary_data:
+        logger.warning(f"No summary data provided for task {parent_task_id}")
+        return processed
+    
+    # Process successful tracks
+    for track_entry in summary_data.get("successful_tracks", []):
+        try:
+            # Parse "track_name - artist_name" format
+            parts = track_entry.split(" - ", 1)
+            if len(parts) == 2:
+                track_name, artist_name = parts
+                add_track_entry_to_history(
+                    track_name=track_name,
+                    artist_name=artist_name, 
+                    parent_task_id=parent_task_id,
+                    track_status="SUCCESSFUL",
+                    parent_history_data=parent_history_data
+                )
+                processed["successful"] += 1
+            else:
+                logger.warning(f"Could not parse track entry: {track_entry}")
+        except Exception as e:
+            logger.error(f"Error processing successful track {track_entry}: {e}", exc_info=True)
+    
+    # Process skipped tracks
+    for track_entry in summary_data.get("skipped_tracks", []):
+        try:
+            parts = track_entry.split(" - ", 1)
+            if len(parts) == 2:
+                track_name, artist_name = parts
+                add_track_entry_to_history(
+                    track_name=track_name,
+                    artist_name=artist_name,
+                    parent_task_id=parent_task_id,
+                    track_status="SKIPPED",
+                    parent_history_data=parent_history_data
+                )
+                processed["skipped"] += 1
+            else:
+                logger.warning(f"Could not parse skipped track entry: {track_entry}")
+        except Exception as e:
+            logger.error(f"Error processing skipped track {track_entry}: {e}", exc_info=True)
+    
+    # Process failed tracks
+    for track_entry in summary_data.get("failed_tracks", []):
+        try:
+            parts = track_entry.split(" - ", 1)
+            if len(parts) == 2:
+                track_name, artist_name = parts
+                add_track_entry_to_history(
+                    track_name=track_name,
+                    artist_name=artist_name,
+                    parent_task_id=parent_task_id,
+                    track_status="FAILED",
+                    parent_history_data=parent_history_data
+                )
+                processed["failed"] += 1
+            else:
+                logger.warning(f"Could not parse failed track entry: {track_entry}")
+        except Exception as e:
+            logger.error(f"Error processing failed track {track_entry}: {e}", exc_info=True)
+    
+    logger.info(
+        f"Added {processed['successful']} successful, {processed['skipped']} skipped, "
+        f"and {processed['failed']} failed track entries for task {parent_task_id}"
+    )
+    
+    return processed
 
 
 if __name__ == "__main__":

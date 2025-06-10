@@ -20,17 +20,25 @@ def test_get_main_config(base_url):
     assert "maxConcurrentDownloads" in config
     assert "spotify" in config  # Should be set by conftest
     assert "deezer" in config   # Should be set by conftest
+    assert "fallback" in config
+    assert "realTime" in config
+    assert "maxRetries" in config
 
 def test_update_main_config(base_url, reset_config):
-    """Tests updating various fields in the main configuration."""
+    """Tests updating various fields in the main configuration based on frontend capabilities."""
     new_settings = {
         "maxConcurrentDownloads": 5,
         "spotifyQuality": "HIGH",
-        "deezerQuality": "MP3_128",
+        "deezerQuality": "FLAC",
         "customDirFormat": "%artist%/%album%",
         "customTrackFormat": "%tracknum% %title%",
         "save_cover": False,
         "fallback": True,
+        "realTime": False,
+        "maxRetries": 5,
+        "retryDelaySeconds": 10,
+        "retry_delay_increase": 10,
+        "tracknum_padding": False,
     }
 
     response = requests.post(f"{base_url}/config", json=new_settings)
@@ -45,8 +53,9 @@ def test_get_watch_config(base_url):
     response = requests.get(f"{base_url}/config/watch")
     assert response.status_code == 200
     config = response.json()
-    assert "delay_between_playlists_seconds" in config
-    assert "delay_between_artists_seconds" in config
+    assert "enabled" in config
+    assert "watchPollIntervalSeconds" in config
+    assert "watchedArtistAlbumGroup" in config
 
 def test_update_watch_config(base_url):
     """Tests updating the watch-specific configuration."""
@@ -54,14 +63,19 @@ def test_update_watch_config(base_url):
     original_config = response.json()
 
     new_settings = {
-        "delay_between_playlists_seconds": 120,
-        "delay_between_artists_seconds": 240,
-        "auto_add_new_releases_to_queue": False,
+        "enabled": False,
+        "watchPollIntervalSeconds": 7200,
+        "watchedArtistAlbumGroup": ["album", "single"],
     }
 
     response = requests.post(f"{base_url}/config/watch", json=new_settings)
     assert response.status_code == 200
-    updated_config = response.json()
+
+    # The response for updating watch config is just a success message,
+    # so we need to GET the config again to verify.
+    verify_response = requests.get(f"{base_url}/config/watch")
+    assert verify_response.status_code == 200
+    updated_config = verify_response.json()
 
     for key, value in new_settings.items():
         assert updated_config[key] == value
@@ -71,24 +85,29 @@ def test_update_watch_config(base_url):
 
 def test_update_conversion_config(base_url, reset_config):
     """
-    Iterates through all supported conversion formats and bitrates,
-    updating the config and verifying the changes for each combination.
+    Iterates through supported conversion formats and bitrates from the frontend,
+    updating the config and verifying the changes.
     """
-    conversion_formats = ["mp3", "flac", "ogg", "opus", "m4a"]
+    # Formats and bitrates aligned with src/js/config.ts
+    conversion_formats = ["MP3", "AAC", "OGG", "OPUS", "FLAC", "WAV", "ALAC"]
     bitrates = {
-        "mp3": ["320", "256", "192", "128"],
-        "ogg": ["500", "320", "192", "160"],
-        "opus": ["256", "192", "128", "96"],
-        "m4a": ["320k", "256k", "192k", "128k"],
-        "flac": [None]  # Bitrate is not applicable for FLAC
+        "MP3": ["128k", "320k"],
+        "AAC": ["128k", "256k"],
+        "OGG": ["128k", "320k"],
+        "OPUS": ["96k", "256k"],
+        "FLAC": [None],
+        "WAV": [None],
+        "ALAC": [None],
     }
 
-    for format in conversion_formats:
-        for br in bitrates.get(format, [None]):
-            print(f"Testing conversion config: format={format}, bitrate={br}")
-            new_settings = {"convertTo": format, "bitrate": br}
+    for format_val in conversion_formats:
+        for br in bitrates.get(format_val, [None]):
+            print(f"Testing conversion config: format={format_val}, bitrate={br}")
+            new_settings = {"convertTo": format_val, "bitrate": br}
             response = requests.post(f"{base_url}/config", json=new_settings)
+
             assert response.status_code == 200
             updated_config = response.json()
-            assert updated_config["convertTo"] == format
+            assert updated_config["convertTo"] == format_val
+            # The backend might return null for empty bitrate, which is fine
             assert updated_config["bitrate"] == br 

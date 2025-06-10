@@ -403,6 +403,9 @@ def get_credential(service, name):
                 "name": data.get("name"),
                 "region": data.get("region"),
                 "blob_content": data.get("blob_content"),
+                "blob_file_path": data.get(
+                    "blob_file_path"
+                ),  # Ensure blob_file_path is returned
             }
             return cleaned_data
 
