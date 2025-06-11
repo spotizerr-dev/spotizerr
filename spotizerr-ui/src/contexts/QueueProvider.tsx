@@ -21,8 +21,8 @@ interface TaskStatusDTO {
   current_track?: number;
   total_tracks?: number;
   summary?: {
-    successful_tracks: number;
-    skipped_tracks: number;
+    successful_tracks: string[];
+    skipped_tracks: string[];
     failed_tracks: number;
     failed_track_details: { name: string; reason: string }[];
   };
@@ -51,14 +51,15 @@ interface TaskDTO {
     [key: string]: unknown;
   };
   summary?: {
-    successful_tracks: number;
-    skipped_tracks: number;
+    successful_tracks: string[];
+    skipped_tracks: string[];
     failed_tracks: number;
     failed_track_details?: { name: string; reason: string }[];
   };
 }
 
-const isTerminalStatus = (status: QueueStatus) => ["completed", "error", "cancelled", "skipped"].includes(status);
+const isTerminalStatus = (status: QueueStatus) =>
+  ["completed", "error", "cancelled", "skipped", "done"].includes(status);
 
 export function QueueProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<QueueItem[]>(() => {
@@ -180,7 +181,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
   // --- Core Action: Add Item ---
   const addItem = useCallback(
-    async (item: { name: string; type: DownloadType; spotifyId: string }) => {
+    async (item: { name: string; type: DownloadType; spotifyId: string; artist?: string }) => {
       const internalId = uuidv4();
       const newItem: QueueItem = {
         ...item,
@@ -191,11 +192,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       if (!isVisible) setIsVisible(true);
 
       try {
-        // Use the specific type endpoints instead of a generic /download endpoint
         let endpoint = "";
 
         if (item.type === "track") {
-          endpoint = `/track/download/${item.spotifyId}`;
+          // WORKAROUND: Use the playlist endpoint for single tracks to avoid
+          // connection issues with the direct track downloader.
+          const trackUrl = `https://open.spotify.com/track/${item.spotifyId}`;
+          endpoint = `/playlist/download?url=${encodeURIComponent(trackUrl)}&name=${encodeURIComponent(item.name)}`;
         } else if (item.type === "album") {
           endpoint = `/album/download/${item.spotifyId}`;
         } else if (item.type === "playlist") {

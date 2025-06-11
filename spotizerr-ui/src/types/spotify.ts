@@ -7,11 +7,14 @@ export interface ImageType {
 export interface ArtistType {
   id: string;
   name: string;
-  images: ImageType[];
+  images?: ImageType[];
 }
 
 export interface TrackAlbumInfo {
+  id: string;
+  name: string;
   images: ImageType[];
+  release_date: string;
 }
 
 export interface TrackType {
@@ -21,11 +24,16 @@ export interface TrackType {
   duration_ms: number;
   explicit: boolean;
   album: TrackAlbumInfo;
+  popularity: number;
+  external_urls: {
+    spotify: string;
+  };
 }
 
 export interface AlbumType {
   id: string;
   name: string;
+  album_type: "album" | "single" | "compilation";
   artists: ArtistType[];
   images: ImageType[];
   release_date: string;
@@ -39,7 +47,14 @@ export interface AlbumType {
 }
 
 export interface PlaylistItemType {
+  added_at: string;
+  is_local: boolean;
   track: TrackType | null;
+}
+
+export interface PlaylistOwnerType {
+  id: string;
+  display_name: string;
 }
 
 export interface PlaylistType {
@@ -49,8 +64,14 @@ export interface PlaylistType {
   images: ImageType[];
   tracks: {
     items: PlaylistItemType[];
+    total: number;
   };
-  owner: {
-    display_name: string;
+  owner: PlaylistOwnerType;
+  followers: {
+    total: number;
   };
 }
+
+export type SearchResult = (TrackType | AlbumType | ArtistType | PlaylistType) & {
+  model: "track" | "album" | "artist" | "playlist";
+};

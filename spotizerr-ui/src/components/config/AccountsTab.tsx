@@ -94,7 +94,7 @@ export function AccountsTab() {
         <input
           id="accountName"
           {...register("accountName", { required: "This field is required" })}
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         {errors.accountName && <p className="text-red-500 text-sm">{errors.accountName.message}</p>}
       </div>
@@ -104,7 +104,7 @@ export function AccountsTab() {
           <textarea
             id="authBlob"
             {...register("authBlob", { required: activeService === "spotify" ? "Auth Blob is required" : false })}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             rows={4}
           ></textarea>
           {errors.authBlob && <p className="text-red-500 text-sm">{errors.authBlob.message}</p>}
@@ -116,7 +116,7 @@ export function AccountsTab() {
           <input
             id="arl"
             {...register("arl", { required: activeService === "deezer" ? "ARL is required" : false })}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {errors.arl && <p className="text-red-500 text-sm">{errors.arl.message}</p>}
         </div>
@@ -127,7 +127,7 @@ export function AccountsTab() {
           id="accountRegion"
           {...register("accountRegion")}
           placeholder="e.g. US, GB"
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
       <div className="flex gap-2">
@@ -171,7 +171,10 @@ export function AccountsTab() {
       ) : (
         <div className="space-y-2">
           {credentials?.map((cred) => (
-            <div key={cred.name} className="flex justify-between items-center p-3 bg-gray-800 rounded-md">
+            <div
+              key={cred.name}
+              className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white rounded-md"
+            >
               <span>{cred.name}</span>
               <button
                 onClick={() => deleteMutation.mutate({ service: activeService, name: cred.name })}

@@ -93,10 +93,27 @@ const defaultSettings: FlatAppSettings = {
   },
 };
 
+interface FetchedCamelCaseSettings {
+  watchEnabled?: boolean;
+  watch?: { enabled: boolean };
+  [key: string]: unknown;
+}
+
 const fetchSettings = async (): Promise<FlatAppSettings> => {
-  const { data } = await apiClient.get("/config");
+  const [{ data: generalConfig }, { data: watchConfig }] = await Promise.all([
+    apiClient.get("/config"),
+    apiClient.get("/config/watch"),
+  ]);
+
+  const combinedConfig = {
+    ...generalConfig,
+    watch: watchConfig,
+  };
+
   // Transform the keys before returning the data
-  return convertKeysToCamelCase(data) as FlatAppSettings;
+  const camelData = convertKeysToCamelCase(combinedConfig) as FetchedCamelCaseSettings;
+
+  return camelData as unknown as FlatAppSettings;
 };
 
 export function SettingsProvider({ children }: { children: ReactNode }) {

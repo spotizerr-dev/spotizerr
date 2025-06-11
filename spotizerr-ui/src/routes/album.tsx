@@ -5,6 +5,7 @@ import { QueueContext } from "../contexts/queue-context";
 import { useSettings } from "../contexts/settings-context";
 import type { AlbumType, TrackType } from "../types/spotify";
 import { toast } from "sonner";
+import { FaArrowLeft } from "react-icons/fa";
 
 export const Album = () => {
   const { albumId } = useParams({ from: "/album/$albumId" });
@@ -70,6 +71,15 @@ export const Album = () => {
 
   return (
     <div className="space-y-6">
+      <div className="mb-6">
+        <button
+          onClick={() => window.history.back()}
+          className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          <FaArrowLeft />
+          <span>Back to results</span>
+        </button>
+      </div>
       <div className="flex flex-col md:flex-row items-start gap-6">
         <img
           src={album.images[0]?.url || "/placeholder.jpg"}

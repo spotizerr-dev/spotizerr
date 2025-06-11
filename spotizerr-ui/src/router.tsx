@@ -8,15 +8,47 @@ import { Config } from "./routes/config";
 import { Playlist } from "./routes/playlist";
 import { History } from "./routes/history";
 import { Watchlist } from "./routes/watchlist";
+import apiClient from "./lib/api-client";
+import type { SearchResult } from "./types/spotify";
 
 const rootRoute = createRootRoute({
   component: Root,
 });
 
-const indexRoute = createRoute({
+export const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: Home,
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { q?: string; type?: "track" | "album" | "artist" | "playlist" } => {
+    return {
+      q: search.q as string | undefined,
+      type: search.type as "track" | "album" | "artist" | "playlist" | undefined,
+    };
+  },
+  loaderDeps: ({ search: { q, type } }) => ({ q, type: type || "track" }),
+  loader: async ({ deps: { q, type } }) => {
+    if (!q || q.length < 3) return { items: [] };
+
+    const spotifyUrlRegex = /https:\/\/open\.spotify\.com\/(playlist|album|artist|track)\/([a-zA-Z0-9]+)/;
+    const match = q.match(spotifyUrlRegex);
+
+    if (match) {
+      const [, urlType, id] = match;
+      const response = await apiClient.get<SearchResult>(`/${urlType}/info?id=${id}`);
+      return { items: [{ ...response.data, model: urlType as "track" | "album" | "artist" | "playlist" }] };
+    }
+
+    const response = await apiClient.get<{ items: SearchResult[] }>(`/search?q=${q}&search_type=${type}&limit=50`);
+    const augmentedResults = response.data.items.map((item) => ({
+      ...item,
+      model: type,
+    }));
+    return { items: augmentedResults };
+  },
+  gcTime: 5 * 60 * 1000, // 5 minutes
+  staleTime: 5 * 60 * 1000, // 5 minutes
 });
 
 const albumRoute = createRoute({

@@ -1,62 +1,41 @@
 import { useState, useEffect, useMemo, useContext, useCallback, useRef } from "react";
+import { useNavigate, useSearch, useRouterState } from "@tanstack/react-router";
 import { useDebounce } from "use-debounce";
-import apiClient from "@/lib/api-client";
 import { toast } from "sonner";
-import type { TrackType, AlbumType, ArtistType, PlaylistType } from "@/types/spotify";
+import type { TrackType, AlbumType, ArtistType, PlaylistType, SearchResult } from "@/types/spotify";
 import { QueueContext } from "@/contexts/queue-context";
 import { SearchResultCard } from "@/components/SearchResultCard";
+import { indexRoute } from "@/router";
 
 const PAGE_SIZE = 12;
 
-type SearchResult = (TrackType | AlbumType | ArtistType | PlaylistType) & {
-  model: "track" | "album" | "artist" | "playlist";
-};
-
 export const Home = () => {
-  const [query, setQuery] = useState("");
-  const [searchType, setSearchType] = useState<"track" | "album" | "artist" | "playlist">("track");
-  const [allResults, setAllResults] = useState<SearchResult[]>([]);
-  const [displayedResults, setDisplayedResults] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const navigate = useNavigate({ from: "/" });
+  const { q, type } = useSearch({ from: "/" });
+  const { items: allResults } = indexRoute.useLoaderData();
+  const isLoading = useRouterState({ select: (s) => s.status === "pending" });
+
+  const [query, setQuery] = useState(q || "");
+  const [searchType, setSearchType] = useState<"track" | "album" | "artist" | "playlist">(type || "track");
   const [debouncedQuery] = useDebounce(query, 500);
+
+  const [displayedResults, setDisplayedResults] = useState<SearchResult[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const context = useContext(QueueContext);
   const loaderRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    navigate({ search: (prev) => ({ ...prev, q: debouncedQuery, type: searchType }) });
+  }, [debouncedQuery, searchType, navigate]);
+
+  useEffect(() => {
+    setDisplayedResults(allResults.slice(0, PAGE_SIZE));
+  }, [allResults]);
 
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
   const { addItem } = context;
-
-  useEffect(() => {
-    if (debouncedQuery.length < 3) {
-      setAllResults([]);
-      setDisplayedResults([]);
-      return;
-    }
-
-    const performSearch = async () => {
-      setIsLoading(true);
-      try {
-        const response = await apiClient.get<{
-          items: SearchResult[];
-        }>(`/search?q=${debouncedQuery}&search_type=${searchType}&limit=50`);
-
-        const augmentedResults = response.data.items.map((item) => ({
-          ...item,
-          model: searchType,
-        }));
-        setAllResults(augmentedResults);
-        setDisplayedResults(augmentedResults.slice(0, PAGE_SIZE));
-      } catch {
-        toast.error("Search failed. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    performSearch();
-  }, [debouncedQuery, searchType]);
 
   const loadMore = useCallback(() => {
     setIsLoadingMore(true);
@@ -93,7 +72,8 @@ export const Home = () => {
 
   const handleDownloadTrack = useCallback(
     (track: TrackType) => {
-      addItem({ spotifyId: track.id, type: "track", name: track.name });
+      const artistName = track.artists?.map((a) => a.name).join(", ");
+      addItem({ spotifyId: track.id, type: "track", name: track.name, artist: artistName });
       toast.info(`Adding ${track.name} to queue...`);
     },
     [addItem],
@@ -101,7 +81,8 @@ export const Home = () => {
 
   const handleDownloadAlbum = useCallback(
     (album: AlbumType) => {
-      addItem({ spotifyId: album.id, type: "album", name: album.name });
+      const artistName = album.artists?.map((a) => a.name).join(", ");
+      addItem({ spotifyId: album.id, type: "album", name: album.name, artist: artistName });
       toast.info(`Adding ${album.name} to queue...`);
     },
     [addItem],
