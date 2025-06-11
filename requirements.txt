@@ -2,4 +2,4 @@ waitress==3.0.2
 celery==5.5.3
 Flask==3.1.1
 flask_cors==6.0.0
-deezspot-spotizerr==1.7.0
+deezspot-spotizerr==1.10.0

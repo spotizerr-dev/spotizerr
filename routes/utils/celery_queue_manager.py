@@ -127,6 +127,7 @@ class CeleryDownloadQueueManager:
 
             NON_BLOCKING_STATES = [
                 ProgressState.COMPLETE,
+                ProgressState.DONE,
                 ProgressState.CANCELLED,
                 ProgressState.ERROR,
                 ProgressState.ERROR_RETRIED,
@@ -354,7 +355,11 @@ class CeleryDownloadQueueManager:
             status = task.get("status")
 
             # Only cancel tasks that are not already completed or cancelled
-            if status not in [ProgressState.COMPLETE, ProgressState.CANCELLED]:
+            if status not in [
+                ProgressState.COMPLETE,
+                ProgressState.DONE,
+                ProgressState.CANCELLED,
+            ]:
                 result = cancel_celery_task(task_id)
                 if result.get("status") == "cancelled":
                     cancelled_count += 1

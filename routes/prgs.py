@@ -21,16 +21,15 @@ prgs_bp = Blueprint("prgs", __name__, url_prefix="/api/prgs")
 
 
 @prgs_bp.route("/<task_id>", methods=["GET"])
-def get_prg_file(task_id):
+def get_task_details(task_id):
     """
     Return a JSON object with the resource type, its name (title),
     the last progress update, and, if available, the original request parameters.
 
-    This function works with both the old PRG file system (for backward compatibility)
-    and the new task ID based system.
+    This function works with the new task ID based system.
 
     Args:
-        task_id: Either a task UUID from Celery or a PRG filename from the old system
+        task_id: A task UUID from Celery
     """
     # Only support new task IDs
     task_info = get_task_info(task_id)
@@ -77,24 +76,31 @@ def get_prg_file(task_id):
 
     last_status = get_last_task_status(task_id)
     status_count = len(get_task_status(task_id))
+
+    # Default to the full last_status object, then check for the raw callback
+    last_line_content = last_status
+    if last_status and "raw_callback" in last_status:
+        last_line_content = last_status["raw_callback"]
+
     response = {
         "original_url": dynamic_original_url,
-        "last_line": last_status,
+        "last_line": last_line_content,
         "timestamp": time.time(),
         "task_id": task_id,
         "status_count": status_count,
     }
+    if last_status and last_status.get("summary"):
+        response["summary"] = last_status["summary"]
     return jsonify(response)
 
 
 @prgs_bp.route("/delete/<task_id>", methods=["DELETE"])
-def delete_prg_file(task_id):
+def delete_task(task_id):
     """
     Delete a task's information and history.
-    Works with both the old PRG file system and the new task ID based system.
 
     Args:
-        task_id: Either a task UUID from Celery or a PRG filename from the old system
+        task_id: A task UUID from Celery
     """
     # Only support new task IDs
     task_info = get_task_info(task_id)
@@ -107,7 +113,7 @@ def delete_prg_file(task_id):
 
 
 @prgs_bp.route("/list", methods=["GET"])
-def list_prg_files():
+def list_tasks():
     """
     Retrieve a list of all tasks in the system.
     Returns a detailed list of task objects including status and metadata.
@@ -124,33 +130,34 @@ def list_prg_files():
             last_status = get_last_task_status(task_id)
 
             if task_info and last_status:
-                detailed_tasks.append(
-                    {
-                        "task_id": task_id,
-                        "type": task_info.get(
-                            "type", task_summary.get("type", "unknown")
-                        ),
-                        "name": task_info.get(
-                            "name", task_summary.get("name", "Unknown")
-                        ),
-                        "artist": task_info.get(
-                            "artist", task_summary.get("artist", "")
-                        ),
-                        "download_type": task_info.get(
-                            "download_type",
-                            task_summary.get("download_type", "unknown"),
-                        ),
-                        "status": last_status.get(
-                            "status", "unknown"
-                        ),  # Keep summary status for quick access
-                        "last_status_obj": last_status,  # Full last status object
-                        "original_request": task_info.get("original_request", {}),
-                        "created_at": task_info.get("created_at", 0),
-                        "timestamp": last_status.get(
-                            "timestamp", task_info.get("created_at", 0)
-                        ),
-                    }
-                )
+                task_details = {
+                    "task_id": task_id,
+                    "type": task_info.get(
+                        "type", task_summary.get("type", "unknown")
+                    ),
+                    "name": task_info.get(
+                        "name", task_summary.get("name", "Unknown")
+                    ),
+                    "artist": task_info.get(
+                        "artist", task_summary.get("artist", "")
+                    ),
+                    "download_type": task_info.get(
+                        "download_type",
+                        task_summary.get("download_type", "unknown"),
+                    ),
+                    "status": last_status.get(
+                        "status", "unknown"
+                    ),  # Keep summary status for quick access
+                    "last_status_obj": last_status,  # Full last status object
+                    "original_request": task_info.get("original_request", {}),
+                    "created_at": task_info.get("created_at", 0),
+                    "timestamp": last_status.get(
+                        "timestamp", task_info.get("created_at", 0)
+                    ),
+                }
+                if last_status.get("summary"):
+                    task_details["summary"] = last_status["summary"]
+                detailed_tasks.append(task_details)
             elif (
                 task_info
             ):  # If last_status is somehow missing, still provide some info

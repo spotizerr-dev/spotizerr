@@ -69,8 +69,16 @@ class CeleryManager:
         try:
             for line in iter(stream.readline, ""):
                 if line:
-                    log_method = logger.error if error else logger.info
-                    log_method(f"{log_prefix}: {line.strip()}")
+                    line_stripped = line.strip()
+                    log_method = logger.info  # Default log method
+
+                    if error:  # This is a stderr stream
+                        if " - ERROR - " in line_stripped or " - CRITICAL - " in line_stripped:
+                            log_method = logger.error
+                        elif " - WARNING - " in line_stripped:
+                            log_method = logger.warning
+                    
+                    log_method(f"{log_prefix}: {line_stripped}")
                 elif (
                     self.stop_event.is_set()
                 ):  # If empty line and stop is set, likely EOF
@@ -359,7 +367,7 @@ celery_manager = CeleryManager()
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] [%(threadName)s] [%(name)s] - %(message)s",
+        format="%(message)s",
     )
     logger.info("Starting Celery Manager example...")
     celery_manager.start()
