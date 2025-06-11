@@ -1,13 +1,45 @@
-/credentials.json
-/test.py
-/venv
-/downloads/
-/creds/
-/Test.py
-/prgs/
-/flask_server.log
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Node
+node_modules
+spotizerr-ui/node_modules
+npm-debug.log
+pnpm-lock.yaml
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+venv/
+env/
+.env.example
+
+# Editor/OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Application data
+credentials.json
+test.py
+downloads/
+creds/
+Test.py
+prgs/
+flask_server.log
 test.sh
-__pycache__/
 routes/__pycache__/*
 routes/utils/__pycache__/*
 search_test.py
@@ -20,8 +52,5 @@ search_demo.py
 celery_worker.log
 static/js/*
 logs/
-.env.example
-.env
-.venv
 data
 tests/

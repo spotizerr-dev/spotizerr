@@ -1,27 +1,31 @@
-# Stage 1: TypeScript build
-FROM node:22.16.0-slim AS typescript-builder
-
-# Set working directory
+# Stage 1: TypeScript to JavaScript compilation
+FROM node:22-slim AS typescript-builder
 WORKDIR /app
-
-# Copy necessary files for TypeScript build
-COPY tsconfig.json ./tsconfig.json
+COPY tsconfig.json .
 COPY src/js ./src/js
-
-# Install TypeScript globally
 RUN npm install -g typescript
-
-# Compile TypeScript
 RUN tsc
 
-# Stage 2: Final image
-FROM python:3.12-slim AS python-builder
+# Stage 2: Frontend build
+FROM node:22-slim AS frontend-builder
+WORKDIR /app/spotizerr-ui
+RUN npm install -g pnpm
+COPY spotizerr-ui/package.json spotizerr-ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY spotizerr-ui/. .
+RUN pnpm build
+
+# Stage 3: Final application image
+FROM python:3.12-slim
+
+# Set an environment variable for non-interactive frontend installation
+ENV DEBIAN_FRONTEND=noninteractive
+
 LABEL org.opencontainers.image.source="https://github.com/Xoconoch/spotizerr"
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies, including Node.js and npm (for pnpm)
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gosu \
@@ -30,29 +34,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pnpm globally
-RUN npm install -g pnpm
-
-# --- Backend Python Dependencies ---
-# Copy only the requirements file to leverage Docker cache
-COPY requirements.txt .
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- Frontend Node.js Dependencies ---
-# Copy package manager files to leverage Docker cache
-COPY spotizerr-ui/package.json spotizerr-ui/pnpm-lock.yaml ./spotizerr-ui/
-# Install frontend dependencies
-RUN cd spotizerr-ui && pnpm install --frozen-lockfile
-
-# --- Application Code & Frontend Build ---
-# Copy the rest of the application code
+# Copy application code (excluding UI source and TS source)
 COPY . .
-# Build the frontend application
-RUN cd spotizerr-ui && pnpm build
 
-# --- Final Container Setup ---
+# Copy compiled assets from previous stages
+COPY --from=typescript-builder /app/static/js ./static/js
+COPY --from=frontend-builder /app/spotizerr-ui/dist ./spotizerr-ui/dist
+
 # Create necessary directories with proper permissions
 RUN mkdir -p downloads data/config data/creds data/watch data/history logs/tasks && \
     chmod -R 777 downloads data logs
@@ -62,5 +54,3 @@ RUN chmod +x entrypoint.sh
 
 # Set entrypoint to our script
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-# No CMD needed as entrypoint.sh handles application startup
