@@ -1,16 +1,22 @@
-import { Link, useParams } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
-import apiClient from '../lib/api-client';
-import { useQueue } from '../contexts/queue-context';
-import { useSettings } from '../contexts/settings-context';
-import type { AlbumType, TrackType } from '../types/spotify';
+import { Link, useParams } from "@tanstack/react-router";
+import { useEffect, useState, useContext } from "react";
+import apiClient from "../lib/api-client";
+import { QueueContext } from "../contexts/queue-context";
+import { useSettings } from "../contexts/settings-context";
+import type { AlbumType, TrackType } from "../types/spotify";
+import { toast } from "sonner";
 
 export const Album = () => {
-  const { albumId } = useParams({ from: '/album/$albumId' });
+  const { albumId } = useParams({ from: "/album/$albumId" });
   const [album, setAlbum] = useState<AlbumType | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { addItem, toggleVisibility } = useQueue();
+  const context = useContext(QueueContext);
   const { settings } = useSettings();
+
+  if (!context) {
+    throw new Error("useQueue must be used within a QueueProvider");
+  }
+  const { addItem } = context;
 
   useEffect(() => {
     const fetchAlbum = async () => {
@@ -18,8 +24,8 @@ export const Album = () => {
         const response = await apiClient.get(`/album/info?id=${albumId}`);
         setAlbum(response.data);
       } catch (err) {
-        setError('Failed to load album');
-        console.error('Error fetching album:', err);
+        setError("Failed to load album");
+        console.error("Error fetching album:", err);
       }
     };
 
@@ -29,14 +35,15 @@ export const Album = () => {
   }, [albumId]);
 
   const handleDownloadTrack = (track: TrackType) => {
-    addItem({ id: track.id, type: 'track', name: track.name });
-    toggleVisibility();
+    if (!track.id) return;
+    toast.info(`Adding ${track.name} to queue...`);
+    addItem({ spotifyId: track.id, type: "track", name: track.name });
   };
 
   const handleDownloadAlbum = () => {
     if (!album) return;
-    addItem({ id: album.id, type: 'album', name: album.name });
-    toggleVisibility();
+    toast.info(`Adding ${album.name} to queue...`);
+    addItem({ spotifyId: album.id, type: "album", name: album.name });
   };
 
   if (error) {
@@ -59,46 +66,42 @@ export const Album = () => {
     );
   }
 
-  const hasExplicitTrack = album.tracks.items.some(track => track.explicit);
+  const hasExplicitTrack = album.tracks.items.some((track) => track.explicit);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row items-start gap-6">
         <img
-          src={album.images[0]?.url || '/placeholder.jpg'}
+          src={album.images[0]?.url || "/placeholder.jpg"}
           alt={album.name}
           className="w-48 h-48 object-cover rounded-lg shadow-lg"
         />
         <div className="flex-grow space-y-2">
           <h1 className="text-3xl font-bold">{album.name}</h1>
           <p className="text-lg text-gray-500 dark:text-gray-400">
-            By{' '}
+            By{" "}
             {album.artists.map((artist, index) => (
               <span key={artist.id}>
-                <Link
-                  to="/artist/$artistId"
-                  params={{ artistId: artist.id }}
-                  className="hover:underline"
-                >
+                <Link to="/artist/$artistId" params={{ artistId: artist.id }} className="hover:underline">
                   {artist.name}
                 </Link>
-                {index < album.artists.length - 1 && ', '}
+                {index < album.artists.length - 1 && ", "}
               </span>
             ))}
           </p>
           <p className="text-sm text-gray-400 dark:text-gray-500">
             {new Date(album.release_date).getFullYear()} • {album.total_tracks} songs
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-600">
-            {album.label}
-          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-600">{album.label}</p>
         </div>
         <div className="flex flex-col items-center gap-2">
-           <button
+          <button
             onClick={handleDownloadAlbum}
             disabled={isExplicitFilterEnabled && hasExplicitTrack}
             className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-            title={isExplicitFilterEnabled && hasExplicitTrack ? 'Album contains explicit tracks' : 'Download Full Album'}
+            title={
+              isExplicitFilterEnabled && hasExplicitTrack ? "Album contains explicit tracks" : "Download Full Album"
+            }
           >
             Download Album
           </button>
@@ -111,14 +114,17 @@ export const Album = () => {
           {album.tracks.items.map((track, index) => {
             if (isExplicitFilterEnabled && track.explicit) {
               return (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg opacity-50">
-                   <div className="flex items-center gap-4">
-                     <span className="text-gray-500 dark:text-gray-400 w-8 text-right">{index + 1}</span>
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg opacity-50"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-gray-500 dark:text-gray-400 w-8 text-right">{index + 1}</span>
                     <p className="font-medium text-gray-500">Explicit track filtered</p>
                   </div>
                   <span className="text-gray-500">--:--</span>
                 </div>
-              )
+              );
             }
             return (
               <div
@@ -131,15 +137,17 @@ export const Album = () => {
                     <p className="font-medium">{track.name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {track.artists.map((artist, index) => (
-                       <span key={artist.id}>
+                        <span key={artist.id}>
                           <Link
                             to="/artist/$artistId"
-                            params={{ artistId: artist.id }}
+                            params={{
+                              artistId: artist.id,
+                            }}
                             className="hover:underline"
                           >
                             {artist.name}
                           </Link>
-                          {index < track.artists.length - 1 && ', '}
+                          {index < track.artists.length - 1 && ", "}
                         </span>
                       ))}
                     </p>
@@ -148,7 +156,7 @@ export const Album = () => {
                 <div className="flex items-center gap-4">
                   <span className="text-gray-500 dark:text-gray-400">
                     {Math.floor(track.duration_ms / 60000)}:
-                    {((track.duration_ms % 60000) / 1000).toFixed(0).padStart(2, '0')}
+                    {((track.duration_ms % 60000) / 1000).toFixed(0).padStart(2, "0")}
                   </span>
                   <button
                     onClick={() => handleDownloadTrack(track)}
@@ -159,10 +167,10 @@ export const Album = () => {
                   </button>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       </div>
     </div>
   );
-}
+};

@@ -7,6 +7,7 @@ export interface ImageType {
 export interface ArtistType {
   id: string;
   name: string;
+  images: ImageType[];
 }
 
 export interface TrackType {
