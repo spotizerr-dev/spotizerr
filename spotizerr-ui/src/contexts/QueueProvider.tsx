@@ -113,7 +113,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           const response = await apiClient.get<PrgsResponse>(`/prgs/${taskId}`);
           const lastStatus = response.data.last_line || {};
           const statusUpdate = {
-            status: lastStatus.status || response.data.status || "pending",
+            status: response.data.status || lastStatus.status || "pending",
             message: lastStatus.message || lastStatus.error,
             can_retry: lastStatus.can_retry,
             progress: lastStatus.progress,
@@ -195,10 +195,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         let endpoint = "";
 
         if (item.type === "track") {
-          // WORKAROUND: Use the playlist endpoint for single tracks to avoid
-          // connection issues with the direct track downloader.
-          const trackUrl = `https://open.spotify.com/track/${item.spotifyId}`;
-          endpoint = `/playlist/download?url=${encodeURIComponent(trackUrl)}&name=${encodeURIComponent(item.name)}`;
+          endpoint = `/track/download/${item.spotifyId}`;
         } else if (item.type === "album") {
           endpoint = `/album/download/${item.spotifyId}`;
         } else if (item.type === "playlist") {
@@ -324,22 +321,24 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [clearAllPolls, startPolling]);
 
   // --- Other Actions ---
-  const removeItem = useCallback(
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const cancelItem = useCallback(
     async (id: string) => {
-      const itemToRemove = items.find((i) => i.id === id);
-      if (itemToRemove) {
-        stopPolling(itemToRemove.id);
-        if (itemToRemove.taskId) {
-          try {
-            // Use the prgs endpoint to cancel tasks
-            await apiClient.post(`/prgs/cancel/${itemToRemove.taskId}`);
-            toast.success(`Cancelled download: ${itemToRemove.name}`);
-          } catch {
-            toast.error(`Failed to cancel download: ${itemToRemove.name}`);
-          }
+      const itemToCancel = items.find((i) => i.id === id);
+      if (itemToCancel && itemToCancel.taskId && !isTerminalStatus(itemToCancel.status)) {
+        stopPolling(id);
+        try {
+          await apiClient.post(`/prgs/cancel/${itemToCancel.taskId}`);
+          toast.success(`Cancelled download: ${itemToCancel.name}`);
+          setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "cancelled" } : i)));
+        } catch (err) {
+          console.error(`Failed to cancel task ${itemToCancel.taskId}`, err);
+          toast.error(`Failed to cancel: ${itemToCancel.name}`);
         }
       }
-      setItems((prev) => prev.filter((item) => item.id !== id));
     },
     [items, stopPolling],
   );
@@ -377,24 +376,26 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [items, startPolling],
   );
 
-  const clearQueue = useCallback(async () => {
+  const cancelAll = useCallback(async () => {
+    toast.info("Cancelling all active downloads...");
     for (const item of items) {
-      if (item.taskId) {
+      if (item.taskId && !isTerminalStatus(item.status)) {
         stopPolling(item.id);
         try {
-          // Use the prgs endpoint to cancel tasks
           await apiClient.post(`/prgs/cancel/${item.taskId}`);
+          // Visually update the item to "cancelled" immediately
+          setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status: "cancelled" } : i)));
         } catch (err) {
           console.error(`Failed to cancel task ${item.taskId}`, err);
+          toast.error(`Failed to cancel: ${item.name}`);
         }
       }
     }
-    setItems([]);
-    toast.info("Queue cleared.");
   }, [items, stopPolling]);
 
   const clearCompleted = useCallback(() => {
     setItems((prev) => prev.filter((item) => !isTerminalStatus(item.status)));
+    toast.info("Cleared finished downloads.");
   }, []);
 
   const toggleVisibility = useCallback(() => setIsVisible((prev) => !prev), []);
@@ -405,9 +406,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     addItem,
     removeItem,
     retryItem,
-    clearQueue,
     toggleVisibility,
     clearCompleted,
+    cancelAll,
+    cancelItem,
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

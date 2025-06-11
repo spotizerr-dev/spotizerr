@@ -1,12 +1,4 @@
-# Stage 1: TypeScript to JavaScript compilation
-FROM node:22-slim AS typescript-builder
-WORKDIR /app
-COPY tsconfig.json .
-COPY src/js ./src/js
-RUN npm install -g typescript
-RUN tsc
-
-# Stage 2: Frontend build
+# Stage 1: Frontend build
 FROM node:22-slim AS frontend-builder
 WORKDIR /app/spotizerr-ui
 RUN npm install -g pnpm
@@ -15,7 +7,7 @@ RUN pnpm install --frozen-lockfile
 COPY spotizerr-ui/. .
 RUN pnpm build
 
-# Stage 3: Final application image
+# Stage 2: Final application image
 FROM python:3.12-slim
 
 # Set an environment variable for non-interactive frontend installation
@@ -42,7 +34,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Copy compiled assets from previous stages
-COPY --from=typescript-builder /app/static/js ./static/js
 COPY --from=frontend-builder /app/spotizerr-ui/dist ./spotizerr-ui/dist
 
 # Create necessary directories with proper permissions

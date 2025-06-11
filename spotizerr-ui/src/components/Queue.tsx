@@ -10,6 +10,9 @@ import {
 } from "react-icons/fa";
 import { QueueContext, type QueueItem, type QueueStatus } from "@/contexts/queue-context";
 
+const isTerminalStatus = (status: QueueStatus) =>
+  ["completed", "error", "cancelled", "skipped", "done"].includes(status);
+
 const statusStyles: Record<QueueStatus, { icon: React.ReactNode; color: string; bgColor: string; name: string }> = {
   queued: {
     icon: <FaHourglassHalf />,
@@ -74,10 +77,10 @@ const statusStyles: Record<QueueStatus, { icon: React.ReactNode; color: string; 
 };
 
 const QueueItemCard = ({ item }: { item: QueueItem }) => {
-  const { removeItem, retryItem } = useContext(QueueContext) || {};
+  const { removeItem, retryItem, cancelItem } = useContext(QueueContext) || {};
   const statusInfo = statusStyles[item.status] || statusStyles.queued;
 
-  const isTerminal = item.status === "completed" || item.status === "done";
+  const isTerminal = isTerminalStatus(item.status);
   const currentCount = isTerminal ? (item.summary?.successful?.length ?? item.totalTracks) : item.currentTrackNumber;
 
   const progressText =
@@ -114,13 +117,23 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
             <p className={`text-sm font-semibold ${statusInfo.color}`}>{statusInfo.name}</p>
             {progressText && <p className="text-xs text-gray-500">{progressText}</p>}
           </div>
-          <button
-            onClick={() => removeItem?.(item.id)}
-            className="text-gray-400 hover:text-red-500 transition-colors"
-            aria-label="Remove"
-          >
-            <FaTimes />
-          </button>
+          {isTerminal ? (
+            <button
+              onClick={() => removeItem?.(item.id)}
+              className="text-gray-400 hover:text-red-500 transition-colors"
+              aria-label="Remove"
+            >
+              <FaTimes />
+            </button>
+          ) : (
+            <button
+              onClick={() => cancelItem?.(item.id)}
+              className="text-gray-400 hover:text-orange-500 transition-colors"
+              aria-label="Cancel"
+            >
+              <FaTimes />
+            </button>
+          )}
           {item.canRetry && (
             <button
               onClick={() => retryItem?.(item.id)}
@@ -149,9 +162,12 @@ export const Queue = () => {
   const context = useContext(QueueContext);
 
   if (!context) return null;
-  const { items, isVisible, toggleVisibility, clearQueue } = context;
+  const { items, isVisible, toggleVisibility, cancelAll, clearCompleted } = context;
 
   if (!isVisible) return null;
+
+  const hasActive = items.some((item) => !isTerminalStatus(item.status));
+  const hasFinished = items.some((item) => isTerminalStatus(item.status));
 
   return (
     <div className="fixed bottom-4 right-4 w-full max-w-md bg-white rounded-lg shadow-xl border border-gray-200 z-50">
@@ -159,12 +175,20 @@ export const Queue = () => {
         <h2 className="text-lg font-bold">Download Queue ({items.length})</h2>
         <div className="flex gap-2">
           <button
-            onClick={clearQueue}
-            className="text-sm text-gray-500 hover:text-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={items.length === 0}
-            aria-label="Clear all items in queue"
+            onClick={cancelAll}
+            className="text-sm text-gray-500 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!hasActive}
+            aria-label="Cancel all active downloads"
           >
-            Clear All
+            Cancel All
+          </button>
+          <button
+            onClick={clearCompleted}
+            className="text-sm text-gray-500 hover:text-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!hasFinished}
+            aria-label="Clear all finished downloads"
+          >
+            Clear Finished
           </button>
           <button onClick={toggleVisibility} className="text-gray-500 hover:text-gray-800" aria-label="Close queue">
             <FaTimes />

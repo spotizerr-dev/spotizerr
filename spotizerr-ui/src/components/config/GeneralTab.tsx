@@ -3,6 +3,7 @@ import apiClient from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "../../contexts/settings-context";
+import { useEffect } from "react";
 
 // --- Type Definitions ---
 interface Credential {
@@ -12,9 +13,7 @@ interface Credential {
 interface GeneralSettings {
   service: "spotify" | "deezer";
   spotify: string;
-  spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
   deezer: string;
-  deezerQuality: "MP3_128" | "MP3_320" | "FLAC";
 }
 
 interface GeneralTabProps {
@@ -47,9 +46,15 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
     queryFn: () => fetchCredentials("deezer"),
   });
 
-  const { register, handleSubmit } = useForm<GeneralSettings>({
-    values: config,
+  const { register, handleSubmit, reset } = useForm<GeneralSettings>({
+    defaultValues: config,
   });
+
+  useEffect(() => {
+    if (config) {
+      reset(config);
+    }
+  }, [config, reset]);
 
   const mutation = useMutation({
     mutationFn: saveGeneralConfig,
@@ -100,18 +105,6 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
             ))}
           </select>
         </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="spotifyQuality">Spotify Quality</label>
-          <select
-            id="spotifyQuality"
-            {...register("spotifyQuality")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="NORMAL">OGG 96kbps</option>
-            <option value="HIGH">OGG 160kbps</option>
-            <option value="VERY_HIGH">OGG 320kbps (Premium)</option>
-          </select>
-        </div>
       </div>
 
       <div className="space-y-4">
@@ -128,18 +121,6 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
                 {acc.name}
               </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-2">
-          <label htmlFor="deezerQuality">Deezer Quality</label>
-          <select
-            id="deezerQuality"
-            {...register("deezerQuality")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="MP3_128">MP3 128kbps</option>
-            <option value="MP3_320">MP3 320kbps</option>
-            <option value="FLAC">FLAC (HiFi)</option>
           </select>
         </div>
       </div>

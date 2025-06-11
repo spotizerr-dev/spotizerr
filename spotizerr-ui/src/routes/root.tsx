@@ -43,7 +43,7 @@ function AppLayout() {
         </main>
       </div>
       <Queue />
-      <Toaster richColors />
+      <Toaster richColors duration={1500} position="bottom-left" />
     </>
   );
 }

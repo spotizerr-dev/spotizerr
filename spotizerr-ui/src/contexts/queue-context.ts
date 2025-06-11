@@ -49,9 +49,10 @@ export interface QueueContextType {
   addItem: (item: { name: string; type: DownloadType; spotifyId: string; artist?: string }) => void;
   removeItem: (id: string) => void;
   retryItem: (id: string) => void;
-  clearQueue: () => void;
   toggleVisibility: () => void;
   clearCompleted: () => void;
+  cancelAll: () => void;
+  cancelItem: (id: string) => void;
 }
 
 export const QueueContext = createContext<QueueContextType | undefined>(undefined);

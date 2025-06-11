@@ -2,6 +2,7 @@ import { useForm, type SubmitHandler } from "react-hook-form";
 import apiClient from "../../lib/api-client";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 // --- Type Definitions ---
 interface DownloadSettings {
@@ -18,6 +19,8 @@ interface DownloadSettings {
   skipExisting: boolean;
   m3u: boolean;
   hlsThreads: number;
+  deezerQuality: "MP3_128" | "MP3_320" | "FLAC";
+  spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
 }
 
 interface DownloadsTabProps {
@@ -56,9 +59,15 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
     },
   });
 
-  const { register, handleSubmit, watch } = useForm<DownloadSettings>({
-    values: config,
+  const { register, handleSubmit, watch, reset } = useForm<DownloadSettings>({
+    defaultValues: config,
   });
+
+  useEffect(() => {
+    if (config) {
+      reset(config);
+    }
+  }, [config, reset]);
 
   const selectedFormat = watch("convertTo");
 
@@ -99,6 +108,38 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           <label htmlFor="fallbackToggle">Download Fallback</label>
           <input id="fallbackToggle" type="checkbox" {...register("fallback")} className="h-6 w-6 rounded" />
         </div>
+      </div>
+
+      {/* Source Quality Settings */}
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold">Source Quality</h3>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="spotifyQuality">Spotify Quality</label>
+          <select
+            id="spotifyQuality"
+            {...register("spotifyQuality")}
+            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="NORMAL">OGG 96kbps</option>
+            <option value="HIGH">OGG 160kbps</option>
+            <option value="VERY_HIGH">OGG 320kbps (Premium)</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <label htmlFor="deezerQuality">Deezer Quality</label>
+          <select
+            id="deezerQuality"
+            {...register("deezerQuality")}
+            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="MP3_128">MP3 128kbps</option>
+            <option value="MP3_320">MP3 320kbps</option>
+            <option value="FLAC">FLAC (HiFi)</option>
+          </select>
+        </div>
+        <p className="text-sm text-gray-500 mt-1">
+          This sets the quality of the original download. Conversion settings below are applied after download.
+        </p>
       </div>
 
       {/* Conversion Settings */}

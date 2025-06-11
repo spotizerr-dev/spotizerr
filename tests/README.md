@@ -41,4 +41,4 @@ pytest tests/test_downloads.py
 For more detailed output, use the `-v` (verbose) and `-s` (show print statements) flags:
 ```bash
 pytest -v -s
-``` 
+```
