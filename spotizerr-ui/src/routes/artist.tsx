@@ -8,11 +8,10 @@ import { useSettings } from "../contexts/settings-context";
 
 export const Artist = () => {
   const { artistId } = useParams({ from: "/artist/$artistId" });
-  const [artistInfo, setArtistInfo] = useState<{
-    artist: ArtistType;
-    top_tracks: TrackType[];
-    albums: AlbumType[];
-  } | null>(null);
+  const [artist, setArtist] = useState<ArtistType | null>(null);
+  const [albums, setAlbums] = useState<AlbumType[]>([]);
+  const [topTracks, setTopTracks] = useState<TrackType[]>([]);
+  const [isWatched, setIsWatched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const context = useContext(QueueContext);
   const { settings } = useSettings();
@@ -23,19 +22,46 @@ export const Artist = () => {
   const { addItem } = context;
 
   useEffect(() => {
-    const fetchArtistInfo = async () => {
+    const fetchArtistData = async () => {
+      if (!artistId) return;
       try {
-        const response = await apiClient.get(`/artist/info?id=${artistId}`);
-        setArtistInfo(response.data);
+        // Since the backend doesn't provide a single endpoint, we make multiple calls
+        const artistPromise = apiClient.get<ArtistType>(`/artist/info?id=${artistId}`);
+        const topTracksPromise = apiClient.get<{ tracks: TrackType[] }>(`/artist/${artistId}/top-tracks`);
+        const albumsPromise = apiClient.get<{ items: AlbumType[] }>(`/artist/${artistId}/albums`);
+        const watchStatusPromise = apiClient.get<{ is_watched: boolean }>(`/artist/watch/${artistId}/status`);
+
+        const [artistRes, topTracksRes, albumsRes, watchStatusRes] = await Promise.allSettled([
+          artistPromise,
+          topTracksPromise,
+          albumsPromise,
+          watchStatusPromise,
+        ]);
+
+        if (artistRes.status === "fulfilled") {
+          setArtist(artistRes.value.data);
+        } else {
+          throw new Error("Failed to load artist details");
+        }
+
+        if (topTracksRes.status === "fulfilled") {
+          setTopTracks(topTracksRes.value.data.tracks);
+        }
+
+        if (albumsRes.status === "fulfilled") {
+          setAlbums(albumsRes.value.data.items);
+        }
+
+        if (watchStatusRes.status === "fulfilled") {
+          setIsWatched(watchStatusRes.value.data.is_watched);
+        }
       } catch (err) {
-        setError("Failed to load artist");
+        setError("Failed to load artist page");
         console.error(err);
       }
     };
 
-    if (artistId) {
-      fetchArtistInfo();
-    }
+    fetchArtistData();
   }, [artistId]);
 
   const handleDownloadTrack = (track: TrackType) => {
@@ -45,24 +71,41 @@ export const Artist = () => {
   };
 
   const handleDownloadArtist = () => {
-    if (!artistId || !artistInfo) return;
-    toast.info(`Adding ${artistInfo.artist.name} to queue...`);
+    if (!artistId || !artist) return;
+    toast.info(`Adding ${artist.name} to queue...`);
     addItem({
       spotifyId: artistId,
       type: "artist",
-      name: artistInfo.artist.name,
+      name: artist.name,
     });
+  };
+
+  const handleToggleWatch = async () => {
+    if (!artistId || !artist) return;
+    try {
+      if (isWatched) {
+        await apiClient.delete(`/artist/watch/${artistId}`);
+        toast.success(`Removed ${artist.name} from watchlist.`);
+      } else {
+        await apiClient.put(`/artist/watch/${artistId}`);
+        toast.success(`Added ${artist.name} to watchlist.`);
+      }
+      setIsWatched(!isWatched);
+    } catch (err) {
+      toast.error("Failed to update watchlist.");
+      console.error(err);
+    }
   };
 
   if (error) {
     return <div className="text-red-500">{error}</div>;
   }
 
-  if (!artistInfo) {
+  if (!artist) {
     return <div>Loading...</div>;
   }
 
-  const filteredAlbums = artistInfo.albums.filter((album) => {
+  const filteredAlbums = albums.filter((album) => {
     if (settings?.explicitFilter) {
       return !album.name.toLowerCase().includes("remix");
     }
@@ -72,16 +115,21 @@ export const Artist = () => {
   return (
     <div className="artist-page">
       <div className="artist-header">
-        <img src={artistInfo.artist.images[0]?.url} alt={artistInfo.artist.name} className="artist-image" />
-        <h1>{artistInfo.artist.name}</h1>
-        <button onClick={handleDownloadArtist} className="download-all-btn">
-          Download All
-        </button>
+        <img src={artist.images[0]?.url} alt={artist.name} className="artist-image" />
+        <h1>{artist.name}</h1>
+        <div className="flex gap-2">
+          <button onClick={handleDownloadArtist} className="download-all-btn">
+            Download All
+          </button>
+          <button onClick={handleToggleWatch} className="watch-btn">
+            {isWatched ? "Unwatch" : "Watch"}
+          </button>
+        </div>
       </div>
 
       <h2>Top Tracks</h2>
       <div className="track-list">
-        {artistInfo.top_tracks.map((track) => (
+        {topTracks.map((track) => (
           <div key={track.id} className="track-item">
             <Link to="/track/$trackId" params={{ trackId: track.id }}>
               {track.name}

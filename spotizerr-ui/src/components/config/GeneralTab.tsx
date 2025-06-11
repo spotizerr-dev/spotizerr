@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, type SubmitHandler } from "react-hook-form";
 import apiClient from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,7 +28,10 @@ const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credenti
   return data.map((name) => ({ name }));
 };
 
-const saveGeneralConfig = (data: Partial<GeneralSettings>) => apiClient.post("/config", data);
+const saveGeneralConfig = async (data: Partial<GeneralSettings>) => {
+  const { data: response } = await apiClient.post("/config", data);
+  return response;
+};
 
 // --- Component ---
 export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabProps) {
@@ -57,7 +60,9 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
     onError: (e: Error) => toast.error(`Failed to save: ${e.message}`),
   });
 
-  const onSubmit = (data: GeneralSettings) => mutation.mutate(data);
+  const onSubmit: SubmitHandler<GeneralSettings> = (data) => {
+    mutation.mutate(data);
+  };
 
   const isLoading = isConfigLoading || spotifyLoading || deezerLoading || settingsLoading;
   if (isLoading) return <p>Loading general settings...</p>;
@@ -155,7 +160,11 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
         </p>
       </div>
 
-      <button type="submit" disabled={mutation.isPending} className="btn-primary">
+      <button
+        type="submit"
+        disabled={mutation.isPending}
+        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+      >
         {mutation.isPending ? "Saving..." : "Save General Settings"}
       </button>
     </form>

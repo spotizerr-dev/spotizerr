@@ -23,6 +23,7 @@ interface PlaylistType {
 export const Playlist = () => {
   const { playlistId } = useParams({ from: "/playlist/$playlistId" });
   const [playlist, setPlaylist] = useState<PlaylistType | null>(null);
+  const [isWatched, setIsWatched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const context = useContext(QueueContext);
   const { settings } = useSettings();
@@ -43,7 +44,21 @@ export const Playlist = () => {
         console.error(err);
       }
     };
+
+    const checkWatchStatus = async () => {
+      if (!playlistId) return;
+      try {
+        const response = await apiClient.get(`/playlist/watch/${playlistId}/status`);
+        if (response.data.is_watched) {
+          setIsWatched(true);
+        }
+      } catch {
+        console.log("Could not get watch status");
+      }
+    };
+
     fetchPlaylist();
+    checkWatchStatus();
   }, [playlistId]);
 
   const handleDownloadTrack = (track: TrackType) => {
@@ -60,6 +75,23 @@ export const Playlist = () => {
       name: playlist.name,
     });
     toast.info(`Adding ${playlist.name} to queue...`);
+  };
+
+  const handleToggleWatch = async () => {
+    if (!playlistId) return;
+    try {
+      if (isWatched) {
+        await apiClient.delete(`/playlist/watch/${playlistId}`);
+        toast.success(`Removed ${playlist?.name} from watchlist.`);
+      } else {
+        await apiClient.put(`/playlist/watch/${playlistId}`);
+        toast.success(`Added ${playlist?.name} to watchlist.`);
+      }
+      setIsWatched(!isWatched);
+    } catch (err) {
+      toast.error("Failed to update watchlist.");
+      console.error(err);
+    }
   };
 
   if (error) {
@@ -83,9 +115,14 @@ export const Playlist = () => {
         <div>
           <h1>{playlist.name}</h1>
           <p>{playlist.description}</p>
-          <button onClick={handleDownloadPlaylist} className="download-playlist-btn">
-            Download All
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handleDownloadPlaylist} className="download-playlist-btn">
+              Download All
+            </button>
+            <button onClick={handleToggleWatch} className="watch-btn">
+              {isWatched ? "Unwatch" : "Watch"}
+            </button>
+          </div>
         </div>
       </div>
       <div className="track-list">

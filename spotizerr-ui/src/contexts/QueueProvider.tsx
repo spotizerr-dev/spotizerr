@@ -28,6 +28,36 @@ interface TaskStatusDTO {
   };
 }
 
+// Task from prgs/list endpoint
+interface TaskDTO {
+  task_id: string;
+  name?: string;
+  type?: string;
+  download_type?: string;
+  status?: string;
+  last_status_obj?: {
+    status?: string;
+    progress?: number;
+    speed?: string;
+    size?: string;
+    eta?: string;
+    current_track?: number;
+    total_tracks?: number;
+    error?: string;
+    can_retry?: boolean;
+  };
+  original_request?: {
+    url?: string;
+    [key: string]: unknown;
+  };
+  summary?: {
+    successful_tracks: number;
+    skipped_tracks: number;
+    failed_tracks: number;
+    failed_track_details?: { name: string; reason: string }[];
+  };
+}
+
 const isTerminalStatus = (status: QueueStatus) => ["completed", "error", "cancelled", "skipped"].includes(status);
 
 export function QueueProvider({ children }: { children: ReactNode }) {
@@ -61,15 +91,45 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       const intervalId = window.setInterval(async () => {
         try {
-          const response = await apiClient.get<TaskStatusDTO>(`/download/status/${taskId}`);
-          const statusUpdate = response.data;
+          // Use the prgs endpoint instead of download/status
+          interface PrgsResponse {
+            status?: string;
+            summary?: TaskStatusDTO["summary"];
+            last_line?: {
+              status?: string;
+              message?: string;
+              error?: string;
+              can_retry?: boolean;
+              progress?: number;
+              speed?: string;
+              size?: string;
+              eta?: string;
+              current_track?: number;
+              total_tracks?: number;
+            };
+          }
+
+          const response = await apiClient.get<PrgsResponse>(`/prgs/${taskId}`);
+          const lastStatus = response.data.last_line || {};
+          const statusUpdate = {
+            status: lastStatus.status || response.data.status || "pending",
+            message: lastStatus.message || lastStatus.error,
+            can_retry: lastStatus.can_retry,
+            progress: lastStatus.progress,
+            speed: lastStatus.speed,
+            size: lastStatus.size,
+            eta: lastStatus.eta,
+            current_track: lastStatus.current_track,
+            total_tracks: lastStatus.total_tracks,
+            summary: response.data.summary,
+          };
 
           setItems((prev) =>
             prev.map((item) => {
               if (item.id === internalId) {
                 const updatedItem: QueueItem = {
                   ...item,
-                  status: statusUpdate.status,
+                  status: statusUpdate.status as QueueStatus,
                   progress: statusUpdate.progress,
                   speed: statusUpdate.speed,
                   size: statusUpdate.size,
@@ -83,12 +143,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                         successful: statusUpdate.summary.successful_tracks,
                         skipped: statusUpdate.summary.skipped_tracks,
                         failed: statusUpdate.summary.failed_tracks,
-                        failedTracks: statusUpdate.summary.failed_track_details,
+                        failedTracks: statusUpdate.summary.failed_track_details || [],
                       }
                     : item.summary,
                 };
 
-                if (isTerminalStatus(statusUpdate.status)) {
+                if (isTerminalStatus(statusUpdate.status as QueueStatus)) {
                   stopPolling(internalId);
                 }
                 return updatedItem;
@@ -131,10 +191,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       if (!isVisible) setIsVisible(true);
 
       try {
-        const response = await apiClient.post<{ task_id: string }>(`/download`, {
-          url: `https://open.spotify.com/${item.type}/${item.spotifyId}`,
-        });
-        const { task_id } = response.data;
+        // Use the specific type endpoints instead of a generic /download endpoint
+        let endpoint = "";
+
+        if (item.type === "track") {
+          endpoint = `/track/download/${item.spotifyId}`;
+        } else if (item.type === "album") {
+          endpoint = `/album/download/${item.spotifyId}`;
+        } else if (item.type === "playlist") {
+          endpoint = `/playlist/download/${item.spotifyId}`;
+        } else if (item.type === "artist") {
+          endpoint = `/artist/download/${item.spotifyId}`;
+        }
+
+        const response = await apiClient.get<{ task_id: string }>(endpoint);
+        const task_id = response.data.task_id;
+
         setItems((prev) =>
           prev.map((i) => (i.id === internalId ? { ...i, taskId: task_id, status: "initializing" } : i)),
         );
@@ -166,18 +238,59 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const syncActiveTasks = async () => {
       try {
-        const response = await apiClient.get<QueueItem[]>("/download/active");
-        const activeTasks = response.data;
+        // Use the prgs/list endpoint instead of download/active
+        const response = await apiClient.get<TaskDTO[]>("/prgs/list");
+
+        // Map the prgs response to the expected QueueItem format
+        const activeTasks = response.data
+          .filter((task) => {
+            // Only include non-terminal tasks
+            const status = task.status?.toLowerCase();
+            return status && !isTerminalStatus(status as QueueStatus);
+          })
+          .map((task) => {
+            // Extract Spotify ID from URL if available
+            const url = task.original_request?.url || "";
+            const spotifyId = url.includes("spotify.com") ? url.split("/").pop() || "" : "";
+
+            // Map download_type to UI type
+            let type: DownloadType = "track";
+            if (task.download_type === "album") type = "album";
+            if (task.download_type === "playlist") type = "playlist";
+            if (task.download_type === "artist") type = "artist";
+
+            return {
+              id: task.task_id,
+              taskId: task.task_id,
+              name: task.name || "Unknown",
+              type,
+              spotifyId,
+              status: (task.status?.toLowerCase() || "pending") as QueueStatus,
+              progress: task.last_status_obj?.progress,
+              speed: task.last_status_obj?.speed,
+              size: task.last_status_obj?.size,
+              eta: task.last_status_obj?.eta,
+              currentTrackNumber: task.last_status_obj?.current_track,
+              totalTracks: task.last_status_obj?.total_tracks,
+              error: task.last_status_obj?.error,
+              canRetry: task.last_status_obj?.can_retry,
+              summary: task.summary
+                ? {
+                    successful: task.summary.successful_tracks,
+                    skipped: task.summary.skipped_tracks,
+                    failed: task.summary.failed_tracks,
+                    failedTracks: task.summary.failed_track_details || [],
+                  }
+                : undefined,
+            };
+          });
 
         // Basic reconciliation
         setItems((prevItems) => {
           const newItems = [...prevItems];
           activeTasks.forEach((task) => {
             if (!newItems.some((item) => item.taskId === task.taskId)) {
-              newItems.push({
-                ...task,
-                id: task.taskId || uuidv4(),
-              });
+              newItems.push(task);
             }
           });
           return newItems;
@@ -215,7 +328,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         stopPolling(itemToRemove.id);
         if (itemToRemove.taskId) {
           try {
-            await apiClient.post(`/download/cancel/${itemToRemove.taskId}`);
+            // Use the prgs endpoint to cancel tasks
+            await apiClient.post(`/prgs/cancel/${itemToRemove.taskId}`);
             toast.success(`Cancelled download: ${itemToRemove.name}`);
           } catch {
             toast.error(`Failed to cancel download: ${itemToRemove.name}`);
@@ -230,20 +344,34 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const retryItem = useCallback(
     async (id: string) => {
       const itemToRetry = items.find((i) => i.id === id);
-      if (!itemToRetry || !itemToRetry.spotifyId) return;
+      if (!itemToRetry || !itemToRetry.taskId) return;
 
-      // Remove the old item
-      setItems((prev) => prev.filter((item) => item.id !== id));
+      try {
+        // Use the prgs/retry endpoint
+        await apiClient.post(`/prgs/retry/${itemToRetry.taskId}`);
+        toast.info(`Retrying download: ${itemToRetry.name}`);
 
-      // Add it again
-      await addItem({
-        name: itemToRetry.name,
-        type: itemToRetry.type,
-        spotifyId: itemToRetry.spotifyId,
-      });
-      toast.info(`Retrying download: ${itemToRetry.name}`);
+        // Update the item status in the UI
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  status: "initializing",
+                  error: undefined,
+                }
+              : item,
+          ),
+        );
+
+        // Start polling again
+        startPolling(id, itemToRetry.taskId);
+      } catch (error) {
+        console.error(`Failed to retry download for ${itemToRetry.name}:`, error);
+        toast.error(`Failed to retry download: ${itemToRetry.name}`);
+      }
     },
-    [items, addItem],
+    [items, startPolling],
   );
 
   const clearQueue = useCallback(async () => {
@@ -251,7 +379,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       if (item.taskId) {
         stopPolling(item.id);
         try {
-          await apiClient.post(`/download/cancel/${item.taskId}`);
+          // Use the prgs endpoint to cancel tasks
+          await apiClient.post(`/prgs/cancel/${item.taskId}`);
         } catch (err) {
           console.error(`Failed to cancel task ${item.taskId}`, err);
         }

@@ -1,22 +1,27 @@
-import { useState, useEffect, useMemo, useContext, useCallback } from "react";
-import { Link } from "@tanstack/react-router";
+import { useState, useEffect, useMemo, useContext, useCallback, useRef } from "react";
 import { useDebounce } from "use-debounce";
-import apiClient from "../lib/api-client";
+import apiClient from "@/lib/api-client";
 import { toast } from "sonner";
-import type { TrackType, AlbumType, ArtistType } from "../types/spotify";
-import { QueueContext } from "../contexts/queue-context";
+import type { TrackType, AlbumType, ArtistType, PlaylistType } from "@/types/spotify";
+import { QueueContext } from "@/contexts/queue-context";
+import { SearchResultCard } from "@/components/SearchResultCard";
 
-type SearchResult = (TrackType | AlbumType | ArtistType) & {
-  model: "track" | "album" | "artist";
+const PAGE_SIZE = 12;
+
+type SearchResult = (TrackType | AlbumType | ArtistType | PlaylistType) & {
+  model: "track" | "album" | "artist" | "playlist";
 };
 
 export const Home = () => {
   const [query, setQuery] = useState("");
-  const [searchType, setSearchType] = useState<"track" | "album" | "artist">("track");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searchType, setSearchType] = useState<"track" | "album" | "artist" | "playlist">("track");
+  const [allResults, setAllResults] = useState<SearchResult[]>([]);
+  const [displayedResults, setDisplayedResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [debouncedQuery] = useDebounce(query, 500);
   const context = useContext(QueueContext);
+  const loaderRef = useRef<HTMLDivElement | null>(null);
 
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
@@ -24,25 +29,67 @@ export const Home = () => {
   const { addItem } = context;
 
   useEffect(() => {
+    if (debouncedQuery.length < 3) {
+      setAllResults([]);
+      setDisplayedResults([]);
+      return;
+    }
+
     const performSearch = async () => {
-      if (debouncedQuery.length < 3) {
-        setResults([]);
-        return;
-      }
       setIsLoading(true);
       try {
         const response = await apiClient.get<{
-          results: SearchResult[];
-        }>(`/search?q=${debouncedQuery}&type=${searchType}`);
-        setResults(response.data.results);
+          items: SearchResult[];
+        }>(`/search?q=${debouncedQuery}&search_type=${searchType}&limit=50`);
+
+        const augmentedResults = response.data.items.map((item) => ({
+          ...item,
+          model: searchType,
+        }));
+        setAllResults(augmentedResults);
+        setDisplayedResults(augmentedResults.slice(0, PAGE_SIZE));
       } catch {
         toast.error("Search failed. Please try again.");
       } finally {
         setIsLoading(false);
       }
     };
+
     performSearch();
   }, [debouncedQuery, searchType]);
+
+  const loadMore = useCallback(() => {
+    setIsLoadingMore(true);
+    setTimeout(() => {
+      const currentLength = displayedResults.length;
+      const nextBatch = allResults.slice(currentLength, currentLength + PAGE_SIZE);
+      setDisplayedResults((prev) => [...prev, ...nextBatch]);
+      setIsLoadingMore(false);
+    }, 500); // Simulate network delay
+  }, [allResults, displayedResults]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const firstEntry = entries[0];
+        if (firstEntry.isIntersecting && allResults.length > displayedResults.length) {
+          loadMore();
+        }
+      },
+      { threshold: 1.0 },
+    );
+
+    const currentLoader = loaderRef.current;
+    if (currentLoader) {
+      observer.observe(currentLoader);
+    }
+
+    return () => {
+      if (currentLoader) {
+        observer.unobserve(currentLoader);
+      }
+    };
+  }, [allResults, displayedResults, loadMore]);
 
   const handleDownloadTrack = useCallback(
     (track: TrackType) => {
@@ -52,78 +99,85 @@ export const Home = () => {
     [addItem],
   );
 
+  const handleDownloadAlbum = useCallback(
+    (album: AlbumType) => {
+      addItem({ spotifyId: album.id, type: "album", name: album.name });
+      toast.info(`Adding ${album.name} to queue...`);
+    },
+    [addItem],
+  );
+
   const resultComponent = useMemo(() => {
-    switch (searchType) {
-      case "track":
-        return (
-          <div className="track-list">
-            {results.map(
-              (item) =>
-                item.model === "track" && (
-                  <div key={item.id} className="track-item">
-                    <Link to="/track/$trackId" params={{ trackId: item.id }}>
-                      {item.name}
-                    </Link>
-                    <button onClick={() => handleDownloadTrack(item as TrackType)}>Download</button>
-                  </div>
-                ),
-            )}
-          </div>
-        );
-      case "album":
-        return (
-          <div className="album-grid">
-            {results.map(
-              (item) =>
-                item.model === "album" && (
-                  <div key={item.id} className="album-card">
-                    <Link to="/album/$albumId" params={{ albumId: item.id }}>
-                      <img src={(item as AlbumType).images[0]?.url} alt={item.name} />
-                      <p>{item.name}</p>
-                    </Link>
-                  </div>
-                ),
-            )}
-          </div>
-        );
-      case "artist":
-        return (
-          <div className="artist-list">
-            {results.map(
-              (item) =>
-                item.model === "artist" && (
-                  <div key={item.id} className="artist-item">
-                    <Link to="/artist/$artistId" params={{ artistId: item.id }}>
-                      <p>{item.name}</p>
-                    </Link>
-                  </div>
-                ),
-            )}
-          </div>
-        );
-      default:
-        return null;
-    }
-  }, [results, searchType, handleDownloadTrack]);
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {displayedResults.map((item) => {
+          let imageUrl;
+          let onDownload;
+          let subtitle;
+
+          if (item.model === "track") {
+            imageUrl = (item as TrackType).album?.images?.[0]?.url;
+            onDownload = () => handleDownloadTrack(item as TrackType);
+            subtitle = (item as TrackType).artists?.map((a) => a.name).join(", ");
+          } else if (item.model === "album") {
+            imageUrl = (item as AlbumType).images?.[0]?.url;
+            onDownload = () => handleDownloadAlbum(item as AlbumType);
+            subtitle = (item as AlbumType).artists?.map((a) => a.name).join(", ");
+          } else if (item.model === "artist") {
+            imageUrl = (item as ArtistType).images?.[0]?.url;
+            subtitle = "Artist";
+          } else if (item.model === "playlist") {
+            imageUrl = (item as PlaylistType).images?.[0]?.url;
+            subtitle = `By ${(item as PlaylistType).owner?.display_name || "Unknown"}`;
+          }
+
+          return (
+            <SearchResultCard
+              key={item.id}
+              id={item.id}
+              name={item.name}
+              type={item.model}
+              imageUrl={imageUrl}
+              subtitle={subtitle}
+              onDownload={onDownload}
+            />
+          );
+        })}
+      </div>
+    );
+  }, [displayedResults, handleDownloadTrack, handleDownloadAlbum]);
 
   return (
-    <div className="home-page">
-      <h1>Search Spotify</h1>
-      <div className="search-bar">
+    <div className="max-w-4xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Search Spotify</h1>
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for a track, album, or artist"
+          className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <select value={searchType} onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist")}>
+        <select
+          value={searchType}
+          onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")}
+          className="p-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
           <option value="track">Track</option>
           <option value="album">Album</option>
           <option value="artist">Artist</option>
+          <option value="playlist">Playlist</option>
         </select>
       </div>
-      {isLoading && <p>Loading...</p>}
-      <div className="search-results">{resultComponent}</div>
+      {isLoading ? (
+        <p className="text-center my-4">Loading results...</p>
+      ) : (
+        <>
+          {resultComponent}
+          <div ref={loaderRef} />
+          {isLoadingMore && <p className="text-center my-4">Loading more results...</p>}
+        </>
+      )}
     </div>
   );
 };

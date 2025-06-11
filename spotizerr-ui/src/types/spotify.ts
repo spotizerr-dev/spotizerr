@@ -10,12 +10,17 @@ export interface ArtistType {
   images: ImageType[];
 }
 
+export interface TrackAlbumInfo {
+  images: ImageType[];
+}
+
 export interface TrackType {
   id: string;
   name: string;
   artists: ArtistType[];
   duration_ms: number;
   explicit: boolean;
+  album: TrackAlbumInfo;
 }
 
 export interface AlbumType {
@@ -30,5 +35,22 @@ export interface AlbumType {
   explicit: boolean;
   tracks: {
     items: TrackType[];
+  };
+}
+
+export interface PlaylistItemType {
+  track: TrackType | null;
+}
+
+export interface PlaylistType {
+  id: string;
+  name: string;
+  description: string | null;
+  images: ImageType[];
+  tracks: {
+    items: PlaylistItemType[];
+  };
+  owner: {
+    display_name: string;
   };
 }
