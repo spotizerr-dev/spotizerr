@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { SummaryObject } from "@/types/callbacks";
 
 export type DownloadType = "track" | "album" | "artist" | "playlist";
 export type QueueStatus =
@@ -11,36 +12,33 @@ export type QueueStatus =
   | "skipped"
   | "cancelled"
   | "done"
-  | "queued";
+  | "queued"
+  | "retrying";
 
 export interface QueueItem {
-  id: string; // Unique ID for the queue item (can be task_id from backend)
-  name: string;
-  artist?: string;
-  type: DownloadType;
-  spotifyId: string; // Original Spotify ID
+    id: string;
+    name: string;
+    type: DownloadType;
+    spotifyId: string;
 
-  // --- Status and Progress ---
-  status: QueueStatus;
-  taskId?: string; // The backend task ID for polling
-  error?: string;
-  canRetry?: boolean;
+    // Display Info
+    artist?: string;
+    albumName?: string;
+    playlistOwner?: string;
+    currentTrackTitle?: string;
 
-  // --- Single Track Progress ---
-  progress?: number; // 0-100
-  speed?: string;
-  size?: string;
-  eta?: string;
-
-  // --- Multi-Track (Album/Playlist) Progress ---
-  currentTrackNumber?: number;
-  totalTracks?: number;
-  summary?: {
-    successful: string[];
-    skipped: string[];
-    failed: number;
-    failedTracks: { name: string; reason: string }[];
-  };
+    // Status and Progress
+    status: QueueStatus;
+    taskId?: string;
+    error?: string;
+    canRetry?: boolean;
+    progress?: number;
+    speed?: string;
+    size?: string;
+    eta?: string;
+    currentTrackNumber?: number;
+    totalTracks?: number;
+    summary?: SummaryObject;
 }
 
 export interface QueueContextType {

@@ -116,10 +116,16 @@ def delete_task(task_id):
 def list_tasks():
     """
     Retrieve a list of all tasks in the system.
-    Returns a detailed list of task objects including status and metadata.
+    Returns a detailed list of task objects including status and metadata,
+    formatted according to the callback documentation.
+    By default, it returns active tasks. Use ?include_finished=true to include completed tasks.
     """
     try:
-        tasks = get_all_tasks()  # This already gets summary data
+        # Check for 'include_finished' query parameter
+        include_finished_str = request.args.get("include_finished", "false")
+        include_finished = include_finished_str.lower() in ["true", "1", "yes"]
+
+        tasks = get_all_tasks(include_finished=include_finished)
         detailed_tasks = []
         for task_summary in tasks:
             task_id = task_summary.get("task_id")
@@ -130,33 +136,29 @@ def list_tasks():
             last_status = get_last_task_status(task_id)
 
             if task_info and last_status:
-                task_details = {
-                    "task_id": task_id,
-                    "type": task_info.get(
-                        "type", task_summary.get("type", "unknown")
-                    ),
-                    "name": task_info.get(
-                        "name", task_summary.get("name", "Unknown")
-                    ),
-                    "artist": task_info.get(
-                        "artist", task_summary.get("artist", "")
-                    ),
-                    "download_type": task_info.get(
-                        "download_type",
-                        task_summary.get("download_type", "unknown"),
-                    ),
-                    "status": last_status.get(
-                        "status", "unknown"
-                    ),  # Keep summary status for quick access
-                    "last_status_obj": last_status,  # Full last status object
-                    "original_request": task_info.get("original_request", {}),
-                    "created_at": task_info.get("created_at", 0),
-                    "timestamp": last_status.get(
-                        "timestamp", task_info.get("created_at", 0)
-                    ),
-                }
-                if last_status.get("summary"):
-                    task_details["summary"] = last_status["summary"]
+                # Start with the last status object as the base.
+                # This object should conform to one of the callback types.
+                task_details = last_status.copy()
+
+                # Add essential metadata to the task details
+                task_details["task_id"] = task_id
+                task_details["original_request"] = task_info.get(
+                    "original_request", {}
+                )
+                task_details["created_at"] = task_info.get("created_at", 0)
+
+                # Ensure core properties from task_info are present if not in status
+                if "type" not in task_details:
+                    task_details["type"] = task_info.get("type", "unknown")
+                if "name" not in task_details:
+                    task_details["name"] = task_info.get("name", "Unknown")
+                if "artist" not in task_details:
+                    task_details["artist"] = task_info.get("artist", "")
+                if "download_type" not in task_details:
+                    task_details["download_type"] = task_info.get(
+                        "download_type", "unknown"
+                    )
+
                 detailed_tasks.append(task_details)
             elif (
                 task_info
@@ -169,7 +171,6 @@ def list_tasks():
                         "artist": task_info.get("artist", ""),
                         "download_type": task_info.get("download_type", "unknown"),
                         "status": "unknown",
-                        "last_status_obj": None,
                         "original_request": task_info.get("original_request", {}),
                         "created_at": task_info.get("created_at", 0),
                         "timestamp": task_info.get("created_at", 0),

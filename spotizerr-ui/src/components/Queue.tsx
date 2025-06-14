@@ -13,7 +13,10 @@ import { QueueContext, type QueueItem, type QueueStatus } from "@/contexts/queue
 const isTerminalStatus = (status: QueueStatus) =>
   ["completed", "error", "cancelled", "skipped", "done"].includes(status);
 
-const statusStyles: Record<QueueStatus, { icon: React.ReactNode; color: string; bgColor: string; name: string }> = {
+const statusStyles: Record<
+  QueueStatus,
+  { icon: React.ReactNode; color: string; bgColor: string; name: string }
+> = {
   queued: {
     icon: <FaHourglassHalf />,
     color: "text-gray-500",
@@ -37,6 +40,12 @@ const statusStyles: Record<QueueStatus, { icon: React.ReactNode; color: string; 
     color: "text-purple-500",
     bgColor: "bg-purple-100",
     name: "Processing",
+  },
+  retrying: {
+    icon: <FaSync className="animate-spin" />,
+    color: "text-orange-500",
+    bgColor: "bg-orange-100",
+    name: "Retrying",
   },
   completed: {
     icon: <FaCheckCircle />,
@@ -79,16 +88,32 @@ const statusStyles: Record<QueueStatus, { icon: React.ReactNode; color: string; 
 const QueueItemCard = ({ item }: { item: QueueItem }) => {
   const { removeItem, retryItem, cancelItem } = useContext(QueueContext) || {};
   const statusInfo = statusStyles[item.status] || statusStyles.queued;
-
   const isTerminal = isTerminalStatus(item.status);
-  const currentCount = isTerminal ? (item.summary?.successful?.length ?? item.totalTracks) : item.currentTrackNumber;
 
-  const progressText =
-    item.type === "album" || item.type === "playlist"
-      ? `${currentCount || 0}/${item.totalTracks || "?"}`
-      : item.progress
-        ? `${item.progress.toFixed(0)}%`
-        : "";
+  const getProgressText = () => {
+    const { status, type, progress, totalTracks, summary } = item;
+
+    if (status === "downloading" || status === "processing") {
+      if (type === "track") {
+        return progress !== undefined ? `${progress.toFixed(0)}%` : null;
+      }
+      // For albums/playlists, detailed progress is in the main body
+      return null;
+    }
+
+    if ((status === "completed" || status === "done") && summary) {
+      if (type === "track") {
+        if (summary.total_successful > 0) return "Completed";
+        if (summary.total_failed > 0) return "Failed";
+        return "Finished";
+      }
+      return `${summary.total_successful}/${totalTracks} tracks`;
+    }
+
+    return null;
+  };
+
+  const progressText = getProgressText();
 
   return (
     <div className={`p-4 rounded-lg shadow-md mb-3 transition-all duration-300 ${statusInfo.bgColor}`}>
@@ -96,20 +121,60 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
         <div className="flex items-center gap-4 min-w-0">
           <div className={`text-2xl ${statusInfo.color}`}>{statusInfo.icon}</div>
           <div className="flex-grow min-w-0">
-            <div className="flex items-center gap-2">
-              {item.type === "track" ? (
-                <FaMusic className="text-gray-500" />
-              ) : (
-                <FaCompactDisc className="text-gray-500" />
-              )}
-              <p className="font-bold text-gray-800 truncate" title={item.name}>
-                {item.name}
-              </p>
-            </div>
-
-            <p className="text-sm text-gray-500 truncate" title={item.artist}>
-              {item.artist}
-            </p>
+            {item.type === "track" && (
+              <>
+                <div className="flex items-center gap-2">
+                  <FaMusic className="text-gray-500" />
+                  <p className="font-bold text-gray-800 truncate" title={item.name}>
+                    {item.name}
+                  </p>
+                </div>
+                <p className="text-sm text-gray-500 truncate" title={item.artist}>
+                  {item.artist}
+                </p>
+                {item.albumName && (
+                  <p className="text-xs text-gray-500 truncate" title={item.albumName}>
+                    {item.albumName}
+                  </p>
+                )}
+              </>
+            )}
+            {item.type === "album" && (
+              <>
+                <div className="flex items-center gap-2">
+                  <FaCompactDisc className="text-gray-500" />
+                  <p className="font-bold text-gray-800 truncate" title={item.name}>
+                    {item.name}
+                  </p>
+                </div>
+                <p className="text-sm text-gray-500 truncate" title={item.artist}>
+                  {item.artist}
+                </p>
+                {item.currentTrackTitle && (
+                  <p className="text-xs text-gray-500 truncate" title={item.currentTrackTitle}>
+                    {item.currentTrackNumber}/{item.totalTracks}: {item.currentTrackTitle}
+                  </p>
+                )}
+              </>
+            )}
+            {item.type === "playlist" && (
+              <>
+                <div className="flex items-center gap-2">
+                  <FaMusic className="text-gray-500" />
+                  <p className="font-bold text-gray-800 truncate" title={item.name}>
+                    {item.name}
+                  </p>
+                </div>
+                <p className="text-sm text-gray-500 truncate" title={item.playlistOwner}>
+                  {item.playlistOwner}
+                </p>
+                {item.currentTrackTitle && (
+                  <p className="text-xs text-gray-500 truncate" title={item.currentTrackTitle}>
+                    {item.currentTrackNumber}/{item.totalTracks}: {item.currentTrackTitle}
+                  </p>
+                )}
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -145,15 +210,29 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
           )}
         </div>
       </div>
-      {item.error && <p className="text-xs text-red-600 mt-2">Error: {item.error}</p>}
-      {(item.status === "downloading" || item.status === "processing") && item.progress !== undefined && (
-        <div className="mt-2 h-1.5 w-full bg-gray-200 rounded-full">
-          <div
-            className={`h-1.5 rounded-full ${statusInfo.color.replace("text", "bg")}`}
-            style={{ width: `${item.progress}%` }}
-          />
+      {(item.status === "error" || item.status === "retrying") && item.error && (
+        <p className="text-xs text-red-600 mt-2">Error: {item.error}</p>
+      )}
+      {isTerminal && item.summary && (item.summary.total_failed > 0 || item.summary.total_skipped > 0) && (
+        <div className="mt-2 text-xs">
+          {item.summary.total_failed > 0 && (
+            <p className="text-red-600">{item.summary.total_failed} track(s) failed.</p>
+          )}
+          {item.summary.total_skipped > 0 && (
+            <p className="text-yellow-600">{item.summary.total_skipped} track(s) skipped.</p>
+          )}
         </div>
       )}
+      {(item.status === "downloading" || item.status === "processing") &&
+        item.type === "track" &&
+        item.progress !== undefined && (
+          <div className="mt-2 h-1.5 w-full bg-gray-200 rounded-full">
+            <div
+              className={`h-1.5 rounded-full ${statusInfo.color.replace("text", "bg")}`}
+              style={{ width: `${item.progress}%` }}
+            />
+          </div>
+        )}
     </div>
   );
 };
