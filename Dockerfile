@@ -1,7 +1,20 @@
-# Use an official Python runtime as a parent image
+# Stage 1: Frontend build
+FROM node:22-slim AS frontend-builder
+WORKDIR /app/spotizerr-ui
+RUN npm install -g pnpm
+COPY spotizerr-ui/package.json spotizerr-ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY spotizerr-ui/. .
+RUN pnpm build
+
+# Stage 2: Final application image
 FROM python:3.12-slim
 
-# Set the working directory in the container
+# Set an environment variable for non-interactive frontend installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+LABEL org.opencontainers.image.source="https://github.com/Xoconoch/spotizerr"
+
 WORKDIR /app
 
 # Install system dependencies
@@ -10,27 +23,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     git \
     ffmpeg \
-    nodejs \
-    npm \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY requirements.txt .
-
 # Install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (excluding UI source and TS source)
 COPY . .
 
-# Install TypeScript globally
-RUN npm install -g typescript
-
-# Compile TypeScript
-# tsc will use tsconfig.json from the current directory (/app)
-# It will read from /app/src/js and output to /app/static/js
-RUN tsc
+# Copy compiled assets from previous stages
+COPY --from=frontend-builder /app/spotizerr-ui/dist ./spotizerr-ui/dist
 
 # Create necessary directories with proper permissions
 RUN mkdir -p downloads data/config data/creds data/watch data/history logs/tasks && \
@@ -41,5 +45,3 @@ RUN chmod +x entrypoint.sh
 
 # Set entrypoint to our script
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-# No CMD needed as entrypoint.sh handles application startup

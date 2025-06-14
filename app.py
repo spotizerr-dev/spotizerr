@@ -1,4 +1,4 @@
-from flask import Flask, request, send_from_directory, render_template
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from routes.search import search_bp
 from routes.credentials import credentials_bp
@@ -145,7 +145,7 @@ def check_redis_connection():
 
 
 def create_app():
-    app = Flask(__name__, template_folder="static/html")
+    app = Flask(__name__, static_folder="spotizerr-ui/dist", static_url_path="/")
 
     # Set up CORS
     CORS(app)
@@ -164,54 +164,14 @@ def create_app():
     app.register_blueprint(prgs_bp, url_prefix="/api/prgs")
     app.register_blueprint(history_bp, url_prefix="/api/history")
 
-    # Serve frontend
-    @app.route("/")
-    def serve_index():
-        return render_template("main.html")
-
-    # Config page route
-    @app.route("/config")
-    def serve_config():
-        return render_template("config.html")
-
-    # New route: Serve watch.html under /watchlist
-    @app.route("/watchlist")
-    def serve_watchlist():
-        return render_template("watch.html")
-
-    # New route: Serve playlist.html under /playlist/<id>
-    @app.route("/playlist/<id>")
-    def serve_playlist(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("playlist.html")
-
-    @app.route("/album/<id>")
-    def serve_album(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("album.html")
-
-    @app.route("/track/<id>")
-    def serve_track(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("track.html")
-
-    @app.route("/artist/<id>")
-    def serve_artist(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("artist.html")
-
-    @app.route("/history")
-    def serve_history_page():
-        return render_template("history.html")
-
-    @app.route("/static/<path:path>")
-    def serve_static(path):
-        return send_from_directory("static", path)
-
-    # Serve favicon.ico from the same directory as index.html (templates)
-    @app.route("/favicon.ico")
-    def serve_favicon():
-        return send_from_directory("static/html", "favicon.ico")
+    # Serve React App
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def serve_react_app(path):
+        if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+            return send_from_directory(app.static_folder, path)
+        else:
+            return send_from_directory(app.static_folder, "index.html")
 
     # Add request logging middleware
     @app.before_request
