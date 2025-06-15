@@ -149,7 +149,7 @@ task_max_retries = MAX_RETRIES
 
 # Task result settings
 task_track_started = True
-result_expires = 60 * 60 * 24 * 7  # 7 days
+result_expires = 3600  # 1 hour
 
 # Configure visibility timeout for task messages
 broker_transport_options = {
@@ -167,3 +167,11 @@ broker_pool_limit = 10
 worker_prefetch_multiplier = 1  # Process one task at a time per worker
 worker_max_tasks_per_child = 100  # Restart worker after 100 tasks
 worker_disable_rate_limits = False
+
+# Celery Beat schedule
+beat_schedule = {
+    'cleanup-old-tasks': {
+        'task': 'routes.utils.celery_tasks.cleanup_old_tasks',
+        'schedule': 3600.0,  # Run every hour
+    },
+}

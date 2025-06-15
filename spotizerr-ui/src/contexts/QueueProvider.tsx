@@ -37,36 +37,9 @@ function isPlaylistCallback(obj: any): obj is PlaylistCallbackObject {
 }
 
 export function QueueProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<QueueItem[]>(() => {
-    try {
-      const storedItems = localStorage.getItem("queueItems");
-      return storedItems ? JSON.parse(storedItems) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [items, setItems] = useState<QueueItem[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const pollingIntervals = useRef<Record<string, number>>({});
-
-  useEffect(() => {
-    localStorage.setItem("queueItems", JSON.stringify(items));
-  }, [items]);
-
-  // Effect to resume polling for active tasks on component mount
-  useEffect(() => {
-    if (items.length > 0) {
-      items.forEach((item) => {
-        // If a task has an ID and is not in a finished state, restart polling.
-        if (item.taskId && !isTerminalStatus(item.status)) {
-          console.log(`Resuming polling for ${item.name} (Task ID: ${item.taskId})`);
-          startPolling(item.id, item.taskId);
-        }
-      });
-    }
-    // This effect should only run once on mount to avoid re-triggering polling unnecessarily.
-    // We are disabling the dependency warning because we intentionally want to use the initial `items` state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const stopPolling = useCallback((internalId: string) => {
     if (pollingIntervals.current[internalId]) {
@@ -75,122 +48,126 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const updateItemFromPrgs = useCallback((item: QueueItem, prgsData: any): QueueItem => {
+    const updatedItem: QueueItem = { ...item };
+    const { last_line, summary, status, name, artist, download_type } = prgsData;
+
+    if (status) updatedItem.status = status as QueueStatus;
+    if (summary) updatedItem.summary = summary;
+    if (name) updatedItem.name = name;
+    if (artist) updatedItem.artist = artist;
+    if (download_type) updatedItem.type = download_type;
+
+    if (last_line) {
+        if (isProcessingCallback(last_line)) {
+            updatedItem.status = "processing";
+        } else if (isTrackCallback(last_line)) {
+            const { status_info, track, current_track, total_tracks, parent } = last_line;
+            updatedItem.currentTrackTitle = track.title;
+            if (current_track) updatedItem.currentTrackNumber = current_track;
+            if (total_tracks) updatedItem.totalTracks = total_tracks;
+            updatedItem.status = (parent && ["done", "skipped"].includes(status_info.status)) ? "downloading" : status_info.status as QueueStatus;
+            if (status_info.status === "skipped") {
+                updatedItem.error = status_info.reason;
+            } else if (status_info.status === "error" || status_info.status === "retrying") {
+                updatedItem.error = status_info.error;
+            }
+            if (!parent && status_info.status === "done" && status_info.summary) updatedItem.summary = status_info.summary;
+        } else if (isAlbumCallback(last_line)) {
+            const { status_info, album } = last_line;
+            updatedItem.status = status_info.status as QueueStatus;
+            updatedItem.name = album.title;
+            updatedItem.artist = album.artists.map(a => a.name).join(", ");
+            if (status_info.status === "done") {
+                if (status_info.summary) updatedItem.summary = status_info.summary;
+                updatedItem.currentTrackTitle = undefined;
+            } else if (status_info.status === "error") {
+                updatedItem.error = status_info.error;
+            }
+        } else if (isPlaylistCallback(last_line)) {
+            const { status_info, playlist } = last_line;
+            updatedItem.status = status_info.status as QueueStatus;
+            updatedItem.name = playlist.title;
+            updatedItem.playlistOwner = playlist.owner.name;
+            if (status_info.status === "done") {
+                if (status_info.summary) updatedItem.summary = status_info.summary;
+                updatedItem.currentTrackTitle = undefined;
+            } else if (status_info.status === "error") {
+                updatedItem.error = status_info.error;
+            }
+        }
+    }
+
+    return updatedItem;
+  }, []);
+
   const startPolling = useCallback(
-    (internalId: string, taskId: string) => {
-        if (pollingIntervals.current[internalId]) return;
+    (taskId: string) => {
+        if (pollingIntervals.current[taskId]) return;
 
         const intervalId = window.setInterval(async () => {
             try {
-                interface PrgsResponse {
-                    status?: string;
-                    summary?: SummaryObject;
-                    last_line?: CallbackObject;
-                }
-
-                const response = await apiClient.get<PrgsResponse>(`/prgs/${taskId}`);
-                const { last_line, summary, status } = response.data;
-
+                const response = await apiClient.get<any>(`/prgs/${taskId}`);
                 setItems(prev =>
                     prev.map(item => {
-                        if (item.id !== internalId) return item;
-
-                        const updatedItem: QueueItem = { ...item };
-
-                        if (status) {
-                            updatedItem.status = status as QueueStatus;
-                        }
-
-                        if (summary) {
-                            updatedItem.summary = summary;
-                        }
-
-                        if (last_line) {
-                            if (isProcessingCallback(last_line)) {
-                                updatedItem.status = "processing";
-                            } else if (isTrackCallback(last_line)) {
-                                const { status_info, track, current_track, total_tracks, parent } = last_line;
-
-                                updatedItem.currentTrackTitle = track.title;
-                                if (current_track) updatedItem.currentTrackNumber = current_track;
-                                if (total_tracks) updatedItem.totalTracks = total_tracks;
-
-                                // A child track being "done" doesn't mean the whole download is done.
-                                // The final "done" status comes from the parent (album/playlist) callback.
-                                if (parent && status_info.status === "done") {
-                                    updatedItem.status = "downloading"; // Or keep current status if not 'error'
-                                } else {
-                                    updatedItem.status = status_info.status as QueueStatus;
-                                }
-
-                                if (status_info.status === "error" || status_info.status === "retrying") {
-                                    updatedItem.error = status_info.error;
-                                }
-
-                                // For single tracks, the "done" status is final.
-                                if (!parent && status_info.status === "done") {
-                                    if (status_info.summary) updatedItem.summary = status_info.summary;
-                                }
-                            } else if (isAlbumCallback(last_line)) {
-                                const { status_info, album } = last_line;
-                                updatedItem.status = status_info.status as QueueStatus;
-                                updatedItem.name = album.title;
-                                updatedItem.artist = album.artists.map(a => a.name).join(", ");
-                                if (status_info.status === "done" && status_info.summary) {
-                                    updatedItem.summary = status_info.summary;
-                                }
-                                if (status_info.status === "error") {
-                                    updatedItem.error = status_info.error;
-                                }
-                            } else if (isPlaylistCallback(last_line)) {
-                                const { status_info, playlist } = last_line;
-                                updatedItem.status = status_info.status as QueueStatus;
-                                updatedItem.name = playlist.title;
-                                updatedItem.playlistOwner = playlist.owner.name;
-                                if (status_info.status === "done" && status_info.summary) {
-                                    updatedItem.summary = status_info.summary;
-                                }
-                                if (status_info.status === "error") {
-                                    updatedItem.error = status_info.error;
-                                }
-                            }
-                        }
-
+                        if (item.taskId !== taskId) return item;
+                        const updatedItem = updateItemFromPrgs(item, response.data);
                         if (isTerminalStatus(updatedItem.status as QueueStatus)) {
-                            stopPolling(internalId);
+                            stopPolling(taskId);
                         }
-
                         return updatedItem;
                     }),
                 );
             } catch (error) {
                 console.error(`Polling failed for task ${taskId}:`, error);
-                stopPolling(internalId);
+                stopPolling(taskId);
                 setItems(prev =>
                     prev.map(i =>
-                        i.id === internalId
-                            ? {
-                                  ...i,
-                                  status: "error",
-                                  error: "Connection lost",
-                              }
+                        i.taskId === taskId
+                            ? { ...i, status: "error", error: "Connection lost" }
                             : i,
                     ),
                 );
             }
         }, 2000);
 
-        pollingIntervals.current[internalId] = intervalId;
+        pollingIntervals.current[taskId] = intervalId;
     },
-    [stopPolling],
+    [stopPolling, updateItemFromPrgs],
   );
 
   useEffect(() => {
-    items.forEach((item) => {
-      if (item.taskId && !isTerminalStatus(item.status)) {
-        startPolling(item.id, item.taskId);
+    const fetchQueue = async () => {
+      try {
+        const response = await apiClient.get<any[]>("/prgs/list");
+        const backendItems = response.data.map((task: any) => {
+          const spotifyId = task.original_url?.split("/").pop() || "";
+          const baseItem: QueueItem = {
+            id: task.task_id,
+            taskId: task.task_id,
+            name: task.name || "Unknown",
+            type: task.download_type || "track",
+            spotifyId: spotifyId,
+            status: "initializing",
+            artist: task.artist,
+          };
+          return updateItemFromPrgs(baseItem, task);
+        });
+
+        setItems(backendItems);
+
+        backendItems.forEach((item: QueueItem) => {
+          if (item.taskId && !isTerminalStatus(item.status)) {
+            startPolling(item.taskId);
+          }
+        });
+      } catch (error) {
+        console.error("Failed to fetch queue from backend:", error);
+        toast.error("Could not load queue. Please refresh the page.");
       }
-    });
-    // We only want to run this on mount, so we disable the exhaustive-deps warning.
+    };
+
+    fetchQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -200,35 +177,31 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       const newItem: QueueItem = {
         ...item,
         id: internalId,
-        status: "queued",
+        status: "initializing",
       };
-      setItems((prev) => [...prev, newItem]);
-      if (!isVisible) setIsVisible(true);
+      setItems(prev => [newItem, ...prev]);
+      setIsVisible(true);
 
       try {
-        let endpoint = "";
-        if (item.type === "track") {
-          endpoint = `/track/download/${item.spotifyId}`;
-        } else if (item.type === "album") {
-          endpoint = `/album/download/${item.spotifyId}`;
-        } else if (item.type === "playlist") {
-          endpoint = `/playlist/download/${item.spotifyId}`;
-        } else if (item.type === "artist") {
-          endpoint = `/artist/download/${item.spotifyId}`;
-        }
-
-        const response = await apiClient.get<{ task_id: string }>(endpoint);
-        const task_id = response.data.task_id;
-
-        setItems((prev) =>
-          prev.map((i) => (i.id === internalId ? { ...i, taskId: task_id, status: "initializing" } : i)),
+        const response = await apiClient.get<{ task_id: string }>(
+          `/${item.type}/download/${item.spotifyId}`,
         );
-        startPolling(internalId, task_id);
-      } catch (error) {
+        const { task_id: taskId } = response.data;
+
+        setItems(prev =>
+          prev.map(i =>
+            i.id === internalId
+              ? { ...i, id: taskId, taskId, status: "queued" }
+              : i,
+          ),
+        );
+
+        startPolling(taskId);
+      } catch (error: any) {
         console.error(`Failed to start download for ${item.name}:`, error);
         toast.error(`Failed to start download for ${item.name}`);
-        setItems((prev) =>
-          prev.map((i) =>
+        setItems(prev =>
+          prev.map(i =>
             i.id === internalId
               ? {
                   ...i,
@@ -243,27 +216,28 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     [isVisible, startPolling],
   );
 
-  const removeItem = useCallback(
-    (id: string) => {
-      const item = items.find((i) => i.id === id);
-      if (item?.taskId) {
-        stopPolling(item.id);
-      }
-      setItems((prev) => prev.filter((item) => item.id !== id));
-    },
-    [items, stopPolling],
-  );
+  const removeItem = useCallback((id: string) => {
+    const item = items.find(i => i.id === id);
+    if (item && item.taskId) {
+      stopPolling(item.taskId);
+      apiClient.delete(`/prgs/delete/${item.taskId}`).catch(err => {
+        console.error(`Failed to delete task ${item.taskId} from backend`, err);
+        // Proceed with frontend removal anyway
+      });
+    }
+    setItems(prev => prev.filter(i => i.id !== id));
+  }, [items, stopPolling]);
 
   const cancelItem = useCallback(
     async (id: string) => {
-      const item = items.find((i) => i.id === id);
+      const item = items.find(i => i.id === id);
       if (!item || !item.taskId) return;
 
       try {
         await apiClient.post(`/prgs/cancel/${item.taskId}`);
-        stopPolling(id);
-        setItems((prev) =>
-          prev.map((i) =>
+        stopPolling(item.taskId);
+        setItems(prev =>
+          prev.map(i =>
             i.id === id
               ? {
                   ...i,
@@ -296,7 +270,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               : i,
           ),
         );
-        startPolling(id, item.taskId);
+        startPolling(item.taskId);
         toast.info(`Retrying download: ${item.name}`);
       }
     },
@@ -320,7 +294,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     try {
       const taskIds = activeItems.map((item) => item.taskId!);
-      await apiClient.post("/prgs/cancel/many", { task_ids: taskIds });
+      await apiClient.post("/prgs/cancel/all", { task_ids: taskIds });
 
       activeItems.forEach((item) => stopPolling(item.id));
 
@@ -404,7 +378,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             } else {
               newItems[existingIndex] = { ...newItems[existingIndex], ...task };
             }
-            startPolling(task.id, task.taskId!);
+            if (task.taskId && !isTerminalStatus(task.status)) {
+              if (task.taskId && !isTerminalStatus(task.status)) {
+                startPolling(task.taskId);
+              }
+            }
           });
           return newItems;
         });

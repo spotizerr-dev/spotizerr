@@ -6,6 +6,7 @@ import time
 from routes.utils.celery_queue_manager import download_queue_manager
 from routes.utils.celery_tasks import store_task_info, store_task_status, ProgressState
 from routes.utils.get_info import get_spotify_info
+from routes.utils.errors import DuplicateDownloadError
 
 album_bp = Blueprint("album", __name__)
 
@@ -73,6 +74,17 @@ def handle_download(album_id):
                 "artist": artist_from_spotify,
                 "orig_request": orig_params,
             }
+        )
+    except DuplicateDownloadError as e:
+        return Response(
+            json.dumps(
+                {
+                    "error": "Duplicate download detected.",
+                    "existing_task": e.existing_task,
+                }
+            ),
+            status=409,
+            mimetype="application/json",
         )
     except Exception as e:
         # Generic error handling for other issues during task submission

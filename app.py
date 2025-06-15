@@ -208,31 +208,37 @@ if __name__ == "__main__":
     # Configure application logging
     log_handler = setup_logging()
 
-    # Set file permissions for log files if needed
+    # Set permissions for log file
     try:
-        os.chmod(log_handler.baseFilename, 0o666)
-    except (OSError, FileNotFoundError) as e:
-        logging.warning(f"Could not set permissions on log file: {str(e)}")
+        if os.name != "nt":  # Not Windows
+            os.chmod(log_handler.baseFilename, 0o666)
+    except Exception as e:
+        logging.warning(f"Could not set permissions on log file: {e}")
 
-    # Log application startup
-    logging.info("=== Spotizerr Application Starting ===")
-
-    # Check Redis connection before starting workers
-    if check_redis_connection():
-        # Start Watch Manager
-        from routes.utils.watch.manager import start_watch_manager
-
-        start_watch_manager()
-
-        # Start Celery workers
-        start_celery_workers()
-
-        # Create and start Flask app
-        app = create_app()
-        logging.info("Starting Flask server on port 7171")
-        from waitress import serve
-
-        serve(app, host="0.0.0.0", port=7171)
-    else:
-        logging.error("Cannot start application: Redis connection failed")
+    # Check Redis connection before starting
+    if not check_redis_connection():
+        logging.error("Exiting: Could not establish Redis connection.")
         sys.exit(1)
+
+    # Start Celery workers in a separate thread
+    start_celery_workers()
+
+    # Clean up Celery workers on exit
+    atexit.register(celery_manager.stop)
+
+    # Create Flask app
+    app = create_app()
+
+    # Get host and port from environment variables or use defaults
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 7171))
+
+    # Use Flask's built-in server for development
+    # logging.info(f"Starting Flask development server on http://{host}:{port}")
+    # app.run(host=host, port=port, debug=True)
+
+    # The following uses Waitress, a production-ready server.
+    # To use it, comment out the app.run() line above and uncomment the lines below.
+    logging.info(f"Starting server with Waitress on http://{host}:{port}")
+    from waitress import serve
+    serve(app, host=host, port=port)

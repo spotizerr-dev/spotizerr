@@ -181,6 +181,70 @@ def get_task_info(task_id):
         return {}
 
 
+def delete_task_data(task_id):
+    """Deletes all Redis data associated with a task_id."""
+    try:
+        redis_client.delete(f"task:{task_id}:info")
+        redis_client.delete(f"task:{task_id}:status")
+        redis_client.delete(f"task:{task_id}:status:next_id")
+        logger.info(f"Deleted data for task {task_id}")
+    except Exception as e:
+        logger.error(f"Error deleting data for task {task_id}: {e}")
+
+
+CLEANUP_THRESHOLD_SECONDS = 3600  # 1 hour
+
+
+@celery_app.task(name="routes.utils.celery_tasks.cleanup_old_tasks")
+def cleanup_old_tasks():
+    """
+    Periodically cleans up old, finished tasks from Redis to prevent data buildup.
+    """
+    logger.info("Starting cleanup of old finished tasks...")
+
+    # Define terminal states that are safe to clean up
+    TERMINAL_STATES = {
+        ProgressState.COMPLETE,
+        ProgressState.DONE,
+        ProgressState.CANCELLED,
+        ProgressState.ERROR,
+        ProgressState.ERROR_RETRIED,
+        ProgressState.ERROR_AUTO_CLEANED,
+    }
+
+    cleaned_count = 0
+    # Scan for all task info keys, which serve as the master record for a task's existence
+    task_info_keys = redis_client.keys("task:*:info")
+
+    for key in task_info_keys:
+        try:
+            task_id = key.decode("utf-8").split(":")[1]
+            last_status = get_last_task_status(task_id)
+
+            if not last_status:
+                # If there's no status, we can't determine age or state.
+                # Could be an orphaned task info key. Consider a separate cleanup for these.
+                continue
+
+            status = last_status.get("status")
+            timestamp = last_status.get("timestamp", 0)
+
+            # Check if the task is in a terminal state and has expired
+            if status in TERMINAL_STATES:
+                if (time.time() - timestamp) > CLEANUP_THRESHOLD_SECONDS:
+                    logger.info(
+                        f"Cleaning up expired task {task_id} (status: {status}, age: {time.time() - timestamp}s)"
+                    )
+                    delete_task_data(task_id)
+                    cleaned_count += 1
+        except Exception as e:
+            logger.error(
+                f"Error processing task key {key} for cleanup: {e}", exc_info=True
+            )
+
+    logger.info(f"Finished cleanup of old tasks. Removed {cleaned_count} tasks.")
+
+
 # --- History Logging Helper ---
 def _log_task_to_history(task_id, final_status_str, error_msg=None):
     """Helper function to gather task data and log it to the history database."""
@@ -1324,6 +1388,7 @@ def download_track(self, **task_data):
             progress_callback=self.progress_callback,
             convert_to=convert_to,
             bitrate=bitrate,
+            _is_celery_task_execution=True,  # Skip duplicate check inside Celery task (consistency)
         )
 
         return {"status": "success", "message": "Track download completed"}
@@ -1410,6 +1475,7 @@ def download_album(self, **task_data):
             progress_callback=self.progress_callback,
             convert_to=convert_to,
             bitrate=bitrate,
+            _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
         )
 
         return {"status": "success", "message": "Album download completed"}
@@ -1508,6 +1574,7 @@ def download_playlist(self, **task_data):
             progress_callback=self.progress_callback,
             convert_to=convert_to,
             bitrate=bitrate,
+            _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
         )
 
         return {"status": "success", "message": "Playlist download completed"}

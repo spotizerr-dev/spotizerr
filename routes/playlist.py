@@ -27,6 +27,7 @@ from routes.utils.watch.manager import (
     check_watched_playlists,
     get_watch_config,
 )  # For manual trigger & config
+from routes.utils.errors import DuplicateDownloadError
 
 logger = logging.getLogger(__name__)  # Added logger initialization
 playlist_bp = Blueprint("playlist", __name__, url_prefix="/api/playlist")
@@ -97,7 +98,17 @@ def handle_download(playlist_id):
                 "orig_request": orig_params,
             }
         )
-    # Removed DuplicateDownloadError handling, add_task now manages this by creating an error task.
+    except DuplicateDownloadError as e:
+        return Response(
+            json.dumps(
+                {
+                    "error": "Duplicate download detected.",
+                    "existing_task": e.existing_task,
+                }
+            ),
+            status=409,
+            mimetype="application/json",
+        )
     except Exception as e:
         # Generic error handling for other issues during task submission
         error_task_id = str(uuid.uuid4())
