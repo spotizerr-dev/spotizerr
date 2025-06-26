@@ -181,6 +181,42 @@ def get_task_info(task_id):
         return {}
 
 
+def get_all_tasks():
+    """Get all active task IDs and their full info"""
+    try:
+        # Use SCAN for better performance than KEYS in production
+        task_ids = [
+            key.decode("utf-8").split(":")[1]
+            for key in redis_client.scan_iter("task:*:info")
+        ]
+
+        tasks = []
+        for task_id in task_ids:
+            task_info = get_task_info(task_id)
+            last_status = get_last_task_status(task_id)
+
+            if task_info and last_status:
+                tasks.append(
+                    {
+                        "task_id": task_id,
+                        "task_info": task_info,  # Pass full info
+                        "last_status": last_status,  # Pass last status
+                        # Keep original fields for backward compatibility
+                        "type": task_info.get("type", "unknown"),
+                        "name": task_info.get("name", "Unknown"),
+                        "artist": task_info.get("artist", ""),
+                        "download_type": task_info.get("download_type", "unknown"),
+                        "status": last_status.get("status", "unknown"),
+                        "timestamp": last_status.get("timestamp", 0),
+                    }
+                )
+
+        return tasks
+    except Exception as e:
+        logger.error(f"Error getting all tasks: {e}")
+        return []
+
+
 # --- History Logging Helper ---
 def _log_task_to_history(task_id, final_status_str, error_msg=None):
     """Helper function to gather task data and log it to the history database."""
@@ -511,40 +547,6 @@ def retry_task(task_id):
     except Exception as e:
         logger.error(f"Error retrying task {task_id}: {e}", exc_info=True)
         return {"status": "error", "error": str(e)}
-
-
-def get_all_tasks():
-    """Get all active task IDs"""
-    try:
-        # Get all keys matching the task info pattern
-        task_keys = redis_client.keys("task:*:info")
-
-        # Extract task IDs from the keys
-        task_ids = [key.decode("utf-8").split(":")[1] for key in task_keys]
-
-        # Get info for each task
-        tasks = []
-        for task_id in task_ids:
-            task_info = get_task_info(task_id)
-            last_status = get_last_task_status(task_id)
-
-            if task_info and last_status:
-                tasks.append(
-                    {
-                        "task_id": task_id,
-                        "type": task_info.get("type", "unknown"),
-                        "name": task_info.get("name", "Unknown"),
-                        "artist": task_info.get("artist", ""),
-                        "download_type": task_info.get("download_type", "unknown"),
-                        "status": last_status.get("status", "unknown"),
-                        "timestamp": last_status.get("timestamp", 0),
-                    }
-                )
-
-        return tasks
-    except Exception as e:
-        logger.error(f"Error getting all tasks: {e}")
-        return []
 
 
 class ProgressTrackingTask(Task):
