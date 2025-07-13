@@ -224,8 +224,9 @@ class CeleryDownloadQueueManager:
                     if not existing_task_id:
                         continue
 
-                    existing_task_info = get_task_info(existing_task_id)
-                    existing_last_status_obj = get_last_task_status(existing_task_id)
+                    # Use the pre-fetched full task info
+                    existing_task_info = task_summary.get("task_info")
+                    existing_last_status_obj = task_summary.get("last_status")
 
                     if not existing_task_info or not existing_last_status_obj:
                         continue
