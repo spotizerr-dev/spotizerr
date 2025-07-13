@@ -25,6 +25,7 @@ def download_track(
     progress_callback=None,
     convert_to=None,
     bitrate=None,
+    _is_celery_task_execution=False,  # Added for consistency, not currently used for duplicate check
 ):
     try:
         # Detect URL source (Spotify or Deezer) from URL

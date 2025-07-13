@@ -3,7 +3,10 @@ import json
 import traceback
 import uuid  # For generating error task IDs
 import time  # For timestamps
-from routes.utils.celery_queue_manager import download_queue_manager
+from routes.utils.celery_queue_manager import (
+    download_queue_manager,
+    get_existing_task_id,
+)
 from routes.utils.celery_tasks import (
     store_task_info,
     store_task_status,
@@ -78,6 +81,20 @@ def handle_download(track_id):
         return Response(
             json.dumps({"error": f"Invalid Link {url} :(", "original_url": url}),
             status=400,
+            mimetype="application/json",
+        )
+
+    # Check for existing task before adding to the queue
+    existing_task = get_existing_task_id(url)
+    if existing_task:
+        return Response(
+            json.dumps(
+                {
+                    "error": "Duplicate download detected.",
+                    "existing_task": existing_task,
+                }
+            ),
+            status=409,
             mimetype="application/json",
         )
 

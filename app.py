@@ -1,4 +1,4 @@
-from flask import Flask, request, send_from_directory, render_template
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from routes.search import search_bp
 from routes.credentials import credentials_bp
@@ -145,7 +145,7 @@ def check_redis_connection():
 
 
 def create_app():
-    app = Flask(__name__, template_folder="static/html")
+    app = Flask(__name__, static_folder="spotizerr-ui/dist", static_url_path="/")
 
     # Set up CORS
     CORS(app)
@@ -164,54 +164,14 @@ def create_app():
     app.register_blueprint(prgs_bp, url_prefix="/api/prgs")
     app.register_blueprint(history_bp, url_prefix="/api/history")
 
-    # Serve frontend
-    @app.route("/")
-    def serve_index():
-        return render_template("main.html")
-
-    # Config page route
-    @app.route("/config")
-    def serve_config():
-        return render_template("config.html")
-
-    # New route: Serve watch.html under /watchlist
-    @app.route("/watchlist")
-    def serve_watchlist():
-        return render_template("watch.html")
-
-    # New route: Serve playlist.html under /playlist/<id>
-    @app.route("/playlist/<id>")
-    def serve_playlist(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("playlist.html")
-
-    @app.route("/album/<id>")
-    def serve_album(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("album.html")
-
-    @app.route("/track/<id>")
-    def serve_track(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("track.html")
-
-    @app.route("/artist/<id>")
-    def serve_artist(id):
-        # The id parameter is captured, but you can use it as needed.
-        return render_template("artist.html")
-
-    @app.route("/history")
-    def serve_history_page():
-        return render_template("history.html")
-
-    @app.route("/static/<path:path>")
-    def serve_static(path):
-        return send_from_directory("static", path)
-
-    # Serve favicon.ico from the same directory as index.html (templates)
-    @app.route("/favicon.ico")
-    def serve_favicon():
-        return send_from_directory("static/html", "favicon.ico")
+    # Serve React App
+    @app.route("/", defaults={"path": ""})
+    @app.route("/<path:path>")
+    def serve_react_app(path):
+        if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+            return send_from_directory(app.static_folder, path)
+        else:
+            return send_from_directory(app.static_folder, "index.html")
 
     # Add request logging middleware
     @app.before_request
@@ -248,31 +208,37 @@ if __name__ == "__main__":
     # Configure application logging
     log_handler = setup_logging()
 
-    # Set file permissions for log files if needed
+    # Set permissions for log file
     try:
-        os.chmod(log_handler.baseFilename, 0o666)
-    except (OSError, FileNotFoundError) as e:
-        logging.warning(f"Could not set permissions on log file: {str(e)}")
+        if os.name != "nt":  # Not Windows
+            os.chmod(log_handler.baseFilename, 0o666)
+    except Exception as e:
+        logging.warning(f"Could not set permissions on log file: {e}")
 
-    # Log application startup
-    logging.info("=== Spotizerr Application Starting ===")
-
-    # Check Redis connection before starting workers
-    if check_redis_connection():
-        # Start Watch Manager
-        from routes.utils.watch.manager import start_watch_manager
-
-        start_watch_manager()
-
-        # Start Celery workers
-        start_celery_workers()
-
-        # Create and start Flask app
-        app = create_app()
-        logging.info("Starting Flask server on port 7171")
-        from waitress import serve
-
-        serve(app, host="0.0.0.0", port=7171)
-    else:
-        logging.error("Cannot start application: Redis connection failed")
+    # Check Redis connection before starting
+    if not check_redis_connection():
+        logging.error("Exiting: Could not establish Redis connection.")
         sys.exit(1)
+
+    # Start Celery workers in a separate thread
+    start_celery_workers()
+
+    # Clean up Celery workers on exit
+    atexit.register(celery_manager.stop)
+
+    # Create Flask app
+    app = create_app()
+
+    # Get host and port from environment variables or use defaults
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 7171))
+
+    # Use Flask's built-in server for development
+    # logging.info(f"Starting Flask development server on http://{host}:{port}")
+    # app.run(host=host, port=port, debug=True)
+
+    # The following uses Waitress, a production-ready server.
+    # To use it, comment out the app.run() line above and uncomment the lines below.
+    logging.info(f"Starting server with Waitress on http://{host}:{port}")
+    from waitress import serve
+    serve(app, host=host, port=port)

@@ -6,6 +6,8 @@ from routes.utils.credentials import (
     _get_global_spotify_api_creds,
     get_spotify_blob_path,
 )
+from routes.utils.celery_queue_manager import get_existing_task_id
+from routes.utils.errors import DuplicateDownloadError
 
 
 def download_album(
@@ -25,7 +27,15 @@ def download_album(
     progress_callback=None,
     convert_to=None,
     bitrate=None,
+    _is_celery_task_execution=False,  # Added to skip duplicate check from Celery task
 ):
+    if not _is_celery_task_execution:
+        existing_task = get_existing_task_id(url)  # Check for duplicates only if not called by Celery task
+        if existing_task:
+            raise DuplicateDownloadError(
+                f"Download for this URL is already in progress.",
+                existing_task=existing_task,
+            )
     try:
         # Detect URL source (Spotify or Deezer) from URL
         is_spotify_url = "open.spotify.com" in url.lower()

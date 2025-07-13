@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@layer base {
+  a {
+    @apply no-underline hover:underline cursor-pointer;
+  }
+}

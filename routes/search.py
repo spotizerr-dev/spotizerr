@@ -47,6 +47,10 @@ def handle_search():
         elif raw_results and search_type in raw_results:
             items = raw_results[search_type].get("items", [])
 
+        # Filter out any null items from the results
+        if items:
+            items = [item for item in items if item is not None]
+
         # Return both the items array and the full data for debugging
         return jsonify(
             {

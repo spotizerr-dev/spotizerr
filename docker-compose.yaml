@@ -8,7 +8,9 @@ services:
       - ./logs:/app/logs  # <-- Volume for persistent logs
     ports:
       - 7171:7171
-    image: cooldockerizer93/spotizerr
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: spotizerr-app
     restart: unless-stopped
     environment:
