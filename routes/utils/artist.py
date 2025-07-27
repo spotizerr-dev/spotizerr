@@ -6,7 +6,6 @@ from routes.utils.get_info import get_spotify_info
 from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
 from routes.utils.errors import DuplicateDownloadError
 
-from deezspot.easy_spoty import Spo
 from deezspot.libutils.utils import get_ids, link_is_valid
 
 # Configure logging
@@ -71,8 +70,6 @@ def get_artist_discography(
                 f"Error checking Spotify account '{main_spotify_account_name}' for discography context: {e}"
             )
 
-    Spo.__init__(client_id, client_secret)  # Initialize with global API keys
-
     try:
         artist_id = get_ids(url)
     except Exception as id_error:
@@ -81,12 +78,8 @@ def get_artist_discography(
         raise ValueError(msg)
 
     try:
-        # The progress_callback is not a standard param for Spo.get_artist
-        # If Spo.get_artist is meant to be Spo.get_artist_discography, that would take limit/offset
-        # Assuming it's Spo.get_artist which takes artist_id and album_type.
-        # If progress_callback was for a different Spo method, this needs review.
-        # For now, removing progress_callback from this specific call as Spo.get_artist doesn't use it.
-        discography = Spo.get_artist(artist_id, album_type=album_type)
+        # Use the optimized get_spotify_info function
+        discography = get_spotify_info(artist_id, "artist_discography")
         return discography
     except Exception as fetch_error:
         msg = f"An error occurred while fetching the discography: {fetch_error}"

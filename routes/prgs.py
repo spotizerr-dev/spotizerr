@@ -8,9 +8,6 @@ from routes.utils.celery_tasks import (
     get_last_task_status,
     get_all_tasks,
     cancel_task,
-    retry_task,
-    redis_client,
-    delete_task_data,
 )
 
 # Configure logging
@@ -174,9 +171,6 @@ def delete_task(task_id):
     # First, cancel the task if it's running
     cancel_task(task_id)
 
-    # Then, delete all associated data from Redis
-    delete_task_data(task_id)
-
     return {"message": f"Task {task_id} deleted successfully"}, 200
 
 
@@ -185,14 +179,9 @@ def list_tasks():
     """
     Retrieve a list of all tasks in the system.
     Returns a detailed list of task objects including status and metadata.
-    By default, it returns active tasks. Use ?include_finished=true to include completed tasks.
     """
     try:
-        # Check for 'include_finished' query parameter
-        include_finished_str = request.args.get("include_finished", "false")
-        include_finished = include_finished_str.lower() in ["true", "1", "yes"]
-
-        tasks = get_all_tasks(include_finished=include_finished)
+        tasks = get_all_tasks()
         detailed_tasks = []
         for task_summary in tasks:
             task_id = task_summary.get("task_id")
@@ -315,7 +304,7 @@ def cancel_all_tasks():
     Cancel all active (running or queued) tasks.
     """
     try:
-        tasks_to_cancel = get_all_tasks(include_finished=False)
+        tasks_to_cancel = get_all_tasks()
         cancelled_count = 0
         errors = []
 

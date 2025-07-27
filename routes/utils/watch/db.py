@@ -40,6 +40,7 @@ EXPECTED_PLAYLIST_TRACKS_COLUMNS = {
     "added_to_db": "INTEGER",
     "is_present_in_spotify": "INTEGER DEFAULT 1",
     "last_seen_in_spotify": "INTEGER",
+    "snapshot_id": "TEXT",  # Track the snapshot_id when this track was added/updated
 }
 
 EXPECTED_WATCHED_ARTISTS_COLUMNS = {
@@ -165,12 +166,98 @@ def init_playlists_db():
                 "watched playlists",
             ):
                 conn.commit()
+            
+            # Update all existing playlist track tables with new schema
+            _update_all_playlist_track_tables(cursor)
+            conn.commit()
+            
             logger.info(
                 f"Playlists database initialized/updated successfully at {PLAYLISTS_DB_PATH}"
             )
     except sqlite3.Error as e:
         logger.error(f"Error initializing watched_playlists table: {e}", exc_info=True)
         raise
+
+
+def _update_all_playlist_track_tables(cursor: sqlite3.Cursor):
+    """Updates all existing playlist track tables to ensure they have the latest schema."""
+    try:
+        # Get all table names that start with 'playlist_'
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'playlist_%'")
+        playlist_tables = cursor.fetchall()
+        
+        for table_row in playlist_tables:
+            table_name = table_row[0]
+            if _ensure_table_schema(
+                cursor,
+                table_name,
+                EXPECTED_PLAYLIST_TRACKS_COLUMNS,
+                f"playlist tracks ({table_name})",
+            ):
+                logger.info(f"Updated schema for existing playlist track table: {table_name}")
+                
+    except sqlite3.Error as e:
+        logger.error(f"Error updating playlist track tables schema: {e}", exc_info=True)
+
+
+def update_all_existing_tables_schema():
+    """Updates all existing tables to ensure they have the latest schema. Can be called independently."""
+    try:
+        with _get_playlists_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Update main watched_playlists table
+            if _ensure_table_schema(
+                cursor,
+                "watched_playlists",
+                EXPECTED_WATCHED_PLAYLISTS_COLUMNS,
+                "watched playlists",
+            ):
+                logger.info("Updated schema for watched_playlists table")
+            
+            # Update all playlist track tables
+            _update_all_playlist_track_tables(cursor)
+            
+            conn.commit()
+            logger.info("Successfully updated all existing tables schema in playlists database")
+            
+    except sqlite3.Error as e:
+        logger.error(f"Error updating existing tables schema: {e}", exc_info=True)
+        raise
+
+
+def ensure_playlist_table_schema(playlist_spotify_id: str):
+    """Ensures a specific playlist's track table has the latest schema."""
+    table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
+    try:
+        with _get_playlists_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check if table exists
+            cursor.execute(
+                f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
+            )
+            if cursor.fetchone() is None:
+                logger.warning(f"Table {table_name} does not exist. Cannot update schema.")
+                return False
+            
+            # Update schema
+            if _ensure_table_schema(
+                cursor,
+                table_name,
+                EXPECTED_PLAYLIST_TRACKS_COLUMNS,
+                f"playlist tracks ({playlist_spotify_id})",
+            ):
+                conn.commit()
+                logger.info(f"Updated schema for playlist track table: {table_name}")
+                return True
+            else:
+                logger.info(f"Schema already up-to-date for playlist track table: {table_name}")
+                return True
+                
+    except sqlite3.Error as e:
+        logger.error(f"Error updating schema for playlist {playlist_spotify_id}: {e}", exc_info=True)
+        return False
 
 
 def _create_playlist_tracks_table(playlist_spotify_id: str):
@@ -192,7 +279,8 @@ def _create_playlist_tracks_table(playlist_spotify_id: str):
                     added_at_playlist TEXT, -- When track was added to Spotify playlist
                     added_to_db INTEGER, -- Timestamp when track was added to this DB table
                     is_present_in_spotify INTEGER DEFAULT 1, -- Flag to mark if still in Spotify playlist
-                    last_seen_in_spotify INTEGER -- Timestamp when last confirmed in Spotify playlist
+                    last_seen_in_spotify INTEGER, -- Timestamp when last confirmed in Spotify playlist
+                    snapshot_id TEXT -- Track the snapshot_id when this track was added/updated
                 )
             """)
             # Ensure schema
@@ -218,6 +306,10 @@ def add_playlist_to_watch(playlist_data: dict):
     """Adds a playlist to the watched_playlists table and creates its tracks table in playlists.db."""
     try:
         _create_playlist_tracks_table(playlist_data["id"])
+        
+        # Construct Spotify URL manually since external_urls might not be present in metadata
+        spotify_url = f"https://open.spotify.com/playlist/{playlist_data['id']}"
+        
         with _get_playlists_db_connection() as conn:  # Use playlists connection
             cursor = conn.cursor()
             cursor.execute(
@@ -234,7 +326,7 @@ def add_playlist_to_watch(playlist_data: dict):
                         "display_name", playlist_data["owner"]["id"]
                     ),
                     playlist_data["tracks"]["total"],
-                    playlist_data["external_urls"]["spotify"],
+                    spotify_url,  # Use constructed URL instead of external_urls
                     playlist_data.get("snapshot_id"),
                     int(time.time()),
                     int(time.time()),
@@ -363,11 +455,91 @@ def get_playlist_track_ids_from_db(playlist_spotify_id: str):
         return track_ids
 
 
-def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list):
+def get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id: str):
+    """Retrieves all tracks with their snapshot_ids from a specific playlist's tracks table in playlists.db."""
+    table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
+    tracks_data = {}
+    try:
+        with _get_playlists_db_connection() as conn:  # Use playlists connection
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
+            )
+            if cursor.fetchone() is None:
+                logger.warning(
+                    f"Track table {table_name} does not exist in {PLAYLISTS_DB_PATH}. Cannot fetch track data."
+                )
+                return tracks_data
+            
+            # Ensure the table has the latest schema before querying
+            _ensure_table_schema(
+                cursor,
+                table_name,
+                EXPECTED_PLAYLIST_TRACKS_COLUMNS,
+                f"playlist tracks ({playlist_spotify_id})",
+            )
+            
+            cursor.execute(
+                f"SELECT spotify_track_id, snapshot_id, title FROM {table_name} WHERE is_present_in_spotify = 1"
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                tracks_data[row["spotify_track_id"]] = {
+                    "snapshot_id": row["snapshot_id"],
+                    "title": row["title"]
+                }
+        return tracks_data
+    except sqlite3.Error as e:
+        logger.error(
+            f"Error retrieving track data for playlist {playlist_spotify_id} from table {table_name} in {PLAYLISTS_DB_PATH}: {e}",
+            exc_info=True,
+        )
+        return tracks_data
+
+
+def get_playlist_total_tracks_from_db(playlist_spotify_id: str) -> int:
+    """Retrieves the total number of tracks in the database for a specific playlist."""
+    table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
+    try:
+        with _get_playlists_db_connection() as conn:  # Use playlists connection
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
+            )
+            if cursor.fetchone() is None:
+                return 0
+            
+            # Ensure the table has the latest schema before querying
+            _ensure_table_schema(
+                cursor,
+                table_name,
+                EXPECTED_PLAYLIST_TRACKS_COLUMNS,
+                f"playlist tracks ({playlist_spotify_id})",
+            )
+            
+            cursor.execute(
+                f"SELECT COUNT(*) as count FROM {table_name} WHERE is_present_in_spotify = 1"
+            )
+            row = cursor.fetchone()
+            return row["count"] if row else 0
+    except sqlite3.Error as e:
+        logger.error(
+            f"Error retrieving track count for playlist {playlist_spotify_id} from table {table_name} in {PLAYLISTS_DB_PATH}: {e}",
+            exc_info=True,
+        )
+        return 0
+
+
+def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list, snapshot_id: str = None):
     """
     Updates existing tracks in the playlist's DB table to mark them as currently present
-    in Spotify and updates their last_seen timestamp. Also refreshes metadata.
+    in Spotify and updates their last_seen timestamp and snapshot_id. Also refreshes metadata.
     Does NOT insert new tracks. New tracks are only added upon successful download.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+        tracks_data: List of track items from Spotify API
+        snapshot_id: The current snapshot_id for this playlist update
     """
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
     if not tracks_data:
@@ -401,7 +573,7 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list):
         # Prepare tuple for UPDATE statement.
         # Order: title, artist_names, album_name, album_artist_names, track_number,
         # album_spotify_id, duration_ms, added_at_playlist,
-        # is_present_in_spotify, last_seen_in_spotify, spotify_track_id (for WHERE)
+        # is_present_in_spotify, last_seen_in_spotify, snapshot_id, spotify_track_id (for WHERE)
         tracks_to_update.append(
             (
                 track.get("name", "N/A"),
@@ -414,7 +586,7 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list):
                 track_item.get("added_at"),  # From playlist item, update if changed
                 1,  # is_present_in_spotify flag
                 current_time,  # last_seen_in_spotify timestamp
-                # added_to_db is NOT updated here as this function only updates existing records.
+                snapshot_id,  # Update snapshot_id for this track
                 track["id"],  # spotify_track_id for the WHERE clause
             )
         )
@@ -446,7 +618,8 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list):
                     duration_ms = ?,
                     added_at_playlist = ?,
                     is_present_in_spotify = ?,
-                    last_seen_in_spotify = ?
+                    last_seen_in_spotify = ?,
+                    snapshot_id = ?
                 WHERE spotify_track_id = ?
             """,
                 tracks_to_update,
@@ -611,7 +784,7 @@ def remove_specific_tracks_from_playlist_table(
         return 0
 
 
-def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db: dict):
+def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db: dict, snapshot_id: str = None):
     """Adds or updates a single track in the specified playlist's tracks table in playlists.db."""
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
     track_detail = track_item_for_db.get("track")
@@ -646,6 +819,7 @@ def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db:
         current_time,
         1,
         current_time,
+        snapshot_id,  # Add snapshot_id to the tuple
     )
     try:
         with _get_playlists_db_connection() as conn:  # Use playlists connection
@@ -654,8 +828,8 @@ def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db:
             cursor.execute(
                 f"""
                 INSERT OR REPLACE INTO {table_name}
-                (spotify_track_id, title, artist_names, album_name, album_artist_names, track_number, album_spotify_id, duration_ms, added_at_playlist, added_to_db, is_present_in_spotify, last_seen_in_spotify)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (spotify_track_id, title, artist_names, album_name, album_artist_names, track_number, album_spotify_id, duration_ms, added_at_playlist, added_to_db, is_present_in_spotify, last_seen_in_spotify, snapshot_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 track_data_tuple,
             )

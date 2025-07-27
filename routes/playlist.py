@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)  # Added logger initialization
 playlist_bp = Blueprint("playlist", __name__, url_prefix="/api/playlist")
 
 
+def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
+    """Construct a Spotify URL for a given item ID and type."""
+    return f"https://open.spotify.com/{item_type}/{item_id}"
+
+
 @playlist_bp.route("/download/<playlist_id>", methods=["GET"])
 def handle_download(playlist_id):
     # Retrieve essential parameters from the request.
@@ -41,14 +46,15 @@ def handle_download(playlist_id):
     orig_params = request.args.to_dict()
 
     # Construct the URL from playlist_id
-    url = f"https://open.spotify.com/playlist/{playlist_id}"
+    url = construct_spotify_url(playlist_id, "playlist")
     orig_params["original_url"] = (
         request.url
     )  # Update original_url to the constructed one
 
-    # Fetch metadata from Spotify
+    # Fetch metadata from Spotify using optimized function
     try:
-        playlist_info = get_spotify_info(playlist_id, "playlist")
+        from routes.utils.get_info import get_playlist_metadata
+        playlist_info = get_playlist_metadata(playlist_id)
         if (
             not playlist_info
             or not playlist_info.get("name")
@@ -177,6 +183,7 @@ def get_playlist_info():
     Expects a query parameter 'id' that contains the Spotify playlist ID.
     """
     spotify_id = request.args.get("id")
+    include_tracks = request.args.get("include_tracks", "false").lower() == "true"
 
     if not spotify_id:
         return Response(
@@ -186,8 +193,9 @@ def get_playlist_info():
         )
 
     try:
-        # Import and use the get_spotify_info function from the utility module.
-        playlist_info = get_spotify_info(spotify_id, "playlist")
+        # Use the optimized playlist info function
+        from routes.utils.get_info import get_playlist_info_optimized
+        playlist_info = get_playlist_info_optimized(spotify_id, include_tracks=include_tracks)
 
         # If playlist_info is successfully fetched, check if it's watched
         # and augment track items with is_locally_known status
@@ -216,6 +224,64 @@ def get_playlist_info():
         return Response(json.dumps(error_data), status=500, mimetype="application/json")
 
 
+@playlist_bp.route("/metadata", methods=["GET"])
+def get_playlist_metadata():
+    """
+    Retrieve only Spotify playlist metadata (no tracks) to avoid rate limiting.
+    Expects a query parameter 'id' that contains the Spotify playlist ID.
+    """
+    spotify_id = request.args.get("id")
+
+    if not spotify_id:
+        return Response(
+            json.dumps({"error": "Missing parameter: id"}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    try:
+        # Use the optimized playlist metadata function
+        from routes.utils.get_info import get_playlist_metadata
+        playlist_metadata = get_playlist_metadata(spotify_id)
+
+        return Response(
+            json.dumps(playlist_metadata), status=200, mimetype="application/json"
+        )
+    except Exception as e:
+        error_data = {"error": str(e), "traceback": traceback.format_exc()}
+        return Response(json.dumps(error_data), status=500, mimetype="application/json")
+
+
+@playlist_bp.route("/tracks", methods=["GET"])
+def get_playlist_tracks():
+    """
+    Retrieve playlist tracks with pagination support for progressive loading.
+    Expects query parameters: 'id' (playlist ID), 'limit' (optional), 'offset' (optional).
+    """
+    spotify_id = request.args.get("id")
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+
+    if not spotify_id:
+        return Response(
+            json.dumps({"error": "Missing parameter: id"}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    try:
+        # Use the optimized playlist tracks function
+        from routes.utils.get_info import get_playlist_tracks
+        tracks_data = get_playlist_tracks(spotify_id, limit=limit, offset=offset)
+
+        return Response(
+            json.dumps(tracks_data), status=200, mimetype="application/json"
+        )
+    except Exception as e:
+        error_data = {"error": str(e), "traceback": traceback.format_exc()}
+        return Response(json.dumps(error_data), status=500, mimetype="application/json")
+
+
 @playlist_bp.route("/watch/<string:playlist_spotify_id>", methods=["PUT"])
 def add_to_watchlist(playlist_spotify_id):
     """Adds a playlist to the watchlist."""
@@ -232,7 +298,8 @@ def add_to_watchlist(playlist_spotify_id):
             ), 200
 
         # Fetch playlist details from Spotify to populate our DB
-        playlist_data = get_spotify_info(playlist_spotify_id, "playlist")
+        from routes.utils.get_info import get_playlist_metadata
+        playlist_data = get_playlist_metadata(playlist_spotify_id)
         if not playlist_data or "id" not in playlist_data:
             logger.error(
                 f"Could not fetch details for playlist {playlist_spotify_id} from Spotify."

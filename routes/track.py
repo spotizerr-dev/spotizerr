@@ -18,6 +18,11 @@ from routes.utils.get_info import get_spotify_info  # Added import
 track_bp = Blueprint("track", __name__)
 
 
+def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
+    """Construct a Spotify URL for a given item ID and type."""
+    return f"https://open.spotify.com/{item_type}/{item_id}"
+
+
 @track_bp.route("/download/<track_id>", methods=["GET"])
 def handle_download(track_id):
     # Retrieve essential parameters from the request.
@@ -26,7 +31,7 @@ def handle_download(track_id):
     orig_params = request.args.to_dict()
 
     # Construct the URL from track_id
-    url = f"https://open.spotify.com/track/{track_id}"
+    url = construct_spotify_url(track_id, "track")
     orig_params["original_url"] = url  # Update original_url to the constructed one
 
     # Fetch metadata from Spotify

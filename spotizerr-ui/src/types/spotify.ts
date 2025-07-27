@@ -50,11 +50,37 @@ export interface PlaylistItemType {
   added_at: string;
   is_local: boolean;
   track: TrackType | null;
+  is_locally_known?: boolean;
 }
 
 export interface PlaylistOwnerType {
   id: string;
   display_name: string;
+}
+
+// New interface for playlist metadata only (no tracks)
+export interface PlaylistMetadataType {
+  id: string;
+  name: string;
+  description: string | null;
+  images: ImageType[];
+  tracks: {
+    total: number;
+  };
+  owner: PlaylistOwnerType;
+  followers: {
+    total: number;
+  };
+  _metadata_only: boolean;
+  _tracks_loaded: boolean;
+}
+
+// New interface for playlist tracks response
+export interface PlaylistTracksResponseType {
+  items: PlaylistItemType[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface PlaylistType {

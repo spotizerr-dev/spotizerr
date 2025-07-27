@@ -11,6 +11,11 @@ from routes.utils.errors import DuplicateDownloadError
 album_bp = Blueprint("album", __name__)
 
 
+def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
+    """Construct a Spotify URL for a given item ID and type."""
+    return f"https://open.spotify.com/{item_type}/{item_id}"
+
+
 @album_bp.route("/download/<album_id>", methods=["GET"])
 def handle_download(album_id):
     # Retrieve essential parameters from the request.
@@ -18,7 +23,7 @@ def handle_download(album_id):
     # artist = request.args.get('artist')
 
     # Construct the URL from album_id
-    url = f"https://open.spotify.com/album/{album_id}"
+    url = construct_spotify_url(album_id, "album")
 
     # Fetch metadata from Spotify
     try:
@@ -163,9 +168,7 @@ def get_album_info():
         )
 
     try:
-        # Import and use the get_spotify_info function from the utility module.
-        from routes.utils.get_info import get_spotify_info
-
+        # Use the get_spotify_info function (already imported at top)
         album_info = get_spotify_info(spotify_id, "album")
         return Response(json.dumps(album_info), status=200, mimetype="application/json")
     except Exception as e:

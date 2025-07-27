@@ -9,9 +9,13 @@ from routes.utils.watch.db import (
     get_watched_playlists,
     get_watched_playlist,
     get_playlist_track_ids_from_db,
+    get_playlist_tracks_with_snapshot_from_db,
+    get_playlist_total_tracks_from_db,
     add_tracks_to_playlist_db,
     update_playlist_snapshot,
     mark_tracks_as_not_present_in_spotify,
+    update_all_existing_tables_schema,
+    ensure_playlist_table_schema,
     # Artist watch DB functions
     get_watched_artists,
     get_watched_artist,
@@ -20,6 +24,9 @@ from routes.utils.watch.db import (
 )
 from routes.utils.get_info import (
     get_spotify_info,
+    get_playlist_metadata,
+    get_playlist_tracks,
+    check_playlist_updated,
 )  # To fetch playlist, track, artist, and album details
 from routes.utils.celery_queue_manager import download_queue_manager
 
@@ -34,6 +41,7 @@ DEFAULT_WATCH_CONFIG = {
     "watchedArtistAlbumGroup": ["album", "single"],  # Default for artists
     "delay_between_playlists_seconds": 2,
     "delay_between_artists_seconds": 5,  # Added for artists
+    "use_snapshot_id_checking": True,  # Enable snapshot_id checking for efficiency
 }
 
 
@@ -82,6 +90,152 @@ def construct_spotify_url(item_id, item_type="track"):
     return f"https://open.spotify.com/{item_type}/{item_id}"
 
 
+def has_playlist_changed(playlist_spotify_id: str, current_snapshot_id: str) -> bool:
+    """
+    Check if a playlist has changed by comparing snapshot_id.
+    This is much more efficient than fetching all tracks.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+        current_snapshot_id: The current snapshot_id from API
+        
+    Returns:
+        True if playlist has changed, False otherwise
+    """
+    try:
+        db_playlist = get_watched_playlist(playlist_spotify_id)
+        if not db_playlist:
+            # Playlist not in database, consider it as "changed" to trigger initial processing
+            return True
+            
+        last_snapshot_id = db_playlist.get("snapshot_id")
+        if not last_snapshot_id:
+            # No previous snapshot_id, consider it as "changed" to trigger initial processing
+            return True
+            
+        return current_snapshot_id != last_snapshot_id
+        
+    except Exception as e:
+        logger.error(f"Error checking playlist change status for {playlist_spotify_id}: {e}")
+        # On error, assume playlist has changed to be safe
+        return True
+
+
+def needs_track_sync(playlist_spotify_id: str, current_snapshot_id: str, api_total_tracks: int) -> tuple[bool, list[str]]:
+    """
+    Check if tracks need to be synchronized by comparing snapshot_ids and total counts.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+        current_snapshot_id: The current snapshot_id from API
+        api_total_tracks: The total number of tracks reported by API
+        
+    Returns:
+        Tuple of (needs_sync, tracks_to_find) where:
+        - needs_sync: True if tracks need to be synchronized
+        - tracks_to_find: List of track IDs that need to be found in API response
+    """
+    try:
+        # Get tracks from database with their snapshot_ids
+        db_tracks = get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id)
+        db_total_tracks = get_playlist_total_tracks_from_db(playlist_spotify_id)
+        
+        # Check if total count matches
+        if db_total_tracks != api_total_tracks:
+            logger.info(
+                f"Track count mismatch for playlist {playlist_spotify_id}: DB={db_total_tracks}, API={api_total_tracks}. Full sync needed to ensure all tracks are captured."
+            )
+            # Always do full sync when counts don't match to ensure we don't miss any tracks
+            # This handles cases like:
+            # - Empty database (DB=0, API=1345)
+            # - Missing tracks (DB=1000, API=1345) 
+            # - Removed tracks (DB=1345, API=1000)
+            return True, []  # Empty list indicates full sync needed
+        
+        # Check if any tracks have different snapshot_id
+        tracks_to_find = []
+        for track_id, track_data in db_tracks.items():
+            if track_data.get("snapshot_id") != current_snapshot_id:
+                tracks_to_find.append(track_id)
+        
+        if tracks_to_find:
+            logger.info(
+                f"Found {len(tracks_to_find)} tracks with outdated snapshot_id for playlist {playlist_spotify_id}"
+            )
+            return True, tracks_to_find
+        
+        return False, []
+        
+    except Exception as e:
+        logger.error(f"Error checking track sync status for {playlist_spotify_id}: {e}")
+        # On error, assume sync is needed to be safe
+        return True, []
+
+
+def find_tracks_in_playlist(playlist_spotify_id: str, tracks_to_find: list[str], current_snapshot_id: str) -> tuple[list, list]:
+    """
+    Progressively fetch playlist tracks until all specified tracks are found or playlist is exhausted.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+        tracks_to_find: List of track IDs to find
+        current_snapshot_id: The current snapshot_id
+        
+    Returns:
+        Tuple of (found_tracks, not_found_tracks) where:
+        - found_tracks: List of track items that were found
+        - not_found_tracks: List of track IDs that were not found
+    """
+    found_tracks = []
+    not_found_tracks = tracks_to_find.copy()
+    offset = 0
+    limit = 100
+    
+    logger.info(
+        f"Searching for {len(tracks_to_find)} tracks in playlist {playlist_spotify_id} starting from offset {offset}"
+    )
+    
+    while not_found_tracks and offset < 10000:  # Safety limit
+        try:
+            tracks_batch = get_playlist_tracks(playlist_spotify_id, limit=limit, offset=offset)
+            
+            if not tracks_batch or "items" not in tracks_batch:
+                logger.warning(f"No tracks returned for playlist {playlist_spotify_id} at offset {offset}")
+                break
+            
+            batch_items = tracks_batch.get("items", [])
+            if not batch_items:
+                logger.info(f"No more tracks found at offset {offset}")
+                break
+            
+            # Check each track in this batch
+            for track_item in batch_items:
+                track = track_item.get("track")
+                if track and track.get("id") and not track.get("is_local"):
+                    track_id = track["id"]
+                    if track_id in not_found_tracks:
+                        found_tracks.append(track_item)
+                        not_found_tracks.remove(track_id)
+                        logger.debug(f"Found track {track_id} at offset {offset}")
+            
+            offset += len(batch_items)
+            
+            # Add small delay between batches
+            time.sleep(0.1)
+            
+        except Exception as e:
+            logger.error(f"Error fetching tracks batch for playlist {playlist_spotify_id} at offset {offset}: {e}")
+            break
+    
+    logger.info(
+        f"Track search complete for playlist {playlist_spotify_id}: "
+        f"Found {len(found_tracks)}/{len(tracks_to_find)} tracks, "
+        f"Not found: {len(not_found_tracks)}"
+    )
+    
+    return found_tracks, not_found_tracks
+
+
 def check_watched_playlists(specific_playlist_id: str = None):
     """Checks watched playlists for new tracks and queues downloads.
     If specific_playlist_id is provided, only that playlist is checked.
@@ -90,6 +244,7 @@ def check_watched_playlists(specific_playlist_id: str = None):
         f"Playlist Watch Manager: Starting check. Specific playlist: {specific_playlist_id or 'All'}"
     )
     config = get_watch_config()
+    use_snapshot_checking = config.get("use_snapshot_id_checking", True)
 
     if specific_playlist_id:
         playlist_obj = get_watched_playlist(specific_playlist_id)
@@ -114,56 +269,115 @@ def check_watched_playlists(specific_playlist_id: str = None):
         )
 
         try:
-            # For playlists, we fetch all tracks in one go usually (Spotify API limit permitting)
-            current_playlist_data_from_api = get_spotify_info(
-                playlist_spotify_id, "playlist"
-            )
-            if (
-                not current_playlist_data_from_api
-                or "tracks" not in current_playlist_data_from_api
-            ):
+            # Ensure the playlist's track table has the latest schema before processing
+            ensure_playlist_table_schema(playlist_spotify_id)
+            
+            # First, get playlist metadata to check if it has changed
+            current_playlist_metadata = get_playlist_metadata(playlist_spotify_id)
+            if not current_playlist_metadata:
                 logger.error(
-                    f"Playlist Watch Manager: Failed to fetch data or tracks from Spotify for playlist {playlist_spotify_id}."
+                    f"Playlist Watch Manager: Failed to fetch metadata from Spotify for playlist {playlist_spotify_id}."
                 )
                 continue
 
-            api_snapshot_id = current_playlist_data_from_api.get("snapshot_id")
-            api_total_tracks = current_playlist_data_from_api.get("tracks", {}).get(
-                "total", 0
-            )
+            api_snapshot_id = current_playlist_metadata.get("snapshot_id")
+            api_total_tracks = current_playlist_metadata.get("tracks", {}).get("total", 0)
+            
+            # Enhanced snapshot_id checking with track-level tracking
+            if use_snapshot_checking:
+                # First check if playlist snapshot_id has changed
+                playlist_changed = has_playlist_changed(playlist_spotify_id, api_snapshot_id)
+                
+                if not playlist_changed:
+                    # Even if playlist snapshot_id hasn't changed, check if individual tracks need sync
+                    needs_sync, tracks_to_find = needs_track_sync(playlist_spotify_id, api_snapshot_id, api_total_tracks)
+                    
+                    if not needs_sync:
+                        logger.info(
+                            f"Playlist Watch Manager: Playlist '{playlist_name}' ({playlist_spotify_id}) has not changed since last check (snapshot_id: {api_snapshot_id}). Skipping detailed check."
+                        )
+                        continue
+                    else:
+                        if not tracks_to_find:
+                            # Empty tracks_to_find means full sync is needed (track count mismatch detected)
+                            logger.info(
+                                f"Playlist Watch Manager: Playlist '{playlist_name}' snapshot_id unchanged, but full sync needed due to track count mismatch. Proceeding with full check."
+                            )
+                            # Continue to full sync below
+                        else:
+                            logger.info(
+                                f"Playlist Watch Manager: Playlist '{playlist_name}' snapshot_id unchanged, but {len(tracks_to_find)} tracks need sync. Proceeding with targeted check."
+                            )
+                            # Use targeted track search instead of full fetch
+                            found_tracks, not_found_tracks = find_tracks_in_playlist(playlist_spotify_id, tracks_to_find, api_snapshot_id)
+                            
+                            # Update found tracks with new snapshot_id
+                            if found_tracks:
+                                add_tracks_to_playlist_db(playlist_spotify_id, found_tracks, api_snapshot_id)
+                            
+                            # Mark not found tracks as removed
+                            if not_found_tracks:
+                                logger.info(
+                                    f"Playlist Watch Manager: {len(not_found_tracks)} tracks not found in playlist '{playlist_name}'. Marking as removed."
+                                )
+                                mark_tracks_as_not_present_in_spotify(playlist_spotify_id, not_found_tracks)
 
-            # Paginate through playlist tracks if necessary
+                            # Update playlist snapshot and continue to next playlist
+                            update_playlist_snapshot(playlist_spotify_id, api_snapshot_id, api_total_tracks)
+                            logger.info(
+                                f"Playlist Watch Manager: Finished targeted sync for playlist '{playlist_name}'. Snapshot ID updated to {api_snapshot_id}."
+                            )
+                            continue
+                else:
+                    logger.info(
+                        f"Playlist Watch Manager: Playlist '{playlist_name}' has changed. New snapshot_id: {api_snapshot_id}. Proceeding with full check."
+                    )
+            else:
+                logger.info(
+                    f"Playlist Watch Manager: Snapshot checking disabled. Proceeding with full check for playlist '{playlist_name}'."
+                )
+
+            # Fetch all tracks using the optimized function
+            # This happens when:
+            # 1. Playlist snapshot_id has changed (full sync needed)
+            # 2. Snapshot checking is disabled (full sync always)
+            # 3. Database is empty but API has tracks (full sync needed)
+            logger.info(
+                f"Playlist Watch Manager: Fetching all tracks for playlist '{playlist_name}' ({playlist_spotify_id}) with {api_total_tracks} total tracks."
+            )
+            
             all_api_track_items = []
             offset = 0
-            limit = 50  # Spotify API limit for playlist items
-
-            while True:
-                # Re-fetch with pagination if tracks.next is present, or on first call.
-                # get_spotify_info for playlist should ideally handle pagination internally if asked for all tracks.
-                # Assuming get_spotify_info for playlist returns all items or needs to be called iteratively.
-                # For simplicity, let's assume current_playlist_data_from_api has 'tracks' -> 'items' for the first page.
-                # And that get_spotify_info with 'playlist' type can take offset.
-                # Modifying get_spotify_info is outside current scope, so we'll assume it returns ALL items for a playlist.
-                # If it doesn't, this part would need adjustment for robust pagination.
-                # For now, we use the items from the initial fetch.
-
-                paginated_playlist_data = get_spotify_info(
-                    playlist_spotify_id, "playlist", offset=offset, limit=limit
-                )
-                if (
-                    not paginated_playlist_data
-                    or "tracks" not in paginated_playlist_data
-                ):
+            limit = 100  # Use maximum batch size for efficiency
+            
+            while offset < api_total_tracks:
+                try:
+                    # Use the optimized get_playlist_tracks function
+                    tracks_batch = get_playlist_tracks(
+                        playlist_spotify_id, limit=limit, offset=offset
+                    )
+                    
+                    if not tracks_batch or "items" not in tracks_batch:
+                        logger.warning(
+                            f"Playlist Watch Manager: No tracks returned for playlist {playlist_spotify_id} at offset {offset}"
+                        )
                     break
 
-                page_items = paginated_playlist_data.get("tracks", {}).get("items", [])
-                if not page_items:
-                    break
-                all_api_track_items.extend(page_items)
-
-                if paginated_playlist_data.get("tracks", {}).get("next"):
-                    offset += limit
-                else:
+                    batch_items = tracks_batch.get("items", [])
+                    if not batch_items:
+                        break
+                    
+                    all_api_track_items.extend(batch_items)
+                    offset += len(batch_items)
+                    
+                    # Add small delay between batches to be respectful to API
+                    if offset < api_total_tracks:
+                        time.sleep(0.1)
+                        
+                except Exception as e:
+                    logger.error(
+                        f"Playlist Watch Manager: Error fetching tracks batch for playlist {playlist_spotify_id} at offset {offset}: {e}"
+                    )
                     break
 
             current_api_track_ids = set()
@@ -237,14 +451,14 @@ def check_watched_playlists(specific_playlist_id: str = None):
 
             # Update DB for tracks that are still present in API (e.g. update 'last_seen_in_spotify')
             # add_tracks_to_playlist_db handles INSERT OR REPLACE, updating existing entries.
-            # We should pass all current API tracks to ensure their `last_seen_in_spotify` and `is_present_in_spotify` are updated.
+            # We should pass all current API tracks to ensure their `last_seen_in_spotify`, `is_present_in_spotify`, and `snapshot_id` are updated.
             if (
                 all_api_track_items
             ):  # If there are any tracks in the API for this playlist
                 logger.info(
                     f"Playlist Watch Manager: Refreshing {len(all_api_track_items)} tracks from API in local DB for playlist '{playlist_name}'."
                 )
-                add_tracks_to_playlist_db(playlist_spotify_id, all_api_track_items)
+                add_tracks_to_playlist_db(playlist_spotify_id, all_api_track_items, api_snapshot_id)
 
             removed_db_ids = db_track_ids - current_api_track_ids
             if removed_db_ids:
@@ -259,7 +473,7 @@ def check_watched_playlists(specific_playlist_id: str = None):
                 playlist_spotify_id, api_snapshot_id, api_total_tracks
             )  # api_total_tracks from initial fetch
             logger.info(
-                f"Playlist Watch Manager: Finished checking playlist '{playlist_name}'. Snapshot ID updated. API Total Tracks: {api_total_tracks}."
+                f"Playlist Watch Manager: Finished checking playlist '{playlist_name}'. Snapshot ID updated to {api_snapshot_id}. API Total Tracks: {api_total_tracks}. Queued {queued_for_download_count} new tracks."
             )
 
         except Exception as e:
@@ -309,17 +523,16 @@ def check_watched_artists(specific_artist_id: str = None):
         )
 
         try:
-            # Spotify API for artist albums is paginated.
-            # We need to fetch all albums. get_spotify_info with type 'artist-albums' should handle this.
-            # Let's assume get_spotify_info(artist_id, 'artist-albums') returns a list of all album objects.
-            # Or we implement pagination here.
-
+            # Use the optimized artist discography function with pagination
             all_artist_albums_from_api: List[Dict[str, Any]] = []
             offset = 0
             limit = 50  # Spotify API limit for artist albums
+            
+            logger.info(
+                f"Artist Watch Manager: Fetching albums for artist '{artist_name}' ({artist_spotify_id})"
+            )
+            
             while True:
-                # The 'artist-albums' type for get_spotify_info needs to support pagination params.
-                # And return a list of album objects.
                 logger.debug(
                     f"Artist Watch Manager: Fetching albums for {artist_spotify_id}. Limit: {limit}, Offset: {offset}"
                 )
@@ -560,6 +773,13 @@ def start_watch_manager():  # Renamed from start_playlist_watch_manager
 
         init_playlists_db()  # For playlists
         init_artists_db()  # For artists
+        
+        # Update all existing tables to ensure they have the latest schema
+        try:
+            update_all_existing_tables_schema()
+            logger.info("Watch Manager: Successfully updated all existing tables schema")
+        except Exception as e:
+            logger.error(f"Watch Manager: Error updating existing tables schema: {e}", exc_info=True)
 
         _watch_scheduler_thread = threading.Thread(
             target=playlist_watch_scheduler, daemon=True
@@ -585,7 +805,3 @@ def stop_watch_manager():  # Renamed from stop_playlist_watch_manager
         _watch_scheduler_thread = None
     else:
         logger.info("Watch Manager: Background scheduler not running.")
-
-
-# If this module is imported, and you want to auto-start the manager, you could call start_watch_manager() here.
-# However, it's usually better to explicitly start it from the main application/__init__.py.

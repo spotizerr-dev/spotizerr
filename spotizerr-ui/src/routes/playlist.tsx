@@ -1,34 +1,46 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import apiClient from "../lib/api-client";
 import { useSettings } from "../contexts/settings-context";
 import { toast } from "sonner";
-import type { PlaylistType, TrackType } from "../types/spotify";
+import type { PlaylistType, TrackType, PlaylistMetadataType, PlaylistTracksResponseType, PlaylistItemType } from "../types/spotify";
 import { QueueContext } from "../contexts/queue-context";
 import { FaArrowLeft } from "react-icons/fa";
 import { FaDownload } from "react-icons/fa6";
 
+
+
 export const Playlist = () => {
   const { playlistId } = useParams({ from: "/playlist/$playlistId" });
-  const [playlist, setPlaylist] = useState<PlaylistType | null>(null);
+  const [playlistMetadata, setPlaylistMetadata] = useState<PlaylistMetadataType | null>(null);
+  const [tracks, setTracks] = useState<PlaylistItemType[]>([]);
   const [isWatched, setIsWatched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingTracks, setLoadingTracks] = useState(false);
+  const [hasMoreTracks, setHasMoreTracks] = useState(true);
+  const [tracksOffset, setTracksOffset] = useState(0);
+  const [totalTracks, setTotalTracks] = useState(0);
+  
   const context = useContext(QueueContext);
   const { settings } = useSettings();
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadingRef = useRef<HTMLDivElement>(null);
 
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
   const { addItem } = context;
 
+  // Load playlist metadata first
   useEffect(() => {
-    const fetchPlaylist = async () => {
+    const fetchPlaylistMetadata = async () => {
       if (!playlistId) return;
       try {
-        const response = await apiClient.get<PlaylistType>(`/playlist/info?id=${playlistId}`);
-        setPlaylist(response.data);
+        const response = await apiClient.get<PlaylistMetadataType>(`/playlist/metadata?id=${playlistId}`);
+        setPlaylistMetadata(response.data);
+        setTotalTracks(response.data.tracks.total);
       } catch (err) {
-        setError("Failed to load playlist");
+        setError("Failed to load playlist metadata");
         console.error(err);
       }
     };
@@ -45,8 +57,74 @@ export const Playlist = () => {
       }
     };
 
-    fetchPlaylist();
+    fetchPlaylistMetadata();
     checkWatchStatus();
+  }, [playlistId]);
+
+  // Load tracks progressively
+  const loadMoreTracks = useCallback(async () => {
+    if (!playlistId || loadingTracks || !hasMoreTracks) return;
+
+    setLoadingTracks(true);
+    try {
+      const limit = 50; // Load 50 tracks at a time
+             const response = await apiClient.get<PlaylistTracksResponseType>(
+         `/playlist/tracks?id=${playlistId}&limit=${limit}&offset=${tracksOffset}`
+       );
+
+      const newTracks = response.data.items;
+      setTracks(prev => [...prev, ...newTracks]);
+      setTracksOffset(prev => prev + newTracks.length);
+      
+      // Check if we've loaded all tracks
+      if (tracksOffset + newTracks.length >= totalTracks) {
+        setHasMoreTracks(false);
+      }
+    } catch (err) {
+      console.error("Failed to load tracks:", err);
+      toast.error("Failed to load more tracks");
+    } finally {
+      setLoadingTracks(false);
+    }
+  }, [playlistId, loadingTracks, hasMoreTracks, tracksOffset, totalTracks]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMoreTracks && !loadingTracks) {
+          loadMoreTracks();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadingRef.current) {
+      observer.observe(loadingRef.current);
+    }
+
+    observerRef.current = observer;
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [loadMoreTracks, hasMoreTracks, loadingTracks]);
+
+  // Load initial tracks when metadata is loaded
+  useEffect(() => {
+    if (playlistMetadata && tracks.length === 0 && totalTracks > 0) {
+      loadMoreTracks();
+    }
+  }, [playlistMetadata, tracks.length, totalTracks, loadMoreTracks]);
+
+  // Reset state when playlist ID changes
+  useEffect(() => {
+    setTracks([]);
+    setTracksOffset(0);
+    setHasMoreTracks(true);
+    setTotalTracks(0);
   }, [playlistId]);
 
   const handleDownloadTrack = (track: TrackType) => {
@@ -56,13 +134,13 @@ export const Playlist = () => {
   };
 
   const handleDownloadPlaylist = () => {
-    if (!playlist) return;
+    if (!playlistMetadata) return;
     addItem({
-      spotifyId: playlist.id,
+      spotifyId: playlistMetadata.id,
       type: "playlist",
-      name: playlist.name,
+      name: playlistMetadata.name,
     });
-    toast.info(`Adding ${playlist.name} to queue...`);
+    toast.info(`Adding ${playlistMetadata.name} to queue...`);
   };
 
   const handleToggleWatch = async () => {
@@ -70,10 +148,10 @@ export const Playlist = () => {
     try {
       if (isWatched) {
         await apiClient.delete(`/playlist/watch/${playlistId}`);
-        toast.success(`Removed ${playlist?.name} from watchlist.`);
+        toast.success(`Removed ${playlistMetadata?.name} from watchlist.`);
       } else {
         await apiClient.put(`/playlist/watch/${playlistId}`);
-        toast.success(`Added ${playlist?.name} to watchlist.`);
+        toast.success(`Added ${playlistMetadata?.name} to watchlist.`);
       }
       setIsWatched(!isWatched);
     } catch (err) {
@@ -86,11 +164,11 @@ export const Playlist = () => {
     return <div className="text-red-500 p-8 text-center">{error}</div>;
   }
 
-  if (!playlist) {
-    return <div className="p-8 text-center">Loading...</div>;
+  if (!playlistMetadata) {
+    return <div className="p-8 text-center">Loading playlist...</div>;
   }
 
-  const filteredTracks = playlist.tracks.items.filter(({ track }) => {
+  const filteredTracks = tracks.filter(({ track }) => {
     if (!track) return false;
     if (settings?.explicitFilter && track.explicit) return false;
     return true;
@@ -107,19 +185,23 @@ export const Playlist = () => {
           <span>Back to results</span>
         </button>
       </div>
+      
+      {/* Playlist Header */}
       <div className="flex flex-col md:flex-row items-start gap-6">
         <img
-          src={playlist.images[0]?.url || "/placeholder.jpg"}
-          alt={playlist.name}
+          src={playlistMetadata.images[0]?.url || "/placeholder.jpg"}
+          alt={playlistMetadata.name}
           className="w-48 h-48 object-cover rounded-lg shadow-lg"
         />
         <div className="flex-grow space-y-2">
-          <h1 className="text-3xl font-bold">{playlist.name}</h1>
-          {playlist.description && <p className="text-gray-500 dark:text-gray-400">{playlist.description}</p>}
+          <h1 className="text-3xl font-bold">{playlistMetadata.name}</h1>
+          {playlistMetadata.description && (
+            <p className="text-gray-500 dark:text-gray-400">{playlistMetadata.description}</p>
+          )}
           <div className="text-sm text-gray-400 dark:text-gray-500">
             <p>
-              By {playlist.owner.display_name} • {playlist.followers.total.toLocaleString()} followers •{" "}
-              {playlist.tracks.total} songs
+              By {playlistMetadata.owner.display_name} • {playlistMetadata.followers.total.toLocaleString()} followers •{" "}
+              {totalTracks} songs
             </p>
           </div>
           <div className="flex gap-2 pt-2">
@@ -149,8 +231,17 @@ export const Playlist = () => {
         </div>
       </div>
 
+      {/* Tracks Section */}
       <div className="space-y-4">
+        <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Tracks</h2>
+          {tracks.length > 0 && (
+            <span className="text-sm text-gray-500">
+              Showing {tracks.length} of {totalTracks} tracks
+            </span>
+          )}
+        </div>
+        
         <div className="space-y-2">
           {filteredTracks.map(({ track }, index) => {
             if (!track) return null;
@@ -198,6 +289,25 @@ export const Playlist = () => {
               </div>
             );
           })}
+          
+          {/* Loading indicator */}
+          {loadingTracks && (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          )}
+          
+          {/* Intersection observer target */}
+          {hasMoreTracks && (
+            <div ref={loadingRef} className="h-4" />
+          )}
+          
+          {/* End of tracks indicator */}
+          {!hasMoreTracks && tracks.length > 0 && (
+            <div className="text-center py-4 text-gray-500">
+              All tracks loaded
+            </div>
+          )}
         </div>
       </div>
     </div>

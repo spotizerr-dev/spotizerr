@@ -29,6 +29,11 @@ artist_bp = Blueprint("artist", __name__, url_prefix="/api/artist")
 logger = logging.getLogger(__name__)
 
 
+def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
+    """Construct a Spotify URL for a given item ID and type."""
+    return f"https://open.spotify.com/{item_type}/{item_id}"
+
+
 def log_json(message_dict):
     print(json.dumps(message_dict))
 
@@ -41,7 +46,7 @@ def handle_artist_download(artist_id):
       - album_type: string(s); comma-separated values such as "album,single,appears_on,compilation"
     """
     # Construct the artist URL from artist_id
-    url = f"https://open.spotify.com/artist/{artist_id}"
+    url = construct_spotify_url(artist_id, "artist")
 
     # Retrieve essential parameters from the request.
     album_type = request.args.get("album_type", "album,single,compilation")
@@ -123,16 +128,26 @@ def get_artist_info():
         )
 
     try:
-        artist_info = get_spotify_info(spotify_id, "artist_discography")
+        # Get artist metadata first
+        artist_metadata = get_spotify_info(spotify_id, "artist")
+        
+        # Get artist discography for albums
+        artist_discography = get_spotify_info(spotify_id, "artist_discography")
+        
+        # Combine metadata with discography
+        artist_info = {
+            **artist_metadata,
+            "albums": artist_discography
+        }
 
-        # If artist_info is successfully fetched (it contains album items),
+        # If artist_info is successfully fetched and has albums,
         # check if the artist is watched and augment album items with is_locally_known status
-        if artist_info and artist_info.get("items"):
+        if artist_info and artist_info.get("albums") and artist_info["albums"].get("items"):
             watched_artist_details = get_watched_artist(
                 spotify_id
             )  # spotify_id is the artist ID
             if watched_artist_details:  # Artist is being watched
-                for album_item in artist_info["items"]:
+                for album_item in artist_info["albums"]["items"]:
                     if album_item and album_item.get("id"):
                         album_id = album_item["id"]
                         album_item["is_locally_known"] = is_album_in_artist_db(
@@ -171,64 +186,39 @@ def add_artist_to_watchlist(artist_spotify_id):
                 {"message": f"Artist {artist_spotify_id} is already being watched."}
             ), 200
 
-        # This call returns an album list-like structure based on logs
+        # Get artist metadata directly for name and basic info
+        artist_metadata = get_spotify_info(artist_spotify_id, "artist")
+        
+        # Get artist discography for album count
         artist_album_list_data = get_spotify_info(
             artist_spotify_id, "artist_discography"
         )
 
-        # Check if we got any data and if it has items
-        if not artist_album_list_data or not isinstance(
-            artist_album_list_data.get("items"), list
-        ):
+        # Check if we got artist metadata
+        if not artist_metadata or not artist_metadata.get("name"):
             logger.error(
-                f"Could not fetch album list details for artist {artist_spotify_id} from Spotify using get_spotify_info('artist_discography'). Data: {artist_album_list_data}"
+                f"Could not fetch artist metadata for {artist_spotify_id} from Spotify."
             )
             return jsonify(
                 {
-                    "error": f"Could not fetch sufficient details for artist {artist_spotify_id} to initiate watch."
+                    "error": f"Could not fetch artist metadata for {artist_spotify_id} to initiate watch."
                 }
             ), 404
 
-        # Attempt to extract artist name and verify ID
-        # The actual artist name might be consistently found in the items, if they exist
-        artist_name_from_albums = "Unknown Artist"  # Default
-        if artist_album_list_data["items"]:
-            first_album = artist_album_list_data["items"][0]
-            if (
-                first_album
-                and isinstance(first_album.get("artists"), list)
-                and first_album["artists"]
-            ):
-                # Find the artist in the list that matches the artist_spotify_id
-                found_artist = next(
-                    (
-                        art
-                        for art in first_album["artists"]
-                        if art.get("id") == artist_spotify_id
-                    ),
-                    None,
-                )
-                if found_artist and found_artist.get("name"):
-                    artist_name_from_albums = found_artist["name"]
-                elif first_album["artists"][0].get(
-                    "name"
-                ):  # Fallback to first artist if specific match not found or no ID
-                    artist_name_from_albums = first_album["artists"][0]["name"]
-                    logger.warning(
-                        f"Could not find exact artist ID {artist_spotify_id} in first album's artists list. Using name '{artist_name_from_albums}'."
-                    )
-        else:
+        # Check if we got album data
+        if not artist_album_list_data or not isinstance(
+            artist_album_list_data.get("items"), list
+        ):
             logger.warning(
-                f"No album items found for artist {artist_spotify_id} to extract name. Using default."
+                f"Could not fetch album list details for artist {artist_spotify_id} from Spotify. Proceeding with metadata only."
             )
 
         # Construct the artist_data object expected by add_artist_db
-        # We use the provided artist_spotify_id as the primary ID.
         artist_data_for_db = {
-            "id": artist_spotify_id,  # This is the crucial part
-            "name": artist_name_from_albums,
+            "id": artist_spotify_id,
+            "name": artist_metadata.get("name", "Unknown Artist"),
             "albums": {  # Mimic structure if add_artist_db expects it for total_albums
-                "total": artist_album_list_data.get("total", 0)
+                "total": artist_album_list_data.get("total", 0) if artist_album_list_data else 0
             },
             # Add any other fields add_artist_db might expect from a true artist object if necessary
         }
@@ -236,7 +226,7 @@ def add_artist_to_watchlist(artist_spotify_id):
         add_artist_db(artist_data_for_db)
 
         logger.info(
-            f"Artist {artist_spotify_id} ('{artist_name_from_albums}') added to watchlist. Their albums will be processed by the watch manager."
+            f"Artist {artist_spotify_id} ('{artist_metadata.get('name', 'Unknown Artist')}') added to watchlist. Their albums will be processed by the watch manager."
         )
         return jsonify(
             {
