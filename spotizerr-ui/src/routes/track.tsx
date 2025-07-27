@@ -47,7 +47,7 @@ export const Track = () => {
   if (error) {
     return (
       <div className="flex justify-center items-center h-full">
-        <p className="text-red-500 text-lg">{error}</p>
+        <p className="text-error text-lg">{error}</p>
       </div>
     );
   }
@@ -55,7 +55,7 @@ export const Track = () => {
   if (!track) {
     return (
       <div className="flex justify-center items-center h-full">
-        <p className="text-lg">Loading...</p>
+        <p className="text-lg text-content-muted dark:text-content-muted-dark">Loading...</p>
       </div>
     );
   }
@@ -67,13 +67,13 @@ export const Track = () => {
       <div className="mb-6">
         <button
           onClick={() => window.history.back()}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
         >
-          <FaArrowLeft />
+          <FaArrowLeft className="icon-secondary hover:icon-primary" />
           <span>Back to results</span>
         </button>
       </div>
-      <div className="bg-white shadow-lg rounded-lg overflow-hidden md:flex">
+      <div className="bg-surface dark:bg-surface-secondary-dark shadow-lg rounded-lg overflow-hidden md:flex">
         {imageUrl && (
           <div className="md:w-1/3">
             <img src={imageUrl} alt={track.album.name} className="w-full h-auto object-cover" />
@@ -82,12 +82,12 @@ export const Track = () => {
         <div className="p-6 md:w-2/3 flex flex-col justify-between">
           <div>
             <div className="flex items-baseline justify-between">
-              <h1 className="text-3xl font-bold text-gray-900">{track.name}</h1>
+              <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">{track.name}</h1>
               {track.explicit && (
-                <span className="text-xs bg-gray-700 text-white px-2 py-1 rounded-full">EXPLICIT</span>
+                <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-inverse dark:text-content-inverse-dark px-2 py-1 rounded-full">EXPLICIT</span>
               )}
             </div>
-            <div className="text-lg text-gray-600 mt-1">
+            <div className="text-lg text-content-secondary dark:text-content-secondary-dark mt-1">
               {track.artists.map((artist, index) => (
                 <span key={artist.id}>
                   <Link to="/artist/$artistId" params={{ artistId: artist.id }}>
@@ -97,27 +97,27 @@ export const Track = () => {
                 </span>
               ))}
             </div>
-            <p className="text-md text-gray-500 mt-4">
+            <p className="text-md text-content-muted dark:text-content-muted-dark mt-4">
               From the album{" "}
               <Link to="/album/$albumId" params={{ albumId: track.album.id }} className="font-semibold">
                 {track.album.name}
               </Link>
             </p>
-            <div className="mt-4 text-sm text-gray-600">
+            <div className="mt-4 text-sm text-content-secondary dark:text-content-secondary-dark">
               <p>Release Date: {track.album.release_date}</p>
               <p>Duration: {formatDuration(track.duration_ms)}</p>
             </div>
             <div className="mt-4">
-              <p className="text-sm text-gray-600">Popularity:</p>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${track.popularity}%` }}></div>
+              <p className="text-sm text-content-secondary dark:text-content-secondary-dark">Popularity:</p>
+              <div className="w-full bg-surface-muted dark:bg-surface-muted-dark rounded-full h-2.5">
+                <div className="bg-success h-2.5 rounded-full" style={{ width: `${track.popularity}%` }}></div>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-4 mt-6">
             <button
               onClick={handleDownloadTrack}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-full transition duration-300"
+              className="bg-button-primary hover:bg-button-primary-hover text-button-primary-text font-bold py-2 px-4 rounded-full transition duration-300"
             >
               Download
             </button>
@@ -125,10 +125,10 @@ export const Track = () => {
               href={track.external_urls.spotify}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 text-gray-700 hover:text-black transition duration-300"
+              className="flex items-center gap-2 text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition duration-300"
               aria-label="Listen on Spotify"
             >
-              <FaSpotify size={24} />
+              <FaSpotify size={24} className="icon-secondary hover:icon-primary" />
               <span className="font-semibold">Listen on Spotify</span>
             </a>
           </div>

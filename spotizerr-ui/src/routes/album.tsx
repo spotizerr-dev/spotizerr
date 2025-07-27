@@ -74,9 +74,9 @@ export const Album = () => {
       <div className="mb-6">
         <button
           onClick={() => window.history.back()}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
         >
-          <FaArrowLeft />
+          <FaArrowLeft className="icon-secondary hover:icon-primary" />
           <span>Back to results</span>
         </button>
       </div>
@@ -87,8 +87,8 @@ export const Album = () => {
           className="w-48 h-48 object-cover rounded-lg shadow-lg"
         />
         <div className="flex-grow space-y-2">
-          <h1 className="text-3xl font-bold">{album.name}</h1>
-          <p className="text-lg text-gray-500 dark:text-gray-400">
+          <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">{album.name}</h1>
+          <p className="text-lg text-content-secondary dark:text-content-secondary-dark">
             By{" "}
             {album.artists.map((artist, index) => (
               <span key={artist.id}>
@@ -99,16 +99,16 @@ export const Album = () => {
               </span>
             ))}
           </p>
-          <p className="text-sm text-gray-400 dark:text-gray-500">
+          <p className="text-sm text-content-muted dark:text-content-muted-dark">
             {new Date(album.release_date).getFullYear()} • {album.total_tracks} songs
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-600">{album.label}</p>
+          <p className="text-xs text-content-muted dark:text-content-muted-dark">{album.label}</p>
         </div>
         <div className="flex flex-col items-center gap-2">
           <button
             onClick={handleDownloadAlbum}
             disabled={isExplicitFilterEnabled && hasExplicitTrack}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title={
               isExplicitFilterEnabled && hasExplicitTrack ? "Album contains explicit tracks" : "Download Full Album"
             }
@@ -119,33 +119,33 @@ export const Album = () => {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Tracks</h2>
+        <h2 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Tracks</h2>
         <div className="space-y-2">
           {album.tracks.items.map((track, index) => {
             if (isExplicitFilterEnabled && track.explicit) {
               return (
                 <div
                   key={index}
-                  className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 rounded-lg opacity-50"
+                  className="flex items-center justify-between p-3 bg-surface-muted dark:bg-surface-muted-dark rounded-lg opacity-50"
                 >
                   <div className="flex items-center gap-4">
-                    <span className="text-gray-500 dark:text-gray-400 w-8 text-right">{index + 1}</span>
-                    <p className="font-medium text-gray-500">Explicit track filtered</p>
+                    <span className="text-content-muted dark:text-content-muted-dark w-8 text-right">{index + 1}</span>
+                    <p className="font-medium text-content-muted dark:text-content-muted-dark">Explicit track filtered</p>
                   </div>
-                  <span className="text-gray-500">--:--</span>
+                  <span className="text-content-muted dark:text-content-muted-dark">--:--</span>
                 </div>
               );
             }
             return (
               <div
                 key={track.id}
-                className="flex items-center justify-between p-3 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                className="flex items-center justify-between p-3 hover:bg-surface-muted dark:hover:bg-surface-muted-dark rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <span className="text-gray-500 dark:text-gray-400 w-8 text-right">{index + 1}</span>
+                  <span className="text-content-muted dark:text-content-muted-dark w-8 text-right">{index + 1}</span>
                   <div>
-                    <p className="font-medium">{track.name}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="font-medium text-content-primary dark:text-content-primary-dark">{track.name}</p>
+                    <p className="text-sm text-content-secondary dark:text-content-secondary-dark">
                       {track.artists.map((artist, index) => (
                         <span key={artist.id}>
                           <Link
@@ -164,16 +164,16 @@ export const Album = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-gray-500 dark:text-gray-400">
+                  <span className="text-content-muted dark:text-content-muted-dark">
                     {Math.floor(track.duration_ms / 60000)}:
                     {((track.duration_ms % 60000) / 1000).toFixed(0).padStart(2, "0")}
                   </span>
                   <button
                     onClick={() => handleDownloadTrack(track)}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                    className="p-2 hover:bg-surface-secondary dark:hover:bg-surface-secondary-dark rounded-full"
                     title="Download"
                   >
-                    <img src="/download.svg" alt="Download" className="w-5 h-5" />
+                    <img src="/download.svg" alt="Download" className="w-5 h-5 icon-secondary hover:icon-success" />
                   </button>
                 </div>
               </div>

@@ -32,10 +32,10 @@ type HistoryEntry = {
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  COMPLETED: "text-green-500",
-  ERROR: "text-red-500",
-  CANCELLED: "text-gray-500",
-  SKIPPED: "text-yellow-500",
+  COMPLETED: "text-success",
+  ERROR: "text-error",
+  CANCELLED: "text-content-muted dark:text-content-muted-dark",
+  SKIPPED: "text-warning",
 };
 
 const QUALITY_MAP: Record<string, Record<string, string>> = {
@@ -140,12 +140,12 @@ export const History = () => {
           const statusKey = (status || "").toUpperCase();
           const statusClass =
             {
-              COMPLETED: "text-green-500",
-              SUCCESSFUL: "text-green-500",
-              ERROR: "text-red-500",
-              FAILED: "text-red-500",
-              CANCELLED: "text-gray-500",
-              SKIPPED: "text-yellow-500",
+              COMPLETED: "text-success",
+              SUCCESSFUL: "text-success",
+              ERROR: "text-error",
+              FAILED: "text-error",
+              CANCELLED: "text-content-muted dark:text-content-muted-dark",
+              SKIPPED: "text-warning",
             }[statusKey] || "text-gray-500";
 
           return <span className={`font-semibold ${statusClass}`}>{status}</span>;
@@ -304,43 +304,43 @@ export const History = () => {
     <div className="space-y-4">
       {parentTaskId && parentTask ? (
         <div className="space-y-4">
-          <button onClick={viewParentTask} className="flex items-center gap-2 text-sm hover:underline">
+          <button onClick={viewParentTask} className="flex items-center gap-2 text-sm hover:underline text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark">
             &larr; Back to All History
           </button>
-          <div className="rounded-lg border bg-gradient-to-br from-card to-muted/30 p-6 shadow-lg">
+          <div className="rounded-lg border border-border dark:border-border-dark bg-gradient-to-br from-surface to-surface-muted dark:from-surface-dark dark:to-surface-muted-dark p-6 shadow-lg">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2 space-y-1.5">
-                <h2 className="text-3xl font-bold tracking-tight">{parentTask.item_name}</h2>
-                <p className="text-xl text-muted-foreground">{parentTask.item_artist}</p>
+                <h2 className="text-3xl font-bold tracking-tight text-content-primary dark:text-content-primary-dark">{parentTask.item_name}</h2>
+                <p className="text-xl text-content-secondary dark:text-content-secondary-dark">{parentTask.item_artist}</p>
                 <div className="pt-2">
-                  <span className="capitalize inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-secondary text-secondary-foreground">
+                  <span className="capitalize inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-surface-accent dark:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark">
                     {parentTask.download_type}
                   </span>
                 </div>
               </div>
               <div className="space-y-2 text-sm md:text-right">
                 <div
-                  className={`inline-flex items-center rounded-full border px-3 py-1 text-base font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+                  className={`inline-flex items-center rounded-full border border-border dark:border-border-dark px-3 py-1 text-base font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
                     STATUS_CLASS[parentTask.status_final]
                   }`}
                 >
                   {parentTask.status_final}
                 </div>
-                <p className="text-muted-foreground pt-2">
-                  <span className="font-semibold text-foreground">Quality: </span>
+                <p className="text-content-muted dark:text-content-muted-dark pt-2">
+                  <span className="font-semibold text-content-primary dark:text-content-primary-dark">Quality: </span>
                   {formatQuality(parentTask)}
                 </p>
-                <p className="text-muted-foreground">
-                  <span className="font-semibold text-foreground">Completed: </span>
+                <p className="text-content-muted dark:text-content-muted-dark">
+                  <span className="font-semibold text-content-primary dark:text-content-primary-dark">Completed: </span>
                   {new Date(parentTask.timestamp_completed * 1000).toLocaleString()}
                 </p>
               </div>
             </div>
           </div>
-          <h3 className="text-2xl font-bold tracking-tight pt-4">Tracks</h3>
+          <h3 className="text-2xl font-bold tracking-tight pt-4 text-content-primary dark:text-content-primary-dark">Tracks</h3>
         </div>
       ) : (
-        <h1 className="text-3xl font-bold">Download History</h1>
+        <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">Download History</h1>
       )}
 
       {/* Filter Controls */}
@@ -349,7 +349,7 @@ export const History = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="p-2 border rounded-md dark:bg-gray-800 dark:border-gray-700"
+            className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="">All Statuses</option>
             <option value="COMPLETED">Completed</option>
@@ -360,7 +360,7 @@ export const History = () => {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="p-2 border rounded-md dark:bg-gray-800 dark:border-gray-700"
+            className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="">All Types</option>
             <option value="track">Track</option>
@@ -371,14 +371,14 @@ export const History = () => {
           <select
             value={trackStatusFilter}
             onChange={(e) => setTrackStatusFilter(e.target.value)}
-            className="p-2 border rounded-md dark:bg-gray-800 dark:border-gray-700"
+            className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="">All Track Statuses</option>
             <option value="SUCCESSFUL">Successful</option>
             <option value="SKIPPED">Skipped</option>
             <option value="FAILED">Failed</option>
           </select>
-          <label className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-content-primary dark:text-content-primary-dark">
             <input
               type="checkbox"
               checked={showChildTracks}
@@ -397,7 +397,7 @@ export const History = () => {
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="p-2 text-left">
+                  <th key={header.id} className="p-2 text-left text-content-primary dark:text-content-primary-dark">
                     {header.isPlaceholder ? null : (
                       <div
                         {...{
@@ -417,13 +417,13 @@ export const History = () => {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={columns.length} className="text-center p-4">
+                <td colSpan={columns.length} className="text-center p-4 text-content-muted dark:text-content-muted-dark">
                   Loading...
                 </td>
               </tr>
             ) : table.getRowModel().rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="text-center p-4">
+                <td colSpan={columns.length} className="text-center p-4 text-content-muted dark:text-content-muted-dark">
                   No history entries found.
                 </td>
               </tr>
@@ -433,17 +433,17 @@ export const History = () => {
                   !row.original.parent_task_id &&
                   (row.original.download_type === "album" || row.original.download_type === "playlist");
                 const isChild = !!row.original.parent_task_id;
-                let rowClass = "hover:bg-muted/50";
+                let rowClass = "hover:bg-surface-muted dark:hover:bg-surface-muted-dark";
                 if (isParent) {
-                  rowClass += " bg-muted/50 font-semibold hover:bg-muted";
+                  rowClass += " bg-surface-accent dark:bg-surface-accent-dark font-semibold hover:bg-surface-muted dark:hover:bg-surface-muted-dark";
                 } else if (isChild) {
-                  rowClass += " border-t border-dashed border-muted-foreground/20";
+                  rowClass += " border-t border-dashed border-content-muted dark:border-content-muted-dark border-opacity-20";
                 }
 
                 return (
-                  <tr key={row.id} className={`border-b border-border ${rowClass}`}>
+                  <tr key={row.id} className={`border-b border-border dark:border-border-dark ${rowClass}`}>
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="p-3">
+                      <td key={cell.id} className="p-3 text-content-primary dark:text-content-primary-dark">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
@@ -460,11 +460,11 @@ export const History = () => {
         <button
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
-          className="p-2 border rounded-md disabled:opacity-50"
+          className="p-2 border bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover border-border dark:border-border-dark rounded-md disabled:opacity-50"
         >
           Previous
         </button>
-        <span>
+        <span className="text-content-primary dark:text-content-primary-dark">
           Page{" "}
           <strong>
             {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
@@ -473,14 +473,14 @@ export const History = () => {
         <button
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
-          className="p-2 border rounded-md disabled:opacity-50"
+          className="p-2 border bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover border-border dark:border-border-dark rounded-md disabled:opacity-50"
         >
           Next
         </button>
         <select
           value={table.getState().pagination.pageSize}
           onChange={(e) => table.setPageSize(Number(e.target.value))}
-          className="p-2 border rounded-md dark:bg-gray-800 dark:border-gray-700"
+          className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         >
           {[10, 25, 50, 100].map((size) => (
             <option key={size} value={size}>

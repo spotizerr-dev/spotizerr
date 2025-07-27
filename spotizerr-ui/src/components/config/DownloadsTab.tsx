@@ -89,36 +89,36 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       {/* Download Settings */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Download Behavior</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Download Behavior</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="maxConcurrentDownloads">Max Concurrent Downloads</label>
+          <label htmlFor="maxConcurrentDownloads" className="text-content-primary dark:text-content-primary-dark">Max Concurrent Downloads</label>
           <input
             id="maxConcurrentDownloads"
             type="number"
             min="1"
             {...register("maxConcurrentDownloads")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex items-center justify-between">
-          <label htmlFor="realTimeToggle">Real-time downloading</label>
+          <label htmlFor="realTimeToggle" className="text-content-primary dark:text-content-primary-dark">Real-time downloading</label>
           <input id="realTimeToggle" type="checkbox" {...register("realTime")} className="h-6 w-6 rounded" />
         </div>
         <div className="flex items-center justify-between">
-          <label htmlFor="fallbackToggle">Download Fallback</label>
+          <label htmlFor="fallbackToggle" className="text-content-primary dark:text-content-primary-dark">Download Fallback</label>
           <input id="fallbackToggle" type="checkbox" {...register("fallback")} className="h-6 w-6 rounded" />
         </div>
       </div>
 
       {/* Source Quality Settings */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Source Quality</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Source Quality</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="spotifyQuality">Spotify Quality</label>
+          <label htmlFor="spotifyQuality" className="text-content-primary dark:text-content-primary-dark">Spotify Quality</label>
           <select
             id="spotifyQuality"
             {...register("spotifyQuality")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="NORMAL">OGG 96kbps</option>
             <option value="HIGH">OGG 160kbps</option>
@@ -126,31 +126,31 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="deezerQuality">Deezer Quality</label>
+          <label htmlFor="deezerQuality" className="text-content-primary dark:text-content-primary-dark">Deezer Quality</label>
           <select
             id="deezerQuality"
             {...register("deezerQuality")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="MP3_128">MP3 128kbps</option>
             <option value="MP3_320">MP3 320kbps</option>
             <option value="FLAC">FLAC (HiFi)</option>
           </select>
         </div>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">
           This sets the quality of the original download. Conversion settings below are applied after download.
         </p>
       </div>
 
       {/* Conversion Settings */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Conversion</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Conversion</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="convertToSelect">Convert To Format</label>
+          <label htmlFor="convertToSelect" className="text-content-primary dark:text-content-primary-dark">Convert To Format</label>
           <select
             id="convertToSelect"
             {...register("convertTo")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="">No Conversion</option>
             {Object.keys(CONVERSION_FORMATS).map((format) => (
@@ -161,11 +161,11 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="bitrateSelect">Bitrate</label>
+          <label htmlFor="bitrateSelect" className="text-content-primary dark:text-content-primary-dark">Bitrate</label>
           <select
             id="bitrateSelect"
             {...register("bitrate")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
             disabled={!selectedFormat || CONVERSION_FORMATS[selectedFormat]?.length === 0}
           >
             <option value="">Auto</option>
@@ -180,35 +180,35 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
 
       {/* Retry Options */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Retries</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Retries</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="maxRetries">Max Retry Attempts</label>
+          <label htmlFor="maxRetries" className="text-content-primary dark:text-content-primary-dark">Max Retry Attempts</label>
           <input
             id="maxRetries"
             type="number"
             min="0"
             {...register("maxRetries")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="retryDelaySeconds">Initial Retry Delay (s)</label>
+          <label htmlFor="retryDelaySeconds" className="text-content-primary dark:text-content-primary-dark">Initial Retry Delay (s)</label>
           <input
             id="retryDelaySeconds"
             type="number"
             min="1"
             {...register("retryDelaySeconds")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="retryDelayIncrease">Retry Delay Increase (s)</label>
+          <label htmlFor="retryDelayIncrease" className="text-content-primary dark:text-content-primary-dark">Retry Delay Increase (s)</label>
           <input
             id="retryDelayIncrease"
             type="number"
             min="0"
             {...register("retryDelayIncrease")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
       </div>
@@ -216,7 +216,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       <button
         type="submit"
         disabled={mutation.isPending}
-        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
       >
         {mutation.isPending ? "Saving..." : "Save Download Settings"}
       </button>

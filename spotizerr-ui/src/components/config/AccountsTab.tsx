@@ -87,61 +87,61 @@ export function AccountsTab() {
   };
 
   const renderAddForm = () => (
-    <form onSubmit={handleSubmit(onSubmit)} className="p-4 border rounded-lg mt-4 space-y-4">
-      <h4 className="font-semibold">Add New {activeService === "spotify" ? "Spotify" : "Deezer"} Account</h4>
+    <form onSubmit={handleSubmit(onSubmit)} className="p-4 border border-line dark:border-border-dark rounded-lg mt-4 space-y-4">
+      <h4 className="font-semibold text-content-primary dark:text-content-primary-dark">Add New {activeService === "spotify" ? "Spotify" : "Deezer"} Account</h4>
       <div className="flex flex-col gap-2">
-        <label htmlFor="accountName">Account Name</label>
+        <label htmlFor="accountName" className="text-content-primary dark:text-content-primary-dark">Account Name</label>
         <input
           id="accountName"
           {...register("accountName", { required: "This field is required" })}
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         />
-        {errors.accountName && <p className="text-red-500 text-sm">{errors.accountName.message}</p>}
+        {errors.accountName && <p className="text-error-text bg-error-muted px-2 py-1 rounded text-sm">{errors.accountName.message}</p>}
       </div>
       {activeService === "spotify" && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="authBlob">Auth Blob (JSON)</label>
+          <label htmlFor="authBlob" className="text-content-primary dark:text-content-primary-dark">Auth Blob (JSON)</label>
           <textarea
             id="authBlob"
             {...register("authBlob", { required: activeService === "spotify" ? "Auth Blob is required" : false })}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
             rows={4}
           ></textarea>
-          {errors.authBlob && <p className="text-red-500 text-sm">{errors.authBlob.message}</p>}
+          {errors.authBlob && <p className="text-error-text bg-error-muted px-2 py-1 rounded text-sm">{errors.authBlob.message}</p>}
         </div>
       )}
       {activeService === "deezer" && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="arl">ARL Token</label>
+          <label htmlFor="arl" className="text-content-primary dark:text-content-primary-dark">ARL Token</label>
           <input
             id="arl"
             {...register("arl", { required: activeService === "deezer" ? "ARL is required" : false })}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
-          {errors.arl && <p className="text-red-500 text-sm">{errors.arl.message}</p>}
+          {errors.arl && <p className="text-error-text bg-error-muted px-2 py-1 rounded text-sm">{errors.arl.message}</p>}
         </div>
       )}
       <div className="flex flex-col gap-2">
-        <label htmlFor="accountRegion">Region (Optional)</label>
+        <label htmlFor="accountRegion" className="text-content-primary dark:text-content-primary-dark">Region (Optional)</label>
         <input
           id="accountRegion"
           {...register("accountRegion")}
           placeholder="e.g. US, GB"
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         />
       </div>
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={addMutation.isPending}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
         >
           {addMutation.isPending ? "Saving..." : "Save Account"}
         </button>
         <button
           type="button"
           onClick={() => setIsAdding(false)}
-          className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+          className="px-4 py-2 bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded-md"
         >
           Cancel
         </button>
@@ -151,35 +151,35 @@ export function AccountsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2 border-b">
+      <div className="flex gap-2 border-b border-line dark:border-border-dark">
         <button
           onClick={() => setActiveService("spotify")}
-          className={`p-2 ${activeService === "spotify" ? "border-b-2 border-blue-500 font-semibold" : ""}`}
+          className={`p-2 text-content-primary dark:text-content-primary-dark ${activeService === "spotify" ? "border-b-2 border-primary font-semibold" : ""}`}
         >
           Spotify
         </button>
         <button
           onClick={() => setActiveService("deezer")}
-          className={`p-2 ${activeService === "deezer" ? "border-b-2 border-blue-500 font-semibold" : ""}`}
+          className={`p-2 text-content-primary dark:text-content-primary-dark ${activeService === "deezer" ? "border-b-2 border-primary font-semibold" : ""}`}
         >
           Deezer
         </button>
       </div>
 
       {isLoading ? (
-        <p>Loading accounts...</p>
+        <p className="text-content-muted dark:text-content-muted-dark">Loading accounts...</p>
       ) : (
         <div className="space-y-2">
           {credentials?.map((cred) => (
             <div
               key={cred.name}
-              className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white rounded-md"
+              className="flex justify-between items-center p-3 bg-surface-muted dark:bg-surface-muted-dark text-content-primary dark:text-content-primary-dark rounded-md"
             >
               <span>{cred.name}</span>
               <button
                 onClick={() => deleteMutation.mutate({ service: activeService, name: cred.name })}
                 disabled={deleteMutation.isPending && deleteMutation.variables?.name === cred.name}
-                className="text-red-500 hover:text-red-400"
+                className="text-error hover:text-error-hover icon-error"
               >
                 Delete
               </button>
@@ -191,7 +191,7 @@ export function AccountsTab() {
       {!isAdding && (
         <button
           onClick={() => setIsAdding(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
         >
           Add Account
         </button>

@@ -95,15 +95,15 @@ export const Watchlist = () => {
   };
 
   if (isLoading || settingsLoading) {
-    return <div className="text-center">Loading Watchlist...</div>;
+    return <div className="text-center text-content-muted dark:text-content-muted-dark">Loading Watchlist...</div>;
   }
 
   if (!settings?.watch?.enabled) {
     return (
       <div className="text-center p-8">
-        <h2 className="text-2xl font-bold mb-2">Watchlist Disabled</h2>
-        <p>The watchlist feature is currently disabled. You can enable it in the settings.</p>
-        <Link to="/config" className="text-blue-500 hover:underline mt-4 inline-block">
+        <h2 className="text-2xl font-bold mb-2 text-content-primary dark:text-content-primary-dark">Watchlist Disabled</h2>
+        <p className="text-content-secondary dark:text-content-secondary-dark">The watchlist feature is currently disabled. You can enable it in the settings.</p>
+        <Link to="/config" className="text-primary hover:underline mt-4 inline-block">
           Go to Settings
         </Link>
       </div>
@@ -113,8 +113,8 @@ export const Watchlist = () => {
   if (items.length === 0) {
     return (
       <div className="text-center p-8">
-        <h2 className="text-2xl font-bold mb-2">Watchlist is Empty</h2>
-        <p>Start watching artists or playlists to see them here.</p>
+        <h2 className="text-2xl font-bold mb-2 text-content-primary dark:text-content-primary-dark">Watchlist is Empty</h2>
+        <p className="text-content-secondary dark:text-content-secondary-dark">Start watching artists or playlists to see them here.</p>
       </div>
     );
   }
@@ -122,38 +122,38 @@ export const Watchlist = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Watched Artists & Playlists</h1>
+        <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">Watched Artists & Playlists</h1>
         <button
           onClick={handleCheckAll}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2"
+          className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md flex items-center gap-2"
         >
-          <FaSearch /> Check All
+          <FaSearch className="icon-inverse" /> Check All
         </button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         {items.map((item) => (
-          <div key={item.id} className="bg-card p-4 rounded-lg shadow space-y-2 flex flex-col">
+          <div key={item.id} className="bg-surface dark:bg-surface-secondary-dark p-4 rounded-lg shadow space-y-2 flex flex-col">
             <a href={`/${item.itemType}/${item.id}`} className="flex-grow">
               <img
                 src={item.images?.[0]?.url || "/images/placeholder.jpg"}
                 alt={item.name}
                 className="w-full h-auto object-cover rounded-md aspect-square"
               />
-              <h3 className="font-bold pt-2 truncate">{item.name}</h3>
-              <p className="text-sm text-muted-foreground capitalize">{item.itemType}</p>
+              <h3 className="font-bold pt-2 truncate text-content-primary dark:text-content-primary-dark">{item.name}</h3>
+              <p className="text-sm text-content-muted dark:text-content-muted-dark capitalize">{item.itemType}</p>
             </a>
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() => handleUnwatch(item)}
-                className="w-full px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center justify-center gap-2"
+                className="w-full px-3 py-1.5 text-sm bg-error hover:bg-error-hover text-button-primary-text rounded-md flex items-center justify-center gap-2"
               >
-                <FaRegTrashAlt /> Unwatch
+                <FaRegTrashAlt className="icon-inverse" /> Unwatch
               </button>
               <button
                 onClick={() => handleCheck(item)}
-                className="w-full px-3 py-1.5 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700 flex items-center justify-center gap-2"
+                className="w-full px-3 py-1.5 text-sm bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded-md flex items-center justify-center gap-2"
               >
-                <FaSearch /> Check
+                <FaSearch className="icon-secondary hover:icon-primary" /> Check
               </button>
             </div>
           </div>

@@ -14,8 +14,8 @@ const ConfigComponent = () => {
   const { settings: config, isLoading } = useSettings();
 
   const renderTabContent = () => {
-    if (isLoading) return <p className="text-center">Loading configuration...</p>;
-    if (!config) return <p className="text-center text-red-500">Error loading configuration.</p>;
+    if (isLoading) return <p className="text-center text-content-muted dark:text-content-muted-dark">Loading configuration...</p>;
+    if (!config) return <p className="text-center text-error-text bg-error-muted p-2 rounded">Error loading configuration.</p>;
 
     switch (activeTab) {
       case "general":
@@ -38,8 +38,8 @@ const ConfigComponent = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Configuration</h1>
-        <p className="text-gray-500">Manage application settings and services.</p>
+        <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">Configuration</h1>
+        <p className="text-content-muted dark:text-content-muted-dark">Manage application settings and services.</p>
       </div>
 
       <div className="flex gap-8">
@@ -47,37 +47,37 @@ const ConfigComponent = () => {
           <nav className="flex flex-col space-y-1">
             <button
               onClick={() => setActiveTab("general")}
-              className={`p-2 rounded-md text-left ${activeTab === "general" ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}`}
+              className={`p-2 rounded-md text-left transition-colors ${activeTab === "general" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark"}`}
             >
               General
             </button>
             <button
               onClick={() => setActiveTab("downloads")}
-              className={`p-2 rounded-md text-left ${activeTab === "downloads" ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}`}
+              className={`p-2 rounded-md text-left transition-colors ${activeTab === "downloads" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark"}`}
             >
               Downloads
             </button>
             <button
               onClick={() => setActiveTab("formatting")}
-              className={`p-2 rounded-md text-left ${activeTab === "formatting" ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}`}
+              className={`p-2 rounded-md text-left transition-colors ${activeTab === "formatting" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark"}`}
             >
               Formatting
             </button>
             <button
               onClick={() => setActiveTab("accounts")}
-              className={`p-2 rounded-md text-left ${activeTab === "accounts" ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}`}
+              className={`p-2 rounded-md text-left transition-colors ${activeTab === "accounts" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark"}`}
             >
               Accounts
             </button>
             <button
               onClick={() => setActiveTab("watch")}
-              className={`p-2 rounded-md text-left ${activeTab === "watch" ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}`}
+              className={`p-2 rounded-md text-left transition-colors ${activeTab === "watch" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark"}`}
             >
               Watch
             </button>
             <button
               onClick={() => setActiveTab("server")}
-              className={`p-2 rounded-md text-left ${activeTab === "server" ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}`}
+              className={`p-2 rounded-md text-left transition-colors ${activeTab === "server" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark"}`}
             >
               Server
             </button>

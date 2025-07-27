@@ -179,9 +179,9 @@ export const Playlist = () => {
       <div className="mb-6">
         <button
           onClick={() => window.history.back()}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
         >
-          <FaArrowLeft />
+          <FaArrowLeft className="icon-secondary hover:icon-primary" />
           <span>Back to results</span>
         </button>
       </div>
@@ -194,11 +194,11 @@ export const Playlist = () => {
           className="w-48 h-48 object-cover rounded-lg shadow-lg"
         />
         <div className="flex-grow space-y-2">
-          <h1 className="text-3xl font-bold">{playlistMetadata.name}</h1>
+          <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">{playlistMetadata.name}</h1>
           {playlistMetadata.description && (
-            <p className="text-gray-500 dark:text-gray-400">{playlistMetadata.description}</p>
+            <p className="text-content-secondary dark:text-content-secondary-dark">{playlistMetadata.description}</p>
           )}
-          <div className="text-sm text-gray-400 dark:text-gray-500">
+          <div className="text-sm text-content-muted dark:text-content-muted-dark">
             <p>
               By {playlistMetadata.owner.display_name} • {playlistMetadata.followers.total.toLocaleString()} followers •{" "}
               {totalTracks} songs
@@ -207,7 +207,7 @@ export const Playlist = () => {
           <div className="flex gap-2 pt-2">
             <button
               onClick={handleDownloadPlaylist}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-lg transition-colors"
             >
               Download All
             </button>
@@ -215,15 +215,14 @@ export const Playlist = () => {
               onClick={handleToggleWatch}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
                 isWatched
-                  ? "bg-red-600 text-white hover:bg-red-700"
-                  : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  ? "bg-error hover:bg-error-hover text-button-primary-text"
+                  : "bg-surface-muted dark:bg-surface-muted-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark"
               }`}
             >
               <img
                 src={isWatched ? "/eye-crossed.svg" : "/eye.svg"}
                 alt="Watch status"
-                className="w-5 h-5"
-                style={{ filter: !isWatched ? "invert(1)" : undefined }}
+                className={`w-5 h-5 ${isWatched ? "icon-inverse" : "icon-primary"}`}
               />
               {isWatched ? "Unwatch" : "Watch"}
             </button>
@@ -234,9 +233,9 @@ export const Playlist = () => {
       {/* Tracks Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Tracks</h2>
+          <h2 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Tracks</h2>
           {tracks.length > 0 && (
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-content-muted dark:text-content-muted-dark">
               Showing {tracks.length} of {totalTracks} tracks
             </span>
           )}
@@ -248,20 +247,20 @@ export const Playlist = () => {
             return (
               <div
                 key={track.id}
-                className="flex items-center justify-between p-3 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                className="flex items-center justify-between p-3 hover:bg-surface-muted dark:hover:bg-surface-muted-dark rounded-lg transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <span className="text-gray-500 dark:text-gray-400 w-8 text-right">{index + 1}</span>
+                  <span className="text-content-muted dark:text-content-muted-dark w-8 text-right">{index + 1}</span>
                   <img
                     src={track.album.images.at(-1)?.url}
                     alt={track.album.name}
                     className="w-10 h-10 object-cover rounded"
                   />
                   <div>
-                    <Link to="/track/$trackId" params={{ trackId: track.id }} className="font-medium hover:underline">
+                    <Link to="/track/$trackId" params={{ trackId: track.id }} className="font-medium hover:underline text-content-primary dark:text-content-primary-dark">
                       {track.name}
                     </Link>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <p className="text-sm text-content-secondary dark:text-content-secondary-dark">
                       {track.artists.map((artist, index) => (
                         <span key={artist.id}>
                           <Link to="/artist/$artistId" params={{ artistId: artist.id }} className="hover:underline">
@@ -274,16 +273,16 @@ export const Playlist = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-gray-500 dark:text-gray-400">
+                  <span className="text-content-muted dark:text-content-muted-dark">
                     {Math.floor(track.duration_ms / 60000)}:
                     {((track.duration_ms % 60000) / 1000).toFixed(0).padStart(2, "0")}
                   </span>
                   <button
                     onClick={() => handleDownloadTrack(track)}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full"
+                    className="p-2 hover:bg-surface-secondary dark:hover:bg-surface-secondary-dark rounded-full"
                     title="Download"
                   >
-                    <FaDownload />
+                    <FaDownload className="icon-secondary hover:icon-success" />
                   </button>
                 </div>
               </div>
@@ -293,7 +292,7 @@ export const Playlist = () => {
           {/* Loading indicator */}
           {loadingTracks && (
             <div className="flex justify-center py-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           )}
           
@@ -304,7 +303,7 @@ export const Playlist = () => {
           
           {/* End of tracks indicator */}
           {!hasMoreTracks && tracks.length > 0 && (
-            <div className="text-center py-4 text-gray-500">
+            <div className="text-center py-4 text-content-muted dark:text-content-muted-dark">
               All tracks loaded
             </div>
           )}

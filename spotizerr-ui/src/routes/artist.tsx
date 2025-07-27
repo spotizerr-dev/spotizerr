@@ -133,9 +133,9 @@ export const Artist = () => {
       <div className="mb-6">
         <button
           onClick={() => window.history.back()}
-          className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
         >
-          <FaArrowLeft />
+          <FaArrowLeft className="icon-secondary hover:icon-primary" />
           <span>Back to results</span>
         </button>
       </div>
@@ -147,31 +147,31 @@ export const Artist = () => {
             className="artist-image w-48 h-48 rounded-full mx-auto mb-4 shadow-lg"
           />
         )}
-        <h1 className="text-5xl font-bold">{artist.name}</h1>
+        <h1 className="text-5xl font-bold text-content-primary dark:text-content-primary-dark">{artist.name}</h1>
         <div className="flex gap-4 justify-center mt-4">
           <button
             onClick={handleDownloadArtist}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-md transition-colors"
           >
-            <FaDownload />
+            <FaDownload className="icon-inverse" />
             <span>Download All</span>
           </button>
           <button
             onClick={handleToggleWatch}
             className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors border ${
               isWatched
-                ? "bg-blue-500 text-white border-blue-500"
-                : "bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800"
+                ? "bg-button-primary text-button-primary-text border-primary"
+                : "bg-surface dark:bg-surface-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark border-border dark:border-border-dark text-content-primary dark:text-content-primary-dark"
             }`}
           >
             {isWatched ? (
               <>
-                <FaBookmark />
+                <FaBookmark className="icon-inverse" />
                 <span>Watching</span>
               </>
             ) : (
               <>
-                <FaRegBookmark />
+                <FaRegBookmark className="icon-primary" />
                 <span>Watch</span>
               </>
             )}
@@ -181,17 +181,20 @@ export const Artist = () => {
 
       {topTracks.length > 0 && (
         <div className="mb-12">
-          <h2 className="text-3xl font-bold mb-6">Top Tracks</h2>
+          <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Top Tracks</h2>
           <div className="track-list space-y-2">
             {topTracks.map((track) => (
               <div
                 key={track.id}
-                className="track-item flex items-center justify-between p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="track-item flex items-center justify-between p-2 rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark transition-colors"
               >
-                <Link to="/track/$trackId" params={{ trackId: track.id }} className="font-semibold">
+                <Link to="/track/$trackId" params={{ trackId: track.id }} className="font-semibold text-content-primary dark:text-content-primary-dark">
                   {track.name}
                 </Link>
-                <button onClick={() => handleDownloadTrack(track)} className="download-btn">
+                <button 
+                  onClick={() => handleDownloadTrack(track)} 
+                  className="px-3 py-1 bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded"
+                >
                   Download
                 </button>
               </div>
@@ -202,7 +205,7 @@ export const Artist = () => {
 
       {artistAlbums.length > 0 && (
         <div className="mb-12">
-          <h2 className="text-3xl font-bold mb-6">Albums</h2>
+          <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Albums</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {artistAlbums.map((album) => (
               <AlbumCard key={album.id} album={album} onDownload={() => handleDownloadAlbum(album)} />
@@ -213,7 +216,7 @@ export const Artist = () => {
 
       {artistSingles.length > 0 && (
         <div className="mb-12">
-          <h2 className="text-3xl font-bold mb-6">Singles</h2>
+          <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Singles</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {artistSingles.map((album) => (
               <AlbumCard key={album.id} album={album} onDownload={() => handleDownloadAlbum(album)} />
@@ -224,7 +227,7 @@ export const Artist = () => {
 
       {artistCompilations.length > 0 && (
         <div className="mb-12">
-          <h2 className="text-3xl font-bold mb-6">Compilations</h2>
+          <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Compilations</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {artistCompilations.map((album) => (
               <AlbumCard key={album.id} album={album} onDownload={() => handleDownloadAlbum(album)} />

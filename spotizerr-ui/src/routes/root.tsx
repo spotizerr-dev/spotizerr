@@ -15,25 +15,25 @@ function AppLayout() {
 
   return (
     <>
-      <div className="min-h-screen bg-background text-foreground">
-        <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
+      <div className="min-h-screen bg-surface dark:bg-surface-dark text-content-primary dark:text-content-primary-dark">
+        <header className="sticky top-0 z-40 w-full border-b border-border dark:border-border-dark bg-surface-overlay dark:bg-surface-overlay-dark backdrop-blur-sm">
           <div className="container mx-auto h-14 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2">
-              <img src="/music.svg" alt="Logo" className="w-6 h-6" />
+              <img src="/music.svg" alt="Logo" className="w-6 h-6 icon-inverse" />
               <h1 className="text-xl font-bold">Spotizerr</h1>
             </Link>
             <div className="flex items-center gap-2">
-              <Link to="/watchlist" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                <img src="/binoculars.svg" alt="Watchlist" className="w-6 h-6" />
+              <Link to="/watchlist" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
+                <img src="/binoculars.svg" alt="Watchlist" className="w-6 h-6 icon-inverse hover:icon-accent" />
               </Link>
-              <Link to="/history" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                <img src="/history.svg" alt="History" className="w-6 h-6" />
+              <Link to="/history" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
+                <img src="/history.svg" alt="History" className="w-6 h-6 icon-inverse hover:icon-accent" />
               </Link>
-              <Link to="/config" className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                <img src="/settings.svg" alt="Settings" className="w-6 h-6" />
+              <Link to="/config" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
+                <img src="/settings.svg" alt="Settings" className="w-6 h-6 icon-inverse hover:icon-accent" />
               </Link>
-              <button onClick={toggleVisibility} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
-                <img src="/queue.svg" alt="Queue" className="w-6 h-6" />
+              <button onClick={toggleVisibility} className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
+                <img src="/queue.svg" alt="Queue" className="w-6 h-6 icon-inverse hover:icon-accent" />
               </button>
             </div>
           </div>
@@ -48,7 +48,7 @@ function AppLayout() {
   );
 }
 
-export function Root() {
+export const Root = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
@@ -58,4 +58,4 @@ export function Root() {
       </SettingsProvider>
     </QueryClientProvider>
   );
-}
+};

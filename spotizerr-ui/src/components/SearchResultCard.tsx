@@ -24,24 +24,24 @@ export const SearchResultCard = ({ id, name, subtitle, imageUrl, type, onDownloa
   };
 
   return (
-    <div className="group flex flex-col rounded-lg overflow-hidden bg-white dark:bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow duration-300 ease-in-out">
+    <div className="group flex flex-col rounded-lg overflow-hidden bg-surface dark:bg-surface-secondary-dark hover:bg-surface-secondary dark:hover:bg-surface-muted-dark shadow-xl hover:shadow-2xl transition-shadow duration-300 ease-in-out">
       <div className="relative">
         <img src={imageUrl || "/placeholder.jpg"} alt={name} className="w-full aspect-square object-cover" />
         {onDownload && (
           <button
             onClick={onDownload}
-            className="absolute bottom-2 right-2 p-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition-opacity shadow-lg opacity-0 group-hover:opacity-100 duration-300"
+            className="absolute bottom-2 right-2 p-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-full transition-opacity shadow-lg opacity-0 group-hover:opacity-100 duration-300"
             title={`Download ${type}`}
           >
-            <img src="/download.svg" alt="Download" className="w-5 h-5" />
+            <img src="/download.svg" alt="Download" className="w-5 h-5 icon-inverse" />
           </button>
         )}
       </div>
       <div className="p-4 flex-grow flex flex-col">
-        <Link to={getLinkPath()} className="font-semibold text-gray-900 dark:text-white truncate block">
+        <Link to={getLinkPath()} className="font-semibold text-content-primary dark:text-content-primary-dark truncate block">
           {name}
         </Link>
-        {subtitle && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-content-secondary dark:text-content-secondary-dark mt-1 truncate">{subtitle}</p>}
       </div>
     </div>
   );

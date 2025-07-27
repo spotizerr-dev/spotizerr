@@ -130,19 +130,19 @@ export const Home = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Search Spotify</h1>
+              <h1 className="text-2xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Search Spotify</h1>
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for a track, album, or artist"
-          className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         />
         <select
           value={searchType}
           onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")}
-          className="p-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         >
           <option value="track">Track</option>
           <option value="album">Album</option>
@@ -150,13 +150,13 @@ export const Home = () => {
           <option value="playlist">Playlist</option>
         </select>
       </div>
-      {isLoading ? (
-        <p className="text-center my-4">Loading results...</p>
-      ) : (
-        <>
-          {resultComponent}
-          <div ref={loaderRef} />
-          {isLoadingMore && <p className="text-center my-4">Loading more results...</p>}
+              {isLoading ? (
+          <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading results...</p>
+        ) : (
+          <>
+            {resultComponent}
+            <div ref={loaderRef} />
+            {isLoadingMore && <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>}
         </>
       )}
     </div>
