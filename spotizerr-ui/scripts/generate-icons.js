@@ -8,19 +8,71 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const publicDir = join(__dirname, '../public');
-const pngPath = join(publicDir, 'spotizerr.png');
+const svgPath = join(publicDir, 'spotizerr.svg');
 
 async function generateIcons() {
   try {
-    // Check if the PNG file exists
-    if (!existsSync(pngPath)) {
-      throw new Error(`PNG file not found at ${pngPath}. Please ensure spotizerr.png exists in the public directory.`);
+    // Check if the SVG file exists
+    if (!existsSync(svgPath)) {
+      throw new Error(`SVG file not found at ${svgPath}. Please ensure spotizerr.svg exists in the public directory.`);
     }
 
-    console.log('🎨 Generating PWA icons from PNG...');
+    console.log('🎨 Generating PWA icons from SVG...');
 
-    // Since the source is already 1667x1667 (square), we don't need to worry about aspect ratio
-    const sourceSize = 1667;
+    // First, convert SVG to PNG and process it
+    console.log('📐 Processing SVG: converting to PNG, scaling by 0.67, and centering in black box...');
+    
+    // Create a base canvas size for processing
+    const baseCanvasSize = 1000;
+    const scaleFactor = 3;
+    
+    // Convert SVG to PNG and get its dimensions
+    const svgToPng = await sharp(svgPath)
+      .png()
+      .toBuffer();
+    
+    const svgMetadata = await sharp(svgToPng).metadata();
+    const svgWidth = svgMetadata.width;
+    const svgHeight = svgMetadata.height;
+    
+    // Calculate scaled dimensions
+    const scaledWidth = Math.round(svgWidth * scaleFactor);
+    const scaledHeight = Math.round(svgHeight * scaleFactor);
+    
+    // Calculate centering offsets
+    const offsetX = Math.round((baseCanvasSize - scaledWidth) / 2);
+    const offsetY = Math.round((baseCanvasSize - scaledHeight) / 2);
+    
+    // Create the processed base image: scale SVG and center in black box
+    const processedImage = await sharp({
+      create: {
+        width: baseCanvasSize,
+        height: baseCanvasSize,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background
+      }
+    })
+    .composite([{
+      input: await sharp(svgToPng)
+        .resize(scaledWidth, scaledHeight)
+        .png()
+        .toBuffer(),
+      top: offsetY,
+      left: offsetX
+    }])
+    .png()
+    .toBuffer();
+
+    console.log(`✅ Processed SVG: ${svgWidth}x${svgHeight} → scaled to ${scaledWidth}x${scaledHeight} → centered in ${baseCanvasSize}x${baseCanvasSize} black box`);
+    
+    // Save the processed base image for reference
+    await sharp(processedImage)
+      .png()
+      .toFile(join(publicDir, 'spotizerr.png'));
+    
+    console.log(`✅ Saved processed base image as spotizerr.png (${baseCanvasSize}x${baseCanvasSize})`);
+    
+    const sourceSize = baseCanvasSize;
 
     // Define icon configurations
     const iconConfigs = [
@@ -51,8 +103,8 @@ async function generateIcons() {
       }
     ];
 
-    // Load the source PNG
-    const sourceImage = sharp(pngPath);
+    // Use the processed image as source
+    const sourceImage = sharp(processedImage);
 
     for (const config of iconConfigs) {
       const { size, name, padding } = config;
@@ -62,13 +114,13 @@ async function generateIcons() {
         const paddedSize = Math.round(size * (1 - padding * 2));
         const offset = Math.round((size - paddedSize) / 2);
 
-        // Create a black background and composite the resized logo on top
+        // Create a pure black background and composite the resized logo on top
         await sharp({
           create: {
             width: size,
             height: size,
             channels: 4,
-            background: { r: 15, g: 23, b: 42, alpha: 1 } // #0f172a in RGB
+            background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background
           }
         })
         .composite([{
@@ -100,7 +152,7 @@ async function generateIcons() {
         width: maskableSize,
         height: maskableSize,
         channels: 4,
-        background: { r: 15, g: 23, b: 42, alpha: 1 } // Solid background for maskable
+        background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background for maskable
       }
     })
     .composite([{
@@ -125,7 +177,7 @@ async function generateIcons() {
           width: size,
           height: size,
           channels: 4,
-          background: { r: 15, g: 23, b: 42, alpha: 1 }
+          background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background
         }
       })
       .composite([{
@@ -154,7 +206,7 @@ async function generateIcons() {
           width: size,
           height: size,
           channels: 4,
-          background: { r: 15, g: 23, b: 42, alpha: 1 }
+          background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background
         }
       })
       .composite([{
@@ -186,8 +238,8 @@ async function generateIcons() {
     });
     console.log('   • favicon.ico (multi-size: 16x16, 32x32, 48x48)');
     console.log('');
-    console.log('💡 The icons are generated with appropriate padding and the dark theme background.');
-    console.log('💡 The source PNG already has the perfect background, so no additional styling needed.');
+    console.log('💡 Icons generated from SVG source, scaled by 0.67, and centered on pure black backgrounds.');
+    console.log('💡 The SVG logo is automatically processed and optimized for all icon formats.');
     console.log('💡 favicon.ico contains multiple sizes for optimal browser compatibility.');
 
   } catch (error) {

@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState, useRef, useEffect } from "react";
 import {
   FaTimes,
   FaSync,
@@ -127,26 +127,27 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
   const progressText = getProgressText();
 
   return (
-    <div className={`p-4 rounded-xl border-2 shadow-lg mb-3 transition-all duration-300 hover:shadow-xl hover:scale-[1.02] ${statusInfo.bgColor} ${statusInfo.borderColor}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 min-w-0 flex-1">
-          <div className={`text-2xl ${statusInfo.color} bg-white/80 dark:bg-surface-dark/80 p-2 rounded-full shadow-sm`}>
+    <div className={`p-4 md:p-4 rounded-xl border-2 shadow-lg mb-3 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] ${statusInfo.bgColor} ${statusInfo.borderColor}`}>
+      {/* Mobile-first layout: stack status and actions on mobile, inline on desktop */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-0">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+          <div className={`text-2xl md:text-2xl ${statusInfo.color} bg-white/80 dark:bg-surface-dark/80 p-2 md:p-2 rounded-full shadow-sm flex-shrink-0`}>
             {statusInfo.icon}
           </div>
           <div className="flex-grow min-w-0">
             {item.type === "track" && (
               <>
                 <div className="flex items-center gap-2">
-                  <FaMusic className="icon-muted text-sm" />
-                  <p className="font-bold text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
+                  <FaMusic className="icon-muted text-sm flex-shrink-0" />
+                  <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
                     {item.name}
                   </p>
                 </div>
-                <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
+                <p className="text-sm md:text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
                   {item.artist}
                 </p>
                 {item.albumName && (
-                  <p className="text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.albumName}>
+                  <p className="text-xs md:text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.albumName}>
                     {item.albumName}
                   </p>
                 )}
@@ -155,16 +156,16 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
             {item.type === "album" && (
               <>
                 <div className="flex items-center gap-2">
-                  <FaCompactDisc className="icon-muted text-sm" />
-                  <p className="font-bold text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
+                  <FaCompactDisc className="icon-muted text-sm flex-shrink-0" />
+                  <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
                     {item.name}
                   </p>
                 </div>
-                <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
+                <p className="text-sm md:text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
                   {item.artist}
                 </p>
                 {item.currentTrackTitle && (
-                  <p className="text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.currentTrackTitle}>
+                  <p className="text-xs md:text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.currentTrackTitle}>
                     {item.currentTrackNumber}/{item.totalTracks}: {item.currentTrackTitle}
                   </p>
                 )}
@@ -173,16 +174,16 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
             {item.type === "playlist" && (
               <>
                 <div className="flex items-center gap-2">
-                  <FaMusic className="icon-muted text-sm" />
-                  <p className="font-bold text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
+                  <FaMusic className="icon-muted text-sm flex-shrink-0" />
+                  <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
                     {item.name}
                   </p>
                 </div>
-                <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.playlistOwner}>
+                <p className="text-sm md:text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.playlistOwner}>
                   {item.playlistOwner}
                 </p>
                 {item.currentTrackTitle && (
-                  <p className="text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.currentTrackTitle}>
+                  <p className="text-xs md:text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.currentTrackTitle}>
                     {item.currentTrackNumber}/{item.totalTracks}: {item.currentTrackTitle}
                   </p>
                 )}
@@ -190,60 +191,62 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 ml-4">
-          <div className="text-right">
-            <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${statusInfo.color} bg-white/60 dark:bg-surface-dark/60 shadow-sm`}>
+        
+        {/* Status and actions - stacked on mobile, inline on desktop */}
+        <div className="flex items-center justify-between md:justify-end gap-3 md:gap-3 md:ml-4">
+          <div className="flex-1 md:flex-none md:text-right">
+            <div className={`inline-flex items-center px-3 py-1 md:px-3 md:py-1 rounded-full text-sm md:text-xs font-semibold ${statusInfo.color} bg-white/60 dark:bg-surface-dark/60 shadow-sm`}>
               {statusInfo.name}
             </div>
-            {progressText && <p className="text-xs text-content-muted dark:text-content-muted-dark mt-1">{progressText}</p>}
+            {progressText && <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">{progressText}</p>}
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-2 md:gap-1 flex-shrink-0">
             {isTerminal ? (
               <button
                 onClick={() => removeItem?.(item.id)}
-                className="p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-error hover:bg-error/10 transition-all duration-200 shadow-sm"
+                className="p-3 md:p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-error hover:bg-error/10 transition-all duration-200 shadow-sm min-h-[44px] md:min-h-auto flex items-center justify-center"
                 aria-label="Remove"
               >
-                <FaTimes className="text-sm" />
+                <FaTimes className="text-base md:text-sm" />
               </button>
             ) : (
               <button
                 onClick={() => cancelItem?.(item.id)}
-                className="p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-warning hover:bg-warning/10 transition-all duration-200 shadow-sm"
+                className="p-3 md:p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-warning hover:bg-warning/10 transition-all duration-200 shadow-sm min-h-[44px] md:min-h-auto flex items-center justify-center"
                 aria-label="Cancel"
               >
-                <FaTimes className="text-sm" />
+                <FaTimes className="text-base md:text-sm" />
               </button>
             )}
             {item.canRetry && (
               <button
                 onClick={() => retryItem?.(item.id)}
-                className="p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-info hover:bg-info/10 transition-all duration-200 shadow-sm"
+                className="p-3 md:p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-info hover:bg-info/10 transition-all duration-200 shadow-sm min-h-[44px] md:min-h-auto flex items-center justify-center"
                 aria-label="Retry"
               >
-                <FaSync className="text-sm" />
+                <FaSync className="text-base md:text-sm" />
               </button>
             )}
           </div>
         </div>
       </div>
       {(item.status === "error" || item.status === "retrying") && item.error && (
-        <div className="mt-3 p-2 bg-error/10 border border-error/20 rounded-lg">
-          <p className="text-xs text-error font-medium">Error: {item.error}</p>
+        <div className="mt-3 p-3 md:p-2 bg-error/10 border border-error/20 rounded-lg">
+          <p className="text-sm md:text-xs text-error font-medium break-words">Error: {item.error}</p>
         </div>
       )}
       {isTerminal && item.summary && (item.summary.total_failed > 0 || item.summary.total_skipped > 0) && (
-        <div className="mt-3 p-2 bg-surface/50 dark:bg-surface-dark/50 rounded-lg">
-          <div className="flex gap-4 text-xs">
+        <div className="mt-3 p-3 md:p-2 bg-surface/50 dark:bg-surface-dark/50 rounded-lg">
+          <div className="flex flex-wrap gap-3 md:gap-4 text-sm md:text-xs">
             {item.summary.total_failed > 0 && (
-              <span className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-error rounded-full"></div>
+              <span className="flex items-center gap-2 md:gap-1">
+                <div className="w-3 h-3 md:w-2 md:h-2 bg-error rounded-full flex-shrink-0"></div>
                 <span className="text-error font-medium">{item.summary.total_failed} failed</span>
               </span>
             )}
             {item.summary.total_skipped > 0 && (
-              <span className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-warning rounded-full"></div>
+              <span className="flex items-center gap-2 md:gap-1">
+                <div className="w-3 h-3 md:w-2 md:h-2 bg-warning rounded-full flex-shrink-0"></div>
                 <span className="text-warning font-medium">{item.summary.total_skipped} skipped</span>
               </span>
             )}
@@ -253,12 +256,12 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
       {(item.status === "downloading" || item.status === "processing") &&
         item.type === "track" &&
         item.progress !== undefined && (
-          <div className="mt-3">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-xs text-content-muted dark:text-content-muted-dark">Progress</span>
-              <span className="text-xs font-semibold text-content-primary dark:text-content-primary-dark">{item.progress.toFixed(0)}%</span>
+          <div className="mt-4 md:mt-3">
+            <div className="flex justify-between items-center mb-2 md:mb-1">
+              <span className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark">Progress</span>
+              <span className="text-sm md:text-xs font-semibold text-content-primary dark:text-content-primary-dark">{item.progress.toFixed(0)}%</span>
             </div>
-            <div className="h-2 w-full bg-surface/50 dark:bg-surface-dark/50 rounded-full overflow-hidden">
+            <div className="h-3 md:h-2 w-full bg-surface/50 dark:bg-surface-dark/50 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ease-out ${
                   item.status === "downloading" ? "bg-info" : "bg-processing"
@@ -274,6 +277,9 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
 
 export const Queue = () => {
   const context = useContext(QueueContext);
+  const [startY, setStartY] = useState<number | null>(null);
+  const [currentY, setCurrentY] = useState<number | null>(null);
+  const queueRef = useRef<HTMLDivElement>(null);
 
   if (!context) return null;
   const { items, isVisible, toggleVisibility, cancelAll, clearCompleted } = context;
@@ -283,51 +289,107 @@ export const Queue = () => {
   const hasActive = items.some((item) => !isTerminalStatus(item.status));
   const hasFinished = items.some((item) => isTerminalStatus(item.status));
 
+  // Handle mobile swipe-to-dismiss
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setStartY(e.touches[0].clientY);
+    setCurrentY(e.touches[0].clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (startY === null) return;
+    setCurrentY(e.touches[0].clientY);
+    
+    const deltaY = e.touches[0].clientY - startY;
+    
+    // Only allow downward swipes to dismiss
+    if (deltaY > 0) {
+      if (queueRef.current) {
+        queueRef.current.style.transform = `translateY(${Math.min(deltaY, 100)}px)`;
+        queueRef.current.style.opacity = `${Math.max(0.3, 1 - deltaY / 200)}`;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (startY === null || currentY === null) return;
+    
+    const deltaY = currentY - startY;
+    
+    if (queueRef.current) {
+      queueRef.current.style.transform = '';
+      queueRef.current.style.opacity = '';
+    }
+    
+    // Dismiss if swiped down more than 50px
+    if (deltaY > 50) {
+      toggleVisibility();
+    }
+    
+    setStartY(null);
+    setCurrentY(null);
+  };
+
   return (
-    <div className="fixed bottom-4 right-4 w-full max-w-md bg-surface dark:bg-surface-dark rounded-xl shadow-2xl border border-border dark:border-border-dark z-50 backdrop-blur-sm">
-      <header className="flex items-center justify-between p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark rounded-t-xl">
-        <h2 className="text-lg font-bold text-content-primary dark:text-content-primary-dark">
-          Download Queue ({items.length})
-        </h2>
-        <div className="flex gap-2">
-          <button
-            onClick={cancelAll}
-            className="text-sm text-content-muted dark:text-content-muted-dark hover:text-warning transition-colors px-2 py-1 rounded-md hover:bg-warning/10"
-            disabled={!hasActive}
-            aria-label="Cancel all active downloads"
-          >
-            Cancel All
-          </button>
-          <button
-            onClick={clearCompleted}
-            className="text-sm text-content-muted dark:text-content-muted-dark hover:text-success transition-colors px-2 py-1 rounded-md hover:bg-success/10"
-            disabled={!hasFinished}
-            aria-label="Clear all finished downloads"
-          >
-            Clear Finished
-          </button>
-          <button 
-            onClick={toggleVisibility} 
-            className="text-content-muted dark:text-content-muted-dark hover:text-content-primary dark:hover:text-content-primary-dark p-1 rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark transition-colors" 
-            aria-label="Close queue"
-          >
-            <FaTimes className="text-sm" />
-          </button>
-        </div>
-      </header>
-      <div className="p-4 overflow-y-auto max-h-96 bg-gradient-to-b from-surface-secondary/30 to-surface/30 dark:from-surface-secondary-dark/30 dark:to-surface-dark/30">
-        {items.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
-              <FaMusic className="text-2xl icon-muted" />
-            </div>
-            <p className="text-content-muted dark:text-content-muted-dark">The queue is empty.</p>
-            <p className="text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
+    <>
+      {/* Mobile backdrop overlay */}
+      <div 
+        className="fixed inset-0 bg-black/50 z-40 md:hidden"
+        onClick={toggleVisibility}
+      />
+      
+      <div 
+        ref={queueRef}
+        className="fixed inset-x-0 bottom-0 md:bottom-4 md:right-4 md:inset-x-auto w-full md:max-w-md bg-surface dark:bg-surface-dark md:rounded-xl shadow-2xl border-t md:border border-border dark:border-border-dark z-50 backdrop-blur-sm md:rounded-b-xl transition-transform transition-opacity"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <header className="flex items-center justify-between p-4 md:p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark md:rounded-t-xl">
+          {/* Add drag indicator for mobile */}
+          <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50"></div>
+          <h2 className="text-lg md:text-lg font-bold text-content-primary dark:text-content-primary-dark">
+            Download Queue ({items.length})
+          </h2>
+          <div className="flex gap-1 md:gap-2">
+            <button
+              onClick={cancelAll}
+              className="text-xs md:text-sm text-content-muted dark:text-content-muted-dark hover:text-warning transition-colors px-3 py-2 md:px-2 md:py-1 rounded-md hover:bg-warning/10 min-h-[44px] md:min-h-auto"
+              disabled={!hasActive}
+              aria-label="Cancel all active downloads"
+            >
+              Cancel All
+            </button>
+            <button
+              onClick={clearCompleted}
+              className="text-xs md:text-sm text-content-muted dark:text-content-muted-dark hover:text-success transition-colors px-3 py-2 md:px-2 md:py-1 rounded-md hover:bg-success/10 min-h-[44px] md:min-h-auto"
+              disabled={!hasFinished}
+              aria-label="Clear all finished downloads"
+            >
+              Clear Finished
+            </button>
+            <button 
+              onClick={toggleVisibility} 
+              className="text-content-muted dark:text-content-muted-dark hover:text-content-primary dark:hover:text-content-primary-dark p-3 md:p-1 rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark transition-colors min-h-[44px] md:min-h-auto flex items-center justify-center" 
+              aria-label="Close queue"
+            >
+              <FaTimes className="text-base md:text-sm" />
+            </button>
           </div>
-        ) : (
-          items.map((item) => <QueueItemCard key={item.id} item={item} />)
-        )}
+        </header>
+        <div className="p-4 overflow-y-auto max-h-[60vh] md:max-h-96 bg-gradient-to-b from-surface-secondary/30 to-surface/30 dark:from-surface-secondary-dark/30 dark:to-surface-dark/30">
+          {items.length === 0 ? (
+            <div className="text-center py-8 md:py-8">
+              <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
+                <FaMusic className="text-3xl md:text-2xl icon-muted" />
+              </div>
+              <p className="text-base md:text-sm text-content-muted dark:text-content-muted-dark">The queue is empty.</p>
+              <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
+            </div>
+          ) : (
+            items.map((item) => <QueueItemCard key={item.id} item={item} />)
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
