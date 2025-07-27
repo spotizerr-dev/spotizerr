@@ -100,57 +100,57 @@
   --color-icon-button-hover-dark: #334155;
 
   /* Icon Colors */
-  --color-icon-primary: #475569;
-  --color-icon-primary-hover: #334155;
-  --color-icon-primary-active: #1e293b;
-  --color-icon-primary-dark: #cbd5e1;
-  --color-icon-primary-hover-dark: #e2e8f0;
-  --color-icon-primary-active-dark: #f8fafc;
+  --color-icon-primary: #000000;
+  --color-icon-primary-hover: #000000;
+  --color-icon-primary-active: #000000;
+  --color-icon-primary-dark: #ffffff;
+  --color-icon-primary-hover-dark: #ffffff;
+  --color-icon-primary-active-dark: #ffffff;
   
-  --color-icon-secondary: #64748b;
-  --color-icon-secondary-hover: #475569;
-  --color-icon-secondary-active: #334155;
-  --color-icon-secondary-dark: #94a3b8;
-  --color-icon-secondary-hover-dark: #cbd5e1;
-  --color-icon-secondary-active-dark: #e2e8f0;
+  --color-icon-secondary: #000000;
+  --color-icon-secondary-hover: #000000;
+  --color-icon-secondary-active: #000000;
+  --color-icon-secondary-dark: #ffffff;
+  --color-icon-secondary-hover-dark: #ffffff;
+  --color-icon-secondary-active-dark: #ffffff;
   
-  --color-icon-muted: #94a3b8;
-  --color-icon-muted-hover: #64748b;
-  --color-icon-muted-active: #475569;
-  --color-icon-muted-dark: #64748b;
-  --color-icon-muted-hover-dark: #94a3b8;
-  --color-icon-muted-active-dark: #cbd5e1;
+  --color-icon-muted: #000000;
+  --color-icon-muted-hover: #000000;
+  --color-icon-muted-active: #000000;
+  --color-icon-muted-dark: #ffffff;
+  --color-icon-muted-hover-dark: #ffffff;
+  --color-icon-muted-active-dark: #ffffff;
   
-  --color-icon-accent: #3b82f6;
-  --color-icon-accent-hover: #2563eb;
-  --color-icon-accent-active: #1d4ed8;
-  --color-icon-accent-dark: #60a5fa;
-  --color-icon-accent-hover-dark: #93c5fd;
-  --color-icon-accent-active-dark: #bfdbfe;
+  --color-icon-accent: #000000;
+  --color-icon-accent-hover: #000000;
+  --color-icon-accent-active: #000000;
+  --color-icon-accent-dark: #ffffff;
+  --color-icon-accent-hover-dark: #ffffff;
+  --color-icon-accent-active-dark: #ffffff;
   
-  --color-icon-success: #22c55e;
-  --color-icon-success-hover: #16a34a;
-  --color-icon-success-active: #15803d;
-  --color-icon-success-dark: #4ade80;
-  --color-icon-success-hover-dark: #86efac;
-  --color-icon-success-active-dark: #bbf7d0;
+  --color-icon-success: #000000;
+  --color-icon-success-hover: #000000;
+  --color-icon-success-active: #000000;
+  --color-icon-success-dark: #ffffff;
+  --color-icon-success-hover-dark: #ffffff;
+  --color-icon-success-active-dark: #ffffff;
   
-  --color-icon-error: #ef4444;
-  --color-icon-error-hover: #dc2626;
-  --color-icon-error-active: #b91c1c;
-  --color-icon-error-dark: #f87171;
-  --color-icon-error-hover-dark: #fca5a5;
-  --color-icon-error-active-dark: #fecaca;
+  --color-icon-error: #000000;
+  --color-icon-error-hover: #000000;
+  --color-icon-error-active: #000000;
+  --color-icon-error-dark: #ffffff;
+  --color-icon-error-hover-dark: #ffffff;
+  --color-icon-error-active-dark: #ffffff;
   
-  --color-icon-warning: #f59e0b;
-  --color-icon-warning-hover: #d97706;
-  --color-icon-warning-active: #b45309;
-  --color-icon-warning-dark: #fbbf24;
-  --color-icon-warning-hover-dark: #fcd34d;
-  --color-icon-warning-active-dark: #fde68a;
+  --color-icon-warning: #000000;
+  --color-icon-warning-hover: #000000;
+  --color-icon-warning-active: #000000;
+  --color-icon-warning-dark: #ffffff;
+  --color-icon-warning-hover-dark: #ffffff;
+  --color-icon-warning-active-dark: #ffffff;
   
   --color-icon-inverse: #ffffff;
-  --color-icon-inverse-dark: #0f172a;
+  --color-icon-inverse-dark: #000000;
 }
 
 @layer base {
@@ -162,158 +162,158 @@
   .icon-primary {
     fill: var(--color-icon-primary);
     color: var(--color-icon-primary);
-    filter: brightness(0) saturate(100%) invert(27%) sepia(8%) saturate(1363%) hue-rotate(183deg) brightness(96%) contrast(89%);
+    filter: brightness(0);
   }
   .dark .icon-primary {
     fill: var(--color-icon-primary-dark);
     color: var(--color-icon-primary-dark);
-    filter: brightness(0) saturate(100%) invert(83%) sepia(8%) saturate(1018%) hue-rotate(183deg) brightness(96%) contrast(91%);
+    filter: brightness(0) invert(100%);
   }
   .icon-primary:hover {
     fill: var(--color-icon-primary-hover);
     color: var(--color-icon-primary-hover);
-    filter: brightness(0) saturate(100%) invert(21%) sepia(12%) saturate(1190%) hue-rotate(183deg) brightness(96%) contrast(92%);
+    filter: brightness(0);
   }
   .dark .icon-primary:hover {
     fill: var(--color-icon-primary-hover-dark);
     color: var(--color-icon-primary-hover-dark);
-    filter: brightness(0) saturate(100%) invert(90%) sepia(6%) saturate(668%) hue-rotate(183deg) brightness(97%) contrast(91%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-secondary {
     fill: var(--color-icon-secondary);
     color: var(--color-icon-secondary);
-    filter: brightness(0) saturate(100%) invert(48%) sepia(14%) saturate(725%) hue-rotate(183deg) brightness(94%) contrast(88%);
+    filter: brightness(0);
   }
   .dark .icon-secondary {
     fill: var(--color-icon-secondary-dark);
     color: var(--color-icon-secondary-dark);
-    filter: brightness(0) saturate(100%) invert(69%) sepia(11%) saturate(763%) hue-rotate(183deg) brightness(93%) contrast(89%);
+    filter: brightness(0) invert(100%);
   }
   .icon-secondary:hover {
     fill: var(--color-icon-secondary-hover);
     color: var(--color-icon-secondary-hover);
-    filter: brightness(0) saturate(100%) invert(27%) sepia(8%) saturate(1363%) hue-rotate(183deg) brightness(96%) contrast(89%);
+    filter: brightness(0);
   }
   .dark .icon-secondary:hover {
     fill: var(--color-icon-secondary-hover-dark);
     color: var(--color-icon-secondary-hover-dark);
-    filter: brightness(0) saturate(100%) invert(83%) sepia(8%) saturate(1018%) hue-rotate(183deg) brightness(96%) contrast(91%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-muted {
     fill: var(--color-icon-muted);
     color: var(--color-icon-muted);
-    filter: brightness(0) saturate(100%) invert(69%) sepia(11%) saturate(763%) hue-rotate(183deg) brightness(93%) contrast(89%);
+    filter: brightness(0);
   }
   .dark .icon-muted {
     fill: var(--color-icon-muted-dark);
     color: var(--color-icon-muted-dark);
-    filter: brightness(0) saturate(100%) invert(48%) sepia(14%) saturate(725%) hue-rotate(183deg) brightness(94%) contrast(88%);
+    filter: brightness(0) invert(100%);
   }
   .icon-muted:hover {
     fill: var(--color-icon-muted-hover);
     color: var(--color-icon-muted-hover);
-    filter: brightness(0) saturate(100%) invert(48%) sepia(14%) saturate(725%) hue-rotate(183deg) brightness(94%) contrast(88%);
+    filter: brightness(0);
   }
   .dark .icon-muted:hover {
     fill: var(--color-icon-muted-hover-dark);
     color: var(--color-icon-muted-hover-dark);
-    filter: brightness(0) saturate(100%) invert(69%) sepia(11%) saturate(763%) hue-rotate(183deg) brightness(93%) contrast(89%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-accent {
     fill: var(--color-icon-accent);
     color: var(--color-icon-accent);
-    filter: brightness(0) saturate(100%) invert(41%) sepia(96%) saturate(1347%) hue-rotate(215deg) brightness(99%) contrast(86%);
+    filter: brightness(0);
   }
   .dark .icon-accent {
     fill: var(--color-icon-accent-dark);
     color: var(--color-icon-accent-dark);
-    filter: brightness(0) saturate(100%) invert(67%) sepia(25%) saturate(2334%) hue-rotate(215deg) brightness(102%) contrast(96%);
+    filter: brightness(0) invert(100%);
   }
   .icon-accent:hover {
     fill: var(--color-icon-accent-hover);
     color: var(--color-icon-accent-hover);
-    filter: brightness(0) saturate(100%) invert(29%) sepia(81%) saturate(2476%) hue-rotate(215deg) brightness(98%) contrast(86%);
+    filter: brightness(0);
   }
   .dark .icon-accent:hover {
     fill: var(--color-icon-accent-hover-dark);
     color: var(--color-icon-accent-hover-dark);
-    filter: brightness(0) saturate(100%) invert(75%) sepia(28%) saturate(1388%) hue-rotate(215deg) brightness(104%) contrast(96%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-success {
     fill: var(--color-icon-success);
     color: var(--color-icon-success);
-    filter: brightness(0) saturate(100%) invert(47%) sepia(95%) saturate(450%) hue-rotate(92deg) brightness(98%) contrast(91%);
+    filter: brightness(0);
   }
   .dark .icon-success {
     fill: var(--color-icon-success-dark);
     color: var(--color-icon-success-dark);
-    filter: brightness(0) saturate(100%) invert(64%) sepia(78%) saturate(394%) hue-rotate(92deg) brightness(101%) contrast(89%);
+    filter: brightness(0) invert(100%);
   }
   .icon-success:hover {
     fill: var(--color-icon-success-hover);
     color: var(--color-icon-success-hover);
-    filter: brightness(0) saturate(100%) invert(42%) sepia(78%) saturate(440%) hue-rotate(92deg) brightness(96%) contrast(89%);
+    filter: brightness(0);
   }
   .dark .icon-success:hover {
     fill: var(--color-icon-success-hover-dark);
     color: var(--color-icon-success-hover-dark);
-    filter: brightness(0) saturate(100%) invert(75%) sepia(64%) saturate(295%) hue-rotate(92deg) brightness(103%) contrast(87%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-error {
     fill: var(--color-icon-error);
     color: var(--color-icon-error);
-    filter: brightness(0) saturate(100%) invert(30%) sepia(93%) saturate(1742%) hue-rotate(339deg) brightness(98%) contrast(94%);
+    filter: brightness(0);
   }
   .dark .icon-error {
     fill: var(--color-icon-error-dark);
     color: var(--color-icon-error-dark);
-    filter: brightness(0) saturate(100%) invert(62%) sepia(93%) saturate(1360%) hue-rotate(339deg) brightness(99%) contrast(96%);
+    filter: brightness(0) invert(100%);
   }
   .icon-error:hover {
     fill: var(--color-icon-error-hover);
     color: var(--color-icon-error-hover);
-    filter: brightness(0) saturate(100%) invert(17%) sepia(95%) saturate(2341%) hue-rotate(339deg) brightness(96%) contrast(94%);
+    filter: brightness(0);
   }
   .dark .icon-error:hover {
     fill: var(--color-icon-error-hover-dark);
     color: var(--color-icon-error-hover-dark);
-    filter: brightness(0) saturate(100%) invert(74%) sepia(29%) saturate(1214%) hue-rotate(339deg) brightness(99%) contrast(94%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-warning {
     fill: var(--color-icon-warning);
     color: var(--color-icon-warning);
-    filter: brightness(0) saturate(100%) invert(67%) sepia(98%) saturate(1284%) hue-rotate(12deg) brightness(95%) contrast(92%);
+    filter: brightness(0);
   }
   .dark .icon-warning {
     fill: var(--color-icon-warning-dark);
     color: var(--color-icon-warning-dark);
-    filter: brightness(0) saturate(100%) invert(84%) sepia(36%) saturate(1043%) hue-rotate(12deg) brightness(97%) contrast(91%);
+    filter: brightness(0) invert(100%);
   }
   .icon-warning:hover {
     fill: var(--color-icon-warning-hover);
     color: var(--color-icon-warning-hover);
-    filter: brightness(0) saturate(100%) invert(58%) sepia(89%) saturate(1619%) hue-rotate(12deg) brightness(94%) contrast(96%);
+    filter: brightness(0);
   }
   .dark .icon-warning:hover {
     fill: var(--color-icon-warning-hover-dark);
     color: var(--color-icon-warning-hover-dark);
-    filter: brightness(0) saturate(100%) invert(89%) sepia(21%) saturate(789%) hue-rotate(12deg) brightness(98%) contrast(88%);
+    filter: brightness(0) invert(100%);
   }
   
   .icon-inverse {
     fill: var(--color-icon-inverse);
     color: var(--color-icon-inverse);
-    filter: brightness(0) saturate(100%) invert(100%);
+    filter: brightness(0) invert(100%);
   }
   .dark .icon-inverse {
     fill: var(--color-icon-inverse-dark);
     color: var(--color-icon-inverse-dark);
-    filter: brightness(0) saturate(100%) invert(5%) sepia(8%) saturate(7470%) hue-rotate(183deg) brightness(97%) contrast(108%);
+    filter: brightness(0);
   }
 }

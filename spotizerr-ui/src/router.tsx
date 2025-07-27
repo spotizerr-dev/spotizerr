@@ -1,5 +1,5 @@
 import { createRouter, createRootRoute, createRoute } from "@tanstack/react-router";
-import { Root } from "./routes/root";
+import Root from "./routes/root";
 import { Album } from "./routes/album";
 import { Artist } from "./routes/artist";
 import { Track } from "./routes/track";

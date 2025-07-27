@@ -3,7 +3,7 @@ import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import apiClient from "../lib/api-client";
 import { useSettings } from "../contexts/settings-context";
 import { toast } from "sonner";
-import type { PlaylistType, TrackType, PlaylistMetadataType, PlaylistTracksResponseType, PlaylistItemType } from "../types/spotify";
+import type { TrackType, PlaylistMetadataType, PlaylistTracksResponseType, PlaylistItemType } from "../types/spotify";
 import { QueueContext } from "../contexts/queue-context";
 import { FaArrowLeft } from "react-icons/fa";
 import { FaDownload } from "react-icons/fa6";
