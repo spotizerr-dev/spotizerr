@@ -27,20 +27,33 @@ export const Artist = () => {
     const fetchArtistData = async () => {
       if (!artistId) return;
       try {
-        const response = await apiClient.get<{ items: AlbumType[] }>(`/artist/info?id=${artistId}`);
-        const albumData = response.data;
+        const response = await apiClient.get(`/artist/info?id=${artistId}`);
+        const artistData = response.data;
 
-        if (albumData?.items && albumData.items.length > 0) {
-          const firstAlbum = albumData.items[0];
-          if (firstAlbum.artists && firstAlbum.artists.length > 0) {
-            setArtist(firstAlbum.artists[0]);
+                 // Check if we have artist data in the response
+         if (artistData?.id && artistData?.name) {
+           // Set artist info directly from the response
+           setArtist({
+             id: artistData.id,
+             name: artistData.name,
+             images: artistData.images || [],
+             external_urls: artistData.external_urls || { spotify: "" },
+             followers: artistData.followers || { total: 0 },
+             genres: artistData.genres || [],
+             popularity: artistData.popularity || 0,
+             type: artistData.type || 'artist',
+             uri: artistData.uri || ''
+           });
+
+          // Check if we have albums data
+          if (artistData?.albums?.items && artistData.albums.items.length > 0) {
+            setAlbums(artistData.albums.items);
           } else {
-            setError("Could not determine artist from album data.");
+            setError("No albums found for this artist.");
             return;
           }
-          setAlbums(albumData.items);
         } else {
-          setError("No albums found for this artist.");
+          setError("Could not load artist data.");
           return;
         }
 

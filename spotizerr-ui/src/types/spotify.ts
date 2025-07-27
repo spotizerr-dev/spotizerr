@@ -8,6 +8,16 @@ export interface ArtistType {
   id: string;
   name: string;
   images?: ImageType[];
+  external_urls?: {
+    spotify: string;
+  };
+  followers?: {
+    total: number;
+  };
+  genres?: string[];
+  popularity?: number;
+  type?: string;
+  uri?: string;
 }
 
 export interface TrackAlbumInfo {

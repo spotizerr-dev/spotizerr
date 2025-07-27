@@ -28,16 +28,16 @@ def _get_spotify_client():
     
     current_time = time.time()
     
-    # Reinitialize client if it's been more than an hour or if client doesn't exist
+        # Reinitialize client if it's been more than an hour or if client doesn't exist
     if (_spotify_client is None or 
         current_time - _last_client_init > _client_init_interval):
         
         client_id, client_secret = _get_global_spotify_api_creds()
 
-    if not client_id or not client_secret:
-        raise ValueError(
-            "Global Spotify API client_id or client_secret not configured in ./data/creds/search.json."
-        )
+        if not client_id or not client_secret:
+            raise ValueError(
+                "Global Spotify API client_id or client_secret not configured in ./data/creds/search.json."
+            )
 
         # Create new client
         _spotify_client = spotipy.Spotify(
@@ -212,7 +212,7 @@ def check_playlist_updated(playlist_id: str, last_snapshot_id: str) -> bool:
         raise
 
 @_rate_limit_handler
-def get_spotfy_info(spotify_id: str, spotify_type: str, limit: Optional[int] = None, offset: Optional[int] = None) -> Dict[str, Any]:
+def get_spotify_info(spotify_id: str, spotify_type: str, limit: Optional[int] = None, offset: Optional[int] = None) -> Dict[str, Any]:
     """
     Get info from Spotify API using Spotipy directly.
     Optimized to prevent rate limiting by using appropriate endpoints.
@@ -231,21 +231,21 @@ def get_spotfy_info(spotify_id: str, spotify_type: str, limit: Optional[int] = N
     try:
         if spotify_type == "track":
             return client.track(spotify_id)
-                
+            
         elif spotify_type == "album":
             return client.album(spotify_id)
-                
+            
         elif spotify_type == "playlist":
             # Use optimized playlist fetching
             return get_playlist_full(spotify_id)
-                
+            
         elif spotify_type == "playlist_metadata":
             # Get only metadata for playlists
             return get_playlist_metadata(spotify_id)
-                
+            
         elif spotify_type == "artist":
             return client.artist(spotify_id)
-                
+            
         elif spotify_type == "artist_discography":
             # Get artist's albums with pagination
             albums = client.artist_albums(
@@ -254,10 +254,10 @@ def get_spotfy_info(spotify_id: str, spotify_type: str, limit: Optional[int] = N
                 offset=offset or 0
             )
             return albums
-                
+            
         elif spotify_type == "episode":
-                return client.episode(spotify_id)
-                
+            return client.episode(spotify_id)
+            
         else:
             raise ValueError(f"Unsupported Spotify type: {spotify_type}")
 
