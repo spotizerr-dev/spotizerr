@@ -130,10 +130,10 @@ export const Artist = () => {
 
   return (
     <div className="artist-page">
-      <div className="mb-6">
+      <div className="mb-4 md:mb-6">
         <button
           onClick={() => window.history.back()}
-          className="flex items-center gap-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
+          className="flex items-center gap-2 p-2 -ml-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark rounded-lg transition-all"
         >
           <FaArrowLeft className="icon-secondary hover:icon-primary" />
           <span>Back to results</span>

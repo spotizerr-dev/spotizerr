@@ -64,10 +64,10 @@ export const Track = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8">
-      <div className="mb-6">
+      <div className="mb-4 md:mb-6">
         <button
           onClick={() => window.history.back()}
-          className="flex items-center gap-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
+          className="flex items-center gap-2 p-2 -ml-2 text-sm font-semibold text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark rounded-lg transition-all"
         >
           <FaArrowLeft className="icon-secondary hover:icon-primary" />
           <span>Back to results</span>
@@ -99,7 +99,7 @@ export const Track = () => {
                 {track.name}
               </h1>
               {track.explicit && (
-                <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-inverse dark:text-content-inverse-dark px-3 py-1 rounded-full self-center md:self-auto">
+                <span className="text-xs bg-surface-dark dark:bg-surface text-content-primary-dark dark:text-content-primary px-3 py-1 rounded-full self-center md:self-auto font-semibold">
                   EXPLICIT
                 </span>
               )}

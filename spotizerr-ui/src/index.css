@@ -1,32 +1,39 @@
 @import "tailwindcss";
 
-@theme {
-  /* Background Colors - Light theme: pure white to warm grays */
-  --color-surface: #ffffff;
-  --color-surface-secondary: #fafbfc;
-  --color-surface-muted: #f4f6f8;
-  --color-surface-accent: #e8ecf0;
-  --color-surface-overlay: rgba(255, 255, 255, 0.96);
-  
-  /* Dark mode backgrounds - Rich blacks with subtle warm undertones */
-  --color-surface-dark: #0a0a0a;
-  --color-surface-secondary-dark: #141414;
-  --color-surface-muted-dark: #1f1f1f;
-  --color-surface-accent-dark: #2d2d2d;
-  --color-surface-overlay-dark: rgba(10, 10, 10, 0.96);
+/* Override dark mode to use class-based instead of prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  /* Text Colors - Light theme with enhanced contrast */
+@theme {
+  /* Background Colors with automatic dark mode variants and gradients */
+  --color-surface: #ffffff;
+  --color-surface-dark: #0a0a0a;
+  --color-surface-secondary: #fafbfc;
+  --color-surface-secondary-dark: #141418;
+  --color-surface-muted: #f4f6f8;
+  --color-surface-muted-dark: #1f1f23;
+  --color-surface-accent: #e8ecf0;
+  --color-surface-accent-dark: #2d2d33;
+  --color-surface-overlay: rgba(255, 255, 255, 0.85);
+  --color-surface-overlay-dark: rgba(10, 10, 12, 0.85);
+
+  /* Gradient backgrounds for depth */
+  --gradient-surface: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
+  --gradient-surface-dark: linear-gradient(135deg, #0a0a0a 0%, #141418 100%);
+  --gradient-muted: linear-gradient(135deg, #f4f6f8 0%, #e8ecf0 100%);
+  --gradient-muted-dark: linear-gradient(135deg, #1f1f23 0%, #2d2d33 100%);
+  --gradient-accent: linear-gradient(135deg, #e8ecf0 0%, #d6dce4 100%);
+  --gradient-accent-dark: linear-gradient(135deg, #2d2d33 0%, #3a3a42 100%);
+
+  /* Text Colors with automatic dark mode variants and subtle tints */
   --color-content-primary: #0d1117;
-  --color-content-secondary: #57606a;
-  --color-content-muted: #768390;
-  --color-content-accent: #8c959f;
-  --color-content-inverse: #ffffff;
-  
-  /* Dark mode text - Crisp whites and refined grays */
   --color-content-primary-dark: #f0f6fc;
-  --color-content-secondary-dark: #c9d1d9;
-  --color-content-muted-dark: #8b949e;
-  --color-content-accent-dark: #6e7681;
+  --color-content-secondary: #4a5568;
+  --color-content-secondary-dark: #a0aec0;
+  --color-content-muted: #718096;
+  --color-content-muted-dark: #9ca3af;
+  --color-content-accent: #6b7280;
+  --color-content-accent-dark: #6b7280;
+  --color-content-inverse: #ffffff;
   --color-content-inverse-dark: #0d1117;
 
   /* Interactive Colors - Enhanced Spotify green with sophistication */
@@ -73,21 +80,27 @@
   --color-processing-muted: #f0ebff;
   --color-processing-text: #5d3e7a;
 
-  /* Border Colors - Subtle and refined */
-  --color-border: #e1e5e9;
-  --color-border-muted: #f4f6f8;
-  --color-border-accent: #d0d7de;
+  /* Border Colors with automatic dark mode variants and gradients */
+  --color-border: #e2e8f0;
+  --color-border-dark: #374151;
+  --color-border-muted: #f1f5f9;
+  --color-border-muted-dark: #1f2937;
+  --color-border-accent: #cbd5e1;
+  --color-border-accent-dark: #4b5563;
   --color-border-focus: #1ed760;
-  --color-border-dark: #30363d;
-  --color-border-muted-dark: #21262d;
-  --color-border-accent-dark: #373e47;
 
-  /* Input Colors */
-  --color-input-background: #f4f6f8;
-  --color-input-border: #e1e5e9;
+  /* Gradient borders for enhanced depth */
+  --gradient-border: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  --gradient-border-dark: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+
+  /* Input Colors with automatic dark mode variants and gradients */
+  --color-input-background: #f8fafc;
+  --color-input-background-dark: #1f2937;
+  --color-input-border: #e2e8f0;
+  --color-input-border-dark: #374151;
   --color-input-focus: #1ed760;
-  --color-input-background-dark: #21262d;
-  --color-input-border-dark: #30363d;
+  --gradient-input: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  --gradient-input-dark: linear-gradient(135deg, #1f2937 0%, #111827 100%);
 
   /* Button Colors */
   --color-button-primary: #1ed760;
@@ -103,8 +116,8 @@
   --color-button-success-hover: #1e7b34;
   --color-button-success-text: #ffffff;
 
-  --color-icon-button-hover: #e8ecf0;
-  --color-icon-button-hover-dark: #30363d;
+  --color-icon-button-hover: #f1f5f9;
+  --color-icon-button-hover-dark: #374151;
 
   /* Icon Colors */
   --color-icon-primary: #000000;
@@ -161,182 +174,64 @@
 }
 
 @layer base {
+  /* PWA Safe Area Support */
+  :root {
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  }
+
+  /* PWA specific body styling */
+  body {
+    background: var(--color-surface);
+    overscroll-behavior: none;
+  }
+  .dark body {
+    background: var(--color-surface-dark);
+  }
+
+  /* PWA viewport fixes */
+  html {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+  }
+
   a {
     @apply no-underline hover:underline cursor-pointer;
   }
   
-  /* SVG Icon Utility Classes - Using filters for img elements */
-  .icon-primary {
-    fill: var(--color-icon-primary);
-    color: var(--color-icon-primary);
-    filter: brightness(0);
-  }
-  .dark .icon-primary {
-    fill: var(--color-icon-primary-dark);
-    color: var(--color-icon-primary-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-primary:hover {
-    fill: var(--color-icon-primary-hover);
-    color: var(--color-icon-primary-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-primary:hover {
-    fill: var(--color-icon-primary-hover-dark);
-    color: var(--color-icon-primary-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-secondary {
-    fill: var(--color-icon-secondary);
-    color: var(--color-icon-secondary);
-    filter: brightness(0);
-  }
-  .dark .icon-secondary {
-    fill: var(--color-icon-secondary-dark);
-    color: var(--color-icon-secondary-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-secondary:hover {
-    fill: var(--color-icon-secondary-hover);
-    color: var(--color-icon-secondary-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-secondary:hover {
-    fill: var(--color-icon-secondary-hover-dark);
-    color: var(--color-icon-secondary-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-muted {
-    fill: var(--color-icon-muted);
-    color: var(--color-icon-muted);
-    filter: brightness(0);
-  }
-  .dark .icon-muted {
-    fill: var(--color-icon-muted-dark);
-    color: var(--color-icon-muted-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-muted:hover {
-    fill: var(--color-icon-muted-hover);
-    color: var(--color-icon-muted-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-muted:hover {
-    fill: var(--color-icon-muted-hover-dark);
-    color: var(--color-icon-muted-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-accent {
-    fill: var(--color-icon-accent);
-    color: var(--color-icon-accent);
-    filter: brightness(0);
-  }
-  .dark .icon-accent {
-    fill: var(--color-icon-accent-dark);
-    color: var(--color-icon-accent-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-accent:hover {
-    fill: var(--color-icon-accent-hover);
-    color: var(--color-icon-accent-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-accent:hover {
-    fill: var(--color-icon-accent-hover-dark);
-    color: var(--color-icon-accent-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-success {
-    fill: var(--color-icon-success);
-    color: var(--color-icon-success);
-    filter: brightness(0);
-  }
-  .dark .icon-success {
-    fill: var(--color-icon-success-dark);
-    color: var(--color-icon-success-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-success:hover {
-    fill: var(--color-icon-success-hover);
-    color: var(--color-icon-success-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-success:hover {
-    fill: var(--color-icon-success-hover-dark);
-    color: var(--color-icon-success-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-error {
-    fill: var(--color-icon-error);
-    color: var(--color-icon-error);
-    filter: brightness(0);
-  }
-  .dark .icon-error {
-    fill: var(--color-icon-error-dark);
-    color: var(--color-icon-error-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-error:hover {
-    fill: var(--color-icon-error-hover);
-    color: var(--color-icon-error-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-error:hover {
-    fill: var(--color-icon-error-hover-dark);
-    color: var(--color-icon-error-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-warning {
-    fill: var(--color-icon-warning);
-    color: var(--color-icon-warning);
-    filter: brightness(0);
-  }
-  .dark .icon-warning {
-    fill: var(--color-icon-warning-dark);
-    color: var(--color-icon-warning-dark);
-    filter: brightness(0) invert(100%);
-  }
-  .icon-warning:hover {
-    fill: var(--color-icon-warning-hover);
-    color: var(--color-icon-warning-hover);
-    filter: brightness(0);
-  }
-  .dark .icon-warning:hover {
-    fill: var(--color-icon-warning-hover-dark);
-    color: var(--color-icon-warning-hover-dark);
-    filter: brightness(0) invert(100%);
-  }
-  
-  .icon-inverse {
-    fill: var(--color-icon-inverse);
-    color: var(--color-icon-inverse);
-    filter: brightness(0) invert(100%);
-  }
-  .dark .icon-inverse {
-    fill: var(--color-icon-inverse-dark);
-    color: var(--color-icon-inverse-dark);
-    filter: brightness(0);
-  }
-  
-  /* Logo Utility Classes - Automatic dark mode detection like Tailwind v4 */
+  /* Logo Utility Classes - Using Tailwind utilities */
   .logo {
-    filter: brightness(0); /* Black in light mode */
+    @apply brightness-0 dark:invert;
   }
   
-  @media (prefers-color-scheme: dark) {
-    .logo {
-      filter: brightness(0) invert(1); /* White in dark mode */
-    }
+
+
+  /* PWA Header Safe Area Classes */
+  .pwa-header {
+    padding-top: var(--safe-area-inset-top);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
   }
-  
-  /* Class-based override for manual toggles */
-  .dark .logo {
-    filter: brightness(0) invert(1); /* White when dark class is present */
+
+  .pwa-footer {
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
   }
+
+  /* PWA Main Content Safe Area */
+  .pwa-main {
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+
 }

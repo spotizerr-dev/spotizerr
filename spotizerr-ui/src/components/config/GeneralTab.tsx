@@ -84,7 +84,7 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
             className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="spotify">Spotify</option>
-            <option value="deezer">Deezer</option>
+            <option value="deezer" disabled>Deezer (not yet...)</option>
           </select>
         </div>
       </div>
@@ -133,7 +133,7 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
             <span className={`font-semibold ${globalSettings?.explicitFilter ? "text-success" : "text-error"}`}>
               {globalSettings?.explicitFilter ? "Enabled" : "Disabled"}
             </span>
-            <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-inverse dark:text-content-inverse-dark px-2 py-1 rounded-full">ENV</span>
+            <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark px-2 py-1 rounded-full">ENV</span>
           </div>
         </div>
         <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">
