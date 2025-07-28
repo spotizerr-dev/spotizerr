@@ -63,7 +63,7 @@ export const Track = () => {
   const imageUrl = track.album.images?.[0]?.url;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-8">
+    <div className="max-w-6xl mx-auto p-4 md:p-8">
       <div className="mb-6">
         <button
           onClick={() => window.history.back()}
@@ -73,65 +73,120 @@ export const Track = () => {
           <span>Back to results</span>
         </button>
       </div>
-      <div className="bg-surface dark:bg-surface-secondary-dark shadow-lg rounded-lg overflow-hidden md:flex">
-        {imageUrl && (
-          <div className="md:w-1/3">
-            <img src={imageUrl} alt={track.album.name} className="w-full h-auto object-cover" />
+      
+      {/* Hero Section with Cover */}
+      <div className="bg-gradient-to-b from-surface-muted to-surface dark:from-surface-muted-dark dark:to-surface-dark rounded-lg overflow-hidden mb-8">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-6 p-6 md:p-8">
+          {/* Album Cover */}
+          <div className="flex-shrink-0">
+            {imageUrl ? (
+              <img 
+                src={imageUrl} 
+                alt={track.album.name} 
+                className="w-48 h-48 md:w-64 md:h-64 object-cover rounded-lg shadow-2xl"
+              />
+            ) : (
+              <div className="w-48 h-48 md:w-64 md:h-64 bg-surface-accent dark:bg-surface-accent-dark rounded-lg shadow-2xl flex items-center justify-center">
+                <img src="/placeholder.jpg" alt="No cover" className="w-16 h-16 opacity-50 logo" />
+              </div>
+            )}
           </div>
-        )}
-        <div className="p-6 md:w-2/3 flex flex-col justify-between">
-          <div>
-            <div className="flex items-baseline justify-between">
-              <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">{track.name}</h1>
+          
+          {/* Track Info */}
+          <div className="flex-1 text-center md:text-left md:pb-4">
+            <div className="flex flex-col md:flex-row md:items-baseline gap-2 md:gap-4 mb-2">
+              <h1 className="text-3xl md:text-5xl font-bold text-content-primary dark:text-content-primary-dark leading-tight">
+                {track.name}
+              </h1>
               {track.explicit && (
-                <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-inverse dark:text-content-inverse-dark px-2 py-1 rounded-full">EXPLICIT</span>
+                <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-inverse dark:text-content-inverse-dark px-3 py-1 rounded-full self-center md:self-auto">
+                  EXPLICIT
+                </span>
               )}
             </div>
-            <div className="text-lg text-content-secondary dark:text-content-secondary-dark mt-1">
+            
+            <div className="text-lg md:text-xl text-content-secondary dark:text-content-secondary-dark mb-2">
               {track.artists.map((artist, index) => (
                 <span key={artist.id}>
-                  <Link to="/artist/$artistId" params={{ artistId: artist.id }}>
+                  <Link 
+                    to="/artist/$artistId" 
+                    params={{ artistId: artist.id }}
+                    className="hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
+                  >
                     {artist.name}
                   </Link>
                   {index < track.artists.length - 1 && ", "}
                 </span>
               ))}
             </div>
-            <p className="text-md text-content-muted dark:text-content-muted-dark mt-4">
-              From the album{" "}
-              <Link to="/album/$albumId" params={{ albumId: track.album.id }} className="font-semibold">
+            
+            <p className="text-content-muted dark:text-content-muted-dark">
+              From{" "}
+              <Link 
+                to="/album/$albumId" 
+                params={{ albumId: track.album.id }} 
+                className="font-semibold hover:text-content-primary dark:hover:text-content-primary-dark transition-colors"
+              >
                 {track.album.name}
               </Link>
             </p>
-            <div className="mt-4 text-sm text-content-secondary dark:text-content-secondary-dark">
-              <p>Release Date: {track.album.release_date}</p>
-              <p>Duration: {formatDuration(track.duration_ms)}</p>
-            </div>
-            <div className="mt-4">
-              <p className="text-sm text-content-secondary dark:text-content-secondary-dark">Popularity:</p>
-              <div className="w-full bg-surface-muted dark:bg-surface-muted-dark rounded-full h-2.5">
-                <div className="bg-success h-2.5 rounded-full" style={{ width: `${track.popularity}%` }}></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Details Section */}
+      <div className="bg-surface dark:bg-surface-secondary-dark rounded-lg shadow-lg p-6 md:p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Track Details */}
+          <div>
+            <h2 className="text-lg font-semibold text-content-primary dark:text-content-primary-dark mb-4">Track Details</h2>
+            <div className="space-y-2 text-sm text-content-secondary dark:text-content-secondary-dark">
+              <div className="flex gap-4">
+                <span className="w-24 flex-shrink-0">Release Date:</span>
+                <span>{track.album.release_date}</span>
+              </div>
+              <div className="flex gap-4">
+                <span className="w-24 flex-shrink-0">Duration:</span>
+                <span>{formatDuration(track.duration_ms)}</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-4 mt-6">
-            <button
-              onClick={handleDownloadTrack}
-              className="bg-button-primary hover:bg-button-primary-hover text-button-primary-text font-bold py-2 px-4 rounded-full transition duration-300"
-            >
-              Download
-            </button>
-            <a
-              href={track.external_urls.spotify}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition duration-300"
-              aria-label="Listen on Spotify"
-            >
-              <FaSpotify size={24} className="icon-secondary hover:icon-primary" />
-              <span className="font-semibold">Listen on Spotify</span>
-            </a>
+          
+          {/* Popularity */}
+          <div>
+            <h2 className="text-lg font-semibold text-content-primary dark:text-content-primary-dark mb-4">Popularity</h2>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 bg-surface-muted dark:bg-surface-muted-dark rounded-full h-3">
+                <div 
+                  className="bg-primary h-3 rounded-full transition-all duration-500" 
+                  style={{ width: `${track.popularity}%` }}
+                ></div>
+              </div>
+              <span className="text-sm font-medium text-content-secondary dark:text-content-secondary-dark">
+                {track.popularity}%
+              </span>
+            </div>
           </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <button
+            onClick={handleDownloadTrack}
+            className="w-full sm:w-auto bg-button-primary hover:bg-button-primary-hover text-button-primary-text font-bold py-3 px-8 rounded-full transition duration-300 shadow-lg hover:shadow-xl"
+          >
+            Download
+          </button>
+          <a
+            href={track.external_urls.spotify}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto flex items-center justify-center gap-3 text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition duration-300 py-3 px-8 border border-border dark:border-border-dark rounded-full hover:border-border-accent dark:hover:border-border-accent-dark"
+            aria-label="Listen on Spotify"
+          >
+            <FaSpotify size={20} className="icon-secondary hover:icon-primary" />
+            <span className="font-semibold">Listen on Spotify</span>
+          </a>
         </div>
       </div>
     </div>

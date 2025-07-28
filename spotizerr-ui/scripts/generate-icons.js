@@ -4,6 +4,16 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import toIco from 'to-ico';
 
+// Helper function to create a rounded square mask
+async function createRoundedSquareMask(size, radius) {
+  const svg = `
+    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="white"/>
+    </svg>
+  `;
+  return Buffer.from(svg);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -80,26 +90,36 @@ async function generateIcons() {
         size: 16, 
         name: 'favicon-16x16.png',
         padding: 0.1, // 10% padding for small icons
+        rounded: true,
+        cornerRadius: 3, // 3px radius for small icons
       },
       { 
         size: 32, 
         name: 'favicon-32x32.png',
         padding: 0.1,
+        rounded: true,
+        cornerRadius: 6, // 6px radius
       },
       { 
         size: 180, 
         name: 'apple-touch-icon-180x180.png',
         padding: 0.05, // 5% padding for Apple (they prefer less padding)
+        rounded: true,
+        cornerRadius: 32, // ~18% radius for Apple icons
       },
       { 
         size: 192, 
         name: 'pwa-192x192.png',
         padding: 0.1,
+        rounded: true,
+        cornerRadius: 34, // ~18% radius
       },
       { 
         size: 512, 
         name: 'pwa-512x512.png',
         padding: 0.1,
+        rounded: true,
+        cornerRadius: 92, // ~18% radius
       }
     ];
 
@@ -107,7 +127,9 @@ async function generateIcons() {
     const sourceImage = sharp(processedImage);
 
     for (const config of iconConfigs) {
-      const { size, name, padding } = config;
+      const { size, name, padding, rounded, cornerRadius } = config;
+      
+      let finalIcon;
       
       if (padding > 0) {
         // Create icon with padding by compositing on a background
@@ -115,7 +137,7 @@ async function generateIcons() {
         const offset = Math.round((size - paddedSize) / 2);
 
         // Create a pure black background and composite the resized logo on top
-        await sharp({
+        finalIcon = await sharp({
           create: {
             width: size,
             height: size,
@@ -129,25 +151,42 @@ async function generateIcons() {
           left: offset
         }])
         .png()
-        .toFile(join(publicDir, name));
+        .toBuffer();
       } else {
         // Direct resize without padding
-        await sourceImage
+        finalIcon = await sourceImage
           .resize(size, size)
           .png()
-          .toFile(join(publicDir, name));
+          .toBuffer();
       }
 
-      console.log(`✅ Generated ${name} (${size}x${size}) - padding: ${padding * 100}%`);
+      // Apply rounded corners if specified
+      if (rounded && cornerRadius > 0) {
+        const mask = await createRoundedSquareMask(size, cornerRadius);
+        finalIcon = await sharp(finalIcon)
+          .composite([{
+            input: mask,
+            blend: 'dest-in'
+          }])
+          .png()
+          .toBuffer();
+      }
+
+      // Write the final icon to file
+      await sharp(finalIcon).toFile(join(publicDir, name));
+
+      const roundedText = rounded ? ` - rounded (${cornerRadius}px)` : '';
+      console.log(`✅ Generated ${name} (${size}x${size}) - padding: ${padding * 100}%${roundedText}`);
     }
 
-    // Create maskable icon (less padding, solid background)
+    // Create maskable icon (less padding, solid background, rounded)
     const maskableSize = 512;
     const maskablePadding = 0.05; // 5% padding for maskable icons
+    const maskableRadius = 92; // ~18% radius for consistency
     const maskablePaddedSize = Math.round(maskableSize * (1 - maskablePadding * 2));
     const maskableOffset = Math.round((maskableSize - maskablePaddedSize) / 2);
 
-    await sharp({
+    let maskableIcon = await sharp({
       create: {
         width: maskableSize,
         height: maskableSize,
@@ -161,47 +200,33 @@ async function generateIcons() {
       left: maskableOffset
     }])
     .png()
-    .toFile(join(publicDir, 'pwa-512x512-maskable.png'));
+    .toBuffer();
 
-    console.log(`✅ Generated pwa-512x512-maskable.png (${maskableSize}x${maskableSize}) - maskable`);
+    // Apply rounded corners to maskable icon
+    const maskableMask = await createRoundedSquareMask(maskableSize, maskableRadius);
+    maskableIcon = await sharp(maskableIcon)
+      .composite([{
+        input: maskableMask,
+        blend: 'dest-in'
+      }])
+      .png()
+      .toBuffer();
 
-    // Generate additional favicon sizes for ICO compatibility
+    await sharp(maskableIcon).toFile(join(publicDir, 'pwa-512x512-maskable.png'));
+
+    console.log(`✅ Generated pwa-512x512-maskable.png (${maskableSize}x${maskableSize}) - maskable, rounded (${maskableRadius}px)`);
+
+    // Generate additional favicon sizes for ICO compatibility (with rounded corners)
     const additionalSizes = [48, 64, 96, 128, 256];
     for (const size of additionalSizes) {
       const padding = size <= 48 ? 0.05 : 0.1;
       const paddedSize = Math.round(size * (1 - padding * 2));
       const offset = Math.round((size - paddedSize) / 2);
+      
+      // Calculate corner radius proportional to size (~18% for larger icons, smaller for tiny ones)
+      const cornerRadius = size <= 48 ? Math.round(size * 0.125) : Math.round(size * 0.18);
 
-      await sharp({
-        create: {
-          width: size,
-          height: size,
-          channels: 4,
-          background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background
-        }
-      })
-      .composite([{
-        input: await sourceImage.resize(paddedSize, paddedSize).png().toBuffer(),
-        top: offset,
-        left: offset
-      }])
-      .png()
-      .toFile(join(publicDir, `favicon-${size}x${size}.png`));
-
-      console.log(`✅ Generated favicon-${size}x${size}.png (${size}x${size}) - padding: ${padding * 100}%`);
-    }
-
-    // Generate favicon.ico with multiple sizes
-    console.log('🎯 Generating favicon.ico...');
-    const icoSizes = [16, 32, 48];
-    const icoBuffers = [];
-
-    for (const size of icoSizes) {
-      const padding = 0.1; // 10% padding for ICO
-      const paddedSize = Math.round(size * (1 - padding * 2));
-      const offset = Math.round((size - paddedSize) / 2);
-
-      const buffer = await sharp({
+      let additionalIcon = await sharp({
         create: {
           width: size,
           height: size,
@@ -217,29 +242,82 @@ async function generateIcons() {
       .png()
       .toBuffer();
 
-      icoBuffers.push(buffer);
+      // Apply rounded corners
+      const additionalMask = await createRoundedSquareMask(size, cornerRadius);
+      additionalIcon = await sharp(additionalIcon)
+        .composite([{
+          input: additionalMask,
+          blend: 'dest-in'
+        }])
+        .png()
+        .toBuffer();
+
+      await sharp(additionalIcon).toFile(join(publicDir, `favicon-${size}x${size}.png`));
+
+      console.log(`✅ Generated favicon-${size}x${size}.png (${size}x${size}) - padding: ${padding * 100}%, rounded (${cornerRadius}px)`);
+    }
+
+    // Generate favicon.ico with multiple sizes (rounded)
+    console.log('🎯 Generating favicon.ico with rounded corners...');
+    const icoSizes = [16, 32, 48];
+    const icoBuffers = [];
+
+    for (const size of icoSizes) {
+      const padding = 0.1; // 10% padding for ICO
+      const paddedSize = Math.round(size * (1 - padding * 2));
+      const offset = Math.round((size - paddedSize) / 2);
+      const cornerRadius = size <= 32 ? Math.round(size * 0.125) : Math.round(size * 0.18);
+
+      let icoIcon = await sharp({
+        create: {
+          width: size,
+          height: size,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 1 } // Pure black background
+        }
+      })
+      .composite([{
+        input: await sourceImage.resize(paddedSize, paddedSize).png().toBuffer(),
+        top: offset,
+        left: offset
+      }])
+      .png()
+      .toBuffer();
+
+      // Apply rounded corners to ICO icon
+      const icoMask = await createRoundedSquareMask(size, cornerRadius);
+      const roundedIcoIcon = await sharp(icoIcon)
+        .composite([{
+          input: icoMask,
+          blend: 'dest-in'
+        }])
+        .png()
+        .toBuffer();
+
+      icoBuffers.push(roundedIcoIcon);
     }
 
     // Create the ICO file
     const icoBuffer = await toIco(icoBuffers);
     writeFileSync(join(publicDir, 'favicon.ico'), icoBuffer);
 
-    console.log(`✅ Generated favicon.ico (${icoSizes.join('x, ')}x sizes) - multi-size ICO`);
+    console.log(`✅ Generated favicon.ico (${icoSizes.join('x, ')}x sizes) - multi-size ICO, rounded corners`);
     
-    console.log('🎉 All PWA icons generated successfully!');
+    console.log('🎉 All PWA icons generated successfully with rounded corners!');
     console.log('');
     console.log('📋 Generated files:');
     iconConfigs.forEach(config => {
-      console.log(`   • ${config.name} (${config.size}x${config.size})`);
+      console.log(`   • ${config.name} (${config.size}x${config.size}) - rounded`);
     });
-    console.log('   • pwa-512x512-maskable.png (512x512)');
+    console.log('   • pwa-512x512-maskable.png (512x512) - rounded');
     additionalSizes.forEach(size => {
-      console.log(`   • favicon-${size}x${size}.png (${size}x${size})`);
+      console.log(`   • favicon-${size}x${size}.png (${size}x${size}) - rounded`);
     });
-    console.log('   • favicon.ico (multi-size: 16x16, 32x32, 48x48)');
+    console.log('   • favicon.ico (multi-size: 16x16, 32x32, 48x48) - rounded');
     console.log('');
     console.log('💡 Icons generated from SVG source, scaled by 0.67, and centered on pure black backgrounds.');
-    console.log('💡 The SVG logo is automatically processed and optimized for all icon formats.');
+    console.log('💡 All icons feature rounded corners for a modern, polished appearance.');
+    console.log('💡 Corner radius scales proportionally with icon size (~18% for larger icons, ~12.5% for smaller ones).');
     console.log('💡 favicon.ico contains multiple sizes for optimal browser compatibility.');
 
   } catch (error) {

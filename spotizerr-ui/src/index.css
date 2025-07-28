@@ -1,103 +1,110 @@
 @import "tailwindcss";
 
 @theme {
-  /* Background Colors */
+  /* Background Colors - Light theme: pure white to warm grays */
   --color-surface: #ffffff;
-  --color-surface-secondary: #f8fafc;
-  --color-surface-muted: #f1f5f9;
-  --color-surface-accent: #e2e8f0;
-  --color-surface-overlay: rgba(255, 255, 255, 0.95);
+  --color-surface-secondary: #fafbfc;
+  --color-surface-muted: #f4f6f8;
+  --color-surface-accent: #e8ecf0;
+  --color-surface-overlay: rgba(255, 255, 255, 0.96);
   
-  /* Dark mode backgrounds */
-  --color-surface-dark: #0f172a;
-  --color-surface-secondary-dark: #1e293b;
-  --color-surface-muted-dark: #334155;
-  --color-surface-accent-dark: #475569;
-  --color-surface-overlay-dark: rgba(15, 23, 42, 0.95);
+  /* Dark mode backgrounds - Rich blacks with subtle warm undertones */
+  --color-surface-dark: #0a0a0a;
+  --color-surface-secondary-dark: #141414;
+  --color-surface-muted-dark: #1f1f1f;
+  --color-surface-accent-dark: #2d2d2d;
+  --color-surface-overlay-dark: rgba(10, 10, 10, 0.96);
 
-  /* Text Colors */
-  --color-content-primary: #0f172a;
-  --color-content-secondary: #475569;
-  --color-content-muted: #64748b;
-  --color-content-accent: #94a3b8;
+  /* Text Colors - Light theme with enhanced contrast */
+  --color-content-primary: #0d1117;
+  --color-content-secondary: #57606a;
+  --color-content-muted: #768390;
+  --color-content-accent: #8c959f;
   --color-content-inverse: #ffffff;
   
-  /* Dark mode text */
-  --color-content-primary-dark: #f8fafc;
-  --color-content-secondary-dark: #e2e8f0;
-  --color-content-muted-dark: #cbd5e1;
-  --color-content-accent-dark: #94a3b8;
-  --color-content-inverse-dark: #0f172a;
+  /* Dark mode text - Crisp whites and refined grays */
+  --color-content-primary-dark: #f0f6fc;
+  --color-content-secondary-dark: #c9d1d9;
+  --color-content-muted-dark: #8b949e;
+  --color-content-accent-dark: #6e7681;
+  --color-content-inverse-dark: #0d1117;
 
-  /* Interactive Colors */
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-active: #1d4ed8;
-  --color-primary-muted: #dbeafe;
+  /* Interactive Colors - Enhanced Spotify green with sophistication */
+  --color-primary: #1ed760;
+  --color-primary-hover: #1fdf64;
+  --color-primary-active: #1db954;
+  --color-primary-muted: #d1f7e0;
   
-  --color-secondary: #64748b;
-  --color-secondary-hover: #475569;
-  --color-secondary-active: #334155;
-  --color-secondary-muted: #f1f5f9;
+  /* Secondary colors with purple accent for contrast */
+  --color-secondary: #8b5fbf;
+  --color-secondary-hover: #9d70d1;
+  --color-secondary-active: #7a4fa3;
+  --color-secondary-muted: #f0ebff;
+  
+  /* Accent purple for complementary design */
+  --color-accent: #8b5fbf;
+  --color-accent-hover: #9d70d1;
+  --color-accent-active: #7a4fa3;
+  --color-accent-muted: #f0ebff;
 
-  /* Status Colors */
-  --color-success: #22c55e;
-  --color-success-hover: #16a34a;
-  --color-success-muted: #dcfce7;
-  --color-success-text: #15803d;
+  /* Status Colors - Refined and harmonious */
+  --color-success: #28a745;
+  --color-success-hover: #1e7b34;
+  --color-success-muted: #d4edda;
+  --color-success-text: #155724;
   
-  --color-error: #ef4444;
-  --color-error-hover: #dc2626;
-  --color-error-muted: #fef2f2;
-  --color-error-text: #dc2626;
+  --color-error: #dc3545;
+  --color-error-hover: #c82333;
+  --color-error-muted: #f8d7da;
+  --color-error-text: #721c24;
   
-  --color-warning: #f59e0b;
-  --color-warning-hover: #d97706;
-  --color-warning-muted: #fef3c7;
-  --color-warning-text: #d97706;
+  --color-warning: #fd7e14;
+  --color-warning-hover: #e8590c;
+  --color-warning-muted: #fff3cd;
+  --color-warning-text: #856404;
   
-  --color-info: #3b82f6;
-  --color-info-hover: #2563eb;
-  --color-info-muted: #dbeafe;
-  --color-info-text: #2563eb;
+  --color-info: #17a2b8;
+  --color-info-hover: #138496;
+  --color-info-muted: #d1ecf1;
+  --color-info-text: #0c5460;
   
-  --color-processing: #a855f7;
-  --color-processing-hover: #9333ea;
-  --color-processing-muted: #f3e8ff;
-  --color-processing-text: #9333ea;
+  --color-processing: #8b5fbf;
+  --color-processing-hover: #7a4fa3;
+  --color-processing-muted: #f0ebff;
+  --color-processing-text: #5d3e7a;
 
-  /* Border Colors */
-  --color-border: #e2e8f0;
-  --color-border-muted: #f1f5f9;
-  --color-border-accent: #cbd5e1;
-  --color-border-focus: #3b82f6;
-  --color-border-dark: #475569;
-  --color-border-muted-dark: #334155;
-  --color-border-accent-dark: #64748b;
+  /* Border Colors - Subtle and refined */
+  --color-border: #e1e5e9;
+  --color-border-muted: #f4f6f8;
+  --color-border-accent: #d0d7de;
+  --color-border-focus: #1ed760;
+  --color-border-dark: #30363d;
+  --color-border-muted-dark: #21262d;
+  --color-border-accent-dark: #373e47;
 
   /* Input Colors */
-  --color-input-background: #f1f5f9;
-  --color-input-border: #e2e8f0;
-  --color-input-focus: #3b82f6;
-  --color-input-background-dark: #1e293b;
-  --color-input-border-dark: #475569;
+  --color-input-background: #f4f6f8;
+  --color-input-border: #e1e5e9;
+  --color-input-focus: #1ed760;
+  --color-input-background-dark: #21262d;
+  --color-input-border-dark: #30363d;
 
   /* Button Colors */
-  --color-button-primary: #3b82f6;
-  --color-button-primary-hover: #2563eb;
+  --color-button-primary: #1ed760;
+  --color-button-primary-hover: #1fdf64;
   --color-button-primary-text: #ffffff;
   
-  --color-button-secondary: #f1f5f9;
-  --color-button-secondary-hover: #64748b;
-  --color-button-secondary-text: #64748b;
+  --color-button-secondary: #f4f6f8;
+  --color-button-secondary-hover: #8b5fbf;
+  --color-button-secondary-text: #57606a;
   --color-button-secondary-text-hover: #ffffff;
   
-  --color-button-success: #22c55e;
-  --color-button-success-hover: #16a34a;
+  --color-button-success: #28a745;
+  --color-button-success-hover: #1e7b34;
   --color-button-success-text: #ffffff;
 
-  --color-icon-button-hover: #e5e7eb;
-  --color-icon-button-hover-dark: #334155;
+  --color-icon-button-hover: #e8ecf0;
+  --color-icon-button-hover-dark: #30363d;
 
   /* Icon Colors */
   --color-icon-primary: #000000;
@@ -315,5 +322,21 @@
     fill: var(--color-icon-inverse-dark);
     color: var(--color-icon-inverse-dark);
     filter: brightness(0);
+  }
+  
+  /* Logo Utility Classes - Automatic dark mode detection like Tailwind v4 */
+  .logo {
+    filter: brightness(0); /* Black in light mode */
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    .logo {
+      filter: brightness(0) invert(1); /* White in dark mode */
+    }
+  }
+  
+  /* Class-based override for manual toggles */
+  .dark .logo {
+    filter: brightness(0) invert(1); /* White when dark class is present */
   }
 }
