@@ -343,55 +343,59 @@ export const History = () => {
         <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">Download History</h1>
       )}
 
-      {/* Filter Controls */}
+      {/* Filter Controls - Responsive */}
       {!parentTaskId && (
-        <div className="flex gap-4 items-center">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
-          >
-            <option value="">All Statuses</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="ERROR">Error</option>
-            <option value="CANCELLED">Cancelled</option>
-            <option value="SKIPPED">Skipped</option>
-          </select>
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
-          >
-            <option value="">All Types</option>
-            <option value="track">Track</option>
-            <option value="album">Album</option>
-            <option value="playlist">Playlist</option>
-            <option value="artist">Artist</option>
-          </select>
-          <select
-            value={trackStatusFilter}
-            onChange={(e) => setTrackStatusFilter(e.target.value)}
-            className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
-          >
-            <option value="">All Track Statuses</option>
-            <option value="SUCCESSFUL">Successful</option>
-            <option value="SKIPPED">Skipped</option>
-            <option value="FAILED">Failed</option>
-          </select>
-          <label className="flex items-center gap-2 text-content-primary dark:text-content-primary-dark">
-            <input
-              type="checkbox"
-              checked={showChildTracks}
-              onChange={(e) => setShowChildTracks(e.target.checked)}
-              disabled={!!parentTaskId}
-            />
-            Include child tracks
-          </label>
+        <div className="space-y-4">
+          {/* Mobile: Stacked filters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+            >
+              <option value="">All Statuses</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="ERROR">Error</option>
+              <option value="CANCELLED">Cancelled</option>
+              <option value="SKIPPED">Skipped</option>
+            </select>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+            >
+              <option value="">All Types</option>
+              <option value="track">Track</option>
+              <option value="album">Album</option>
+              <option value="playlist">Playlist</option>
+              <option value="artist">Artist</option>
+            </select>
+            <select
+              value={trackStatusFilter}
+              onChange={(e) => setTrackStatusFilter(e.target.value)}
+              className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+            >
+              <option value="">All Track Statuses</option>
+              <option value="SUCCESSFUL">Successful</option>
+              <option value="SKIPPED">Skipped</option>
+              <option value="FAILED">Failed</option>
+            </select>
+            <label className="flex items-center gap-2 text-content-primary dark:text-content-primary-dark">
+              <input
+                type="checkbox"
+                checked={showChildTracks}
+                onChange={(e) => setShowChildTracks(e.target.checked)}
+                disabled={!!parentTaskId}
+                className="rounded"
+              />
+              <span className="text-sm">Include child tracks</span>
+            </label>
+          </div>
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* Desktop Table */}
+      <div className="hidden lg:block overflow-x-auto">
         <table className="min-w-full">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -455,39 +459,149 @@ export const History = () => {
         </table>
       </div>
 
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between gap-2">
-        <button
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
-          className="p-2 border bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover border-border dark:border-border-dark rounded-md disabled:opacity-50"
-        >
-          Previous
-        </button>
-        <span className="text-content-primary dark:text-content-primary-dark">
-          Page{" "}
-          <strong>
-            {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-          </strong>
-        </span>
-        <button
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-          className="p-2 border bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover border-border dark:border-border-dark rounded-md disabled:opacity-50"
-        >
-          Next
-        </button>
-        <select
-          value={table.getState().pagination.pageSize}
-          onChange={(e) => table.setPageSize(Number(e.target.value))}
-          className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
-        >
-          {[10, 25, 50, 100].map((size) => (
-            <option key={size} value={size}>
-              Show {size}
-            </option>
-          ))}
-        </select>
+      {/* Mobile Card Layout */}
+      <div className="lg:hidden space-y-3">
+        {isLoading ? (
+          <div className="text-center p-8 text-content-muted dark:text-content-muted-dark">
+            Loading...
+          </div>
+        ) : table.getRowModel().rows.length === 0 ? (
+          <div className="text-center p-8 text-content-muted dark:text-content-muted-dark">
+            No history entries found.
+          </div>
+        ) : (
+          table.getRowModel().rows.map((row) => {
+            const entry = row.original;
+            const isParent = !entry.parent_task_id && (entry.download_type === "album" || entry.download_type === "playlist");
+            const isChild = !!entry.parent_task_id;
+            const status = entry.parent_task_id ? entry.track_status : entry.status_final;
+            const statusKey = (status || "").toUpperCase();
+            const statusClass = {
+              COMPLETED: "text-success",
+              SUCCESSFUL: "text-success", 
+              ERROR: "text-error",
+              FAILED: "text-error",
+              CANCELLED: "text-content-muted dark:text-content-muted-dark",
+              SKIPPED: "text-warning",
+            }[statusKey] || "text-gray-500";
+
+            let cardClass = "bg-surface dark:bg-surface-secondary-dark rounded-lg border border-border dark:border-border-dark p-4";
+            if (isParent) {
+              cardClass += " border-l-4 border-l-primary";
+            } else if (isChild) {
+              cardClass += " ml-4 border-l-2 border-l-content-muted dark:border-l-content-muted-dark";
+            }
+
+            return (
+              <div key={row.id} className={cardClass}>
+                {/* Header */}
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className={`font-semibold text-content-primary dark:text-content-primary-dark truncate ${isChild ? 'text-sm' : 'text-base'}`}>
+                      {isChild ? `└─ ${entry.item_name}` : entry.item_name}
+                    </h3>
+                    <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate">
+                      {entry.item_artist}
+                    </p>
+                  </div>
+                  <span className={`text-sm font-semibold ${statusClass} ml-2`}>
+                    {status}
+                  </span>
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+                  <div>
+                    <span className="text-content-muted dark:text-content-muted-dark">Type:</span>
+                    <span className="ml-1 capitalize text-content-primary dark:text-content-primary-dark">
+                      {entry.download_type}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-content-muted dark:text-content-muted-dark">Source:</span>
+                    <span className="ml-1 text-content-primary dark:text-content-primary-dark">
+                      {getDownloadSource(entry)}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-content-muted dark:text-content-muted-dark">Quality:</span>
+                    <span className="ml-1 text-content-primary dark:text-content-primary-dark">
+                      {formatQuality(entry)}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-content-muted dark:text-content-muted-dark">Completed:</span>
+                    <span className="ml-1 text-content-primary dark:text-content-primary-dark">
+                      {new Date(entry.timestamp_completed * 1000).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions for parent entries */}
+                {!parentTaskId && isParent && (
+                  entry.total_successful || entry.total_skipped || entry.total_failed
+                ) ? (
+                  <div className="mt-3 pt-3 border-t border-border dark:border-border-dark flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-success">{entry.total_successful ?? 0} ✓</span>
+                      <span className="text-warning">{entry.total_skipped ?? 0} ⊘</span>
+                      <span className="text-error">{entry.total_failed ?? 0} ✗</span>
+                    </div>
+                    <button
+                      onClick={() => viewTracksForParent(entry)}
+                      className="px-3 py-1 text-xs rounded-md bg-primary hover:bg-primary-hover text-white"
+                    >
+                      View Tracks
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Pagination Controls - Responsive */}
+      <div className="space-y-4">
+        {/* Mobile: Stacked layout */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center justify-center sm:justify-start gap-2">
+            <button
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="px-4 py-2 border bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover border-border dark:border-border-dark rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="px-4 py-2 border bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover border-border dark:border-border-dark rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row items-center gap-2 text-sm">
+            <span className="text-content-primary dark:text-content-primary-dark whitespace-nowrap">
+              Page{" "}
+              <strong>
+                {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+              </strong>
+            </span>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => table.setPageSize(Number(e.target.value))}
+              className="px-3 py-1 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+            >
+              {[10, 25, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  Show {size}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   );
