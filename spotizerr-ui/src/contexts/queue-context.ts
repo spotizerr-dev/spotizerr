@@ -44,6 +44,7 @@ export interface QueueItem {
 export interface QueueContextType {
   items: QueueItem[];
   isVisible: boolean;
+  activeCount: number;
   addItem: (item: { name: string; type: DownloadType; spotifyId: string; artist?: string }) => void;
   removeItem: (id: string) => void;
   retryItem: (id: string) => void;

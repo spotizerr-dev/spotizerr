@@ -1,4 +1,4 @@
-import { useState, useCallback, type ReactNode, useEffect, useRef } from "react";
+import { useState, useCallback, type ReactNode, useEffect, useRef, useMemo } from "react";
 import apiClient from "../lib/api-client";
 import {
     QueueContext,
@@ -40,6 +40,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const pollingIntervals = useRef<Record<string, number>>({});
+
+  // Calculate active downloads count
+  const activeCount = useMemo(() => {
+    return items.filter(item => !isTerminalStatus(item.status)).length;
+  }, [items]);
 
   const stopPolling = useCallback((internalId: string) => {
     if (pollingIntervals.current[internalId]) {
@@ -180,7 +185,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         status: "initializing",
       };
       setItems(prev => [newItem, ...prev]);
-      setIsVisible(true);
 
       try {
         const response = await apiClient.get<{ task_id: string }>(
@@ -398,6 +402,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const value = {
     items,
     isVisible,
+    activeCount,
     addItem,
     removeItem,
     retryItem,
