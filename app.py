@@ -23,7 +23,6 @@ from urllib.parse import urlparse
 # Import Celery configuration and manager
 from routes.utils.celery_manager import celery_manager
 from routes.utils.celery_config import REDIS_URL
-from routes.utils.history_manager import init_history_db
 
 
 # Configure application-wide logging
@@ -149,9 +148,6 @@ def create_app():
 
     # Set up CORS
     CORS(app)
-
-    # Initialize databases
-    init_history_db()
 
     # Register blueprints
     app.register_blueprint(config_bp, url_prefix="/api")

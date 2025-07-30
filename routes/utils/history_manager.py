@@ -1,1414 +1,938 @@
 import sqlite3
 import json
+import uuid
 import time
 import logging
-import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
-HISTORY_DIR = Path("./data/history")
-HISTORY_DB_FILE = HISTORY_DIR / "download_history.db"
-
-# Main tasks table schema
-MAIN_TASKS_SCHEMA = {
-    "task_id": "TEXT PRIMARY KEY",
-    "task_type": "TEXT NOT NULL",  # 'track', 'album', 'playlist'
-    "title": "TEXT",
-    "artists": "TEXT",  # JSON array of artist objects
-    "ids": "TEXT",  # JSON object with spotify, deezer, isrc, upc
-    "status_current": "TEXT",  # Current status: initializing, retrying, real-time, skipped, error, done
-    "status_final": "TEXT",  # Final result: COMPLETED, ERROR, CANCELLED, SKIPPED
-    "timestamp_created": "REAL",
-    "timestamp_updated": "REAL",
-    "timestamp_completed": "REAL",
-    "children_table": "TEXT",  # Table name for nested items (album_uuid, playlist_uuid)
-    "metadata": "TEXT",  # JSON - Complete object data (albumObject, playlistObject, trackObject)
-    "config": "TEXT",  # JSON - Download config (quality, convert_to, bitrate, service)
-    "error_info": "TEXT",  # JSON - Error details
-    "progress": "TEXT",  # JSON - Progress info (current/total, time_elapsed, etc.)
-    "summary": "TEXT",  # JSON - Final summary for albums/playlists
-    "parent_task_id": "TEXT",  # Reference to parent task for individual tracks
-    "position": "INTEGER",  # Position in parent (for playlist tracks)
-    "original_request": "TEXT"  # JSON - Original request data
-}
-
-# Status history table for tracking all status changes
-STATUS_HISTORY_SCHEMA = {
-    "status_id": "INTEGER PRIMARY KEY AUTOINCREMENT",
-    "task_id": "TEXT NOT NULL",
-    "status_type": "TEXT NOT NULL",  # initializing, retrying, real-time, skipped, error, done
-    "status_data": "TEXT",  # JSON - Complete status object
-    "timestamp": "REAL NOT NULL"
-}
-
-# Schema for individual track tables within albums/playlists
-CHILD_TRACK_SCHEMA = {
-    "track_id": "TEXT PRIMARY KEY",
-    "parent_task_id": "TEXT NOT NULL",
-    "position": "INTEGER",
-    "disc_number": "INTEGER",
-    "track_number": "INTEGER", 
-    "title": "TEXT",
-    "duration_ms": "INTEGER",
-    "explicit": "BOOLEAN",
-    "track_data": "TEXT",  # JSON - Complete trackObject (trackAlbumObject/trackPlaylistObject)
-    "artists_data": "TEXT",  # JSON - Array of artist objects
-    "album_data": "TEXT",  # JSON - Album context data (for playlist tracks)
-    "ids_data": "TEXT",  # JSON - IDs object (spotify, deezer, isrc, etc.)
-    "status_current": "TEXT",  # Current status: initializing, retrying, real-time, skipped, error, done
-    "status_final": "TEXT",   # Final result: COMPLETED, ERROR, CANCELLED, SKIPPED
-    "status_history": "TEXT", # JSON - Array of all status updates for this track
-    "timestamp_created": "REAL",
-    "timestamp_started": "REAL",  # When download actually started
-    "timestamp_completed": "REAL",
-    "time_elapsed": "REAL",   # Total processing time in seconds
-    "retry_count": "INTEGER", # Number of retries attempted
-    "error_info": "TEXT",     # JSON - Error details and reason
-    "progress_info": "TEXT",  # JSON - Progress data during download
-    "config": "TEXT",         # JSON - Download config inherited from parent
-    "download_path": "TEXT",  # Final download path/filename
-    "file_size": "INTEGER",   # File size in bytes
-    "quality_achieved": "TEXT" # Actual quality/bitrate achieved
-}
-
-
-def init_history_db():
-    """Initialize the improved history database with new schema."""
-    conn = None
-    try:
-        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-
-        # Create main tasks table
-        _create_table_from_schema(cursor, "download_tasks", MAIN_TASKS_SCHEMA)
-        
-        # Create status history table
-        _create_table_from_schema(cursor, "status_history", STATUS_HISTORY_SCHEMA)
-
-        # Check if we need to migrate from old schema
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='download_history'")
-        old_table_exists = cursor.fetchone() is not None
-        
-        if old_table_exists:
-            logger.info("Old schema detected. Starting migration...")
-            _migrate_from_old_schema(conn)
-        
-        conn.commit()
-        logger.info(f"History database initialized successfully at {HISTORY_DB_FILE}")
-        
-    except sqlite3.Error as e:
-        logger.error(f"Error initializing history database: {e}", exc_info=True)
-    finally:
-        if conn:
-            conn.close()
-
-
-def _create_table_from_schema(cursor, table_name: str, schema: Dict[str, str]):
-    """Create a table from a schema dictionary."""
-    columns = []
+class HistoryManager:
+    """
+    Manages download history storage using SQLite database.
+    Stores hierarchical download data from deezspot callback objects.
+    """
     
-    for col_name, col_def in schema.items():
-        columns.append(f"{col_name} {col_def}")
-    
-    create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({', '.join(columns)})"
-    
-    cursor.execute(create_sql)
-    logger.info(f"Created/verified table: {table_name}")
-
-
-def _migrate_from_old_schema(conn):
-    """Migrate data from the old download_history table to the new schema."""
-    cursor = conn.cursor()
-    
-    try:
-        # Get all data from old table
-        cursor.execute("SELECT * FROM download_history")
-        old_records = cursor.fetchall()
-        
-        # Get column names
-        cursor.execute("PRAGMA table_info(download_history)")
-        old_columns = [col[1] for col in cursor.fetchall()]
-        
-        logger.info(f"Migrating {len(old_records)} records from old schema...")
-        
-        # Create backup of old table
-        backup_table = f"download_history_backup_{int(time.time())}"
-        cursor.execute(f"CREATE TABLE {backup_table} AS SELECT * FROM download_history")
-        
-        migrated_count = 0
-        for record in old_records:
-            old_data = dict(zip(old_columns, record))
-            
-            # Convert old record to new format
-            new_task = _convert_old_record_to_new(old_data)
-            if new_task:
-                add_task_to_history(new_task)
-                migrated_count += 1
-        
-        logger.info(f"Successfully migrated {migrated_count} records. Old table backed up as {backup_table}")
-        
-    except Exception as e:
-        logger.error(f"Error during migration: {e}", exc_info=True)
-
-
-def _convert_old_record_to_new(old_data: Dict) -> Optional[Dict]:
-    """Convert an old history record to the new format."""
-    try:
-        # Create basic task structure
-        task_data = {
-            "task_id": old_data.get("task_id"),
-            "task_type": old_data.get("download_type", "track"),
-            "title": old_data.get("item_name", ""),
-            "timestamp_created": old_data.get("timestamp_added"),
-            "timestamp_completed": old_data.get("timestamp_completed"),
-            "status_final": old_data.get("status_final"),
-            "parent_task_id": old_data.get("parent_task_id"),
-            "original_request": old_data.get("original_request_json")
-        }
-        
-        # Build artists array
-        if old_data.get("item_artist"):
-            task_data["artists"] = json.dumps([{"name": old_data["item_artist"]}])
-        
-        # Build IDs object
-        ids = {}
-        if old_data.get("spotify_id"):
-            ids["spotify"] = old_data["spotify_id"]
-        if ids:
-            task_data["ids"] = json.dumps(ids)
-        
-        # Build config object
-        config = {}
-        if old_data.get("service_used"):
-            config["service_used"] = old_data["service_used"]
-        if old_data.get("quality_profile"):
-            config["quality_profile"] = old_data["quality_profile"]
-        if old_data.get("convert_to"):
-            config["convert_to"] = old_data["convert_to"]
-        if old_data.get("bitrate"):
-            config["bitrate"] = old_data["bitrate"]
-        if config:
-            task_data["config"] = json.dumps(config)
-        
-        # Handle error information
-        if old_data.get("error_message"):
-            task_data["error_info"] = json.dumps({"message": old_data["error_message"]})
-        
-        # Build basic metadata object
-        metadata = {
-            "type": task_data["task_type"],
-            "title": task_data["title"],
-            "url": old_data.get("item_url")
-        }
-        
-        if old_data.get("item_album"):
-            metadata["album"] = {"title": old_data["item_album"]}
-        
-        task_data["metadata"] = json.dumps(metadata)
-        
-        return task_data
-        
-    except Exception as e:
-        logger.warning(f"Failed to convert old record {old_data.get('task_id')}: {e}")
-        return None
-
-
-def create_child_table(parent_task_id: str, task_type: str) -> str:
-    """Create a child table for album or playlist tracks using UUID-based naming."""
-    # Generate a shorter UUID for the table name to avoid database identifier length limits
-    import uuid as uuid_mod
-    table_uuid = uuid_mod.uuid4().hex[:12]  # Use first 12 characters of UUID
-    table_name = f"{task_type}_{table_uuid}"
-    
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-        
-        # Create the child table
-        _create_table_from_schema(cursor, table_name, CHILD_TRACK_SCHEMA)
-        
-        # Create an index on parent_task_id for faster queries
-        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_parent ON {table_name}(parent_task_id)")
-        
-        # Create an index on position for proper ordering
-        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_position ON {table_name}(position)")
-        
-        conn.commit()
-        
-        logger.info(f"Created child table: {table_name} for parent task: {parent_task_id}")
-        return table_name
-        
-    except sqlite3.Error as e:
-        logger.error(f"Error creating child table {table_name}: {e}")
-        return ""
-    finally:
-        if conn:
-            conn.close()
-
-
-def add_task_to_history(task_data: Dict):
-    """Add or update a main task in the history."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-        
-        # Ensure required fields are present
-        required_fields = ["task_id", "task_type"]
-        for field in required_fields:
-            if field not in task_data:
-                raise ValueError(f"Missing required field: {field}")
-        
-        # Set default timestamps
-        current_time = time.time()
-        task_data.setdefault("timestamp_created", current_time)
-        task_data.setdefault("timestamp_updated", current_time)
-        
-        # Convert all values to appropriate types
-        processed_data = {}
-        for col_name in MAIN_TASKS_SCHEMA.keys():
-            if col_name in task_data:
-                value = task_data[col_name]
-                # Convert objects to JSON strings
-                if isinstance(value, (dict, list)):
-                    processed_data[col_name] = json.dumps(value)
-                else:
-                    processed_data[col_name] = value
-            else:
-                processed_data[col_name] = None
-        
-        # Create INSERT OR REPLACE query
-        columns = list(processed_data.keys())
-        placeholders = ["?" for _ in columns]
-        values = [processed_data[col] for col in columns]
-        
-        query = f"""
-            INSERT OR REPLACE INTO download_tasks ({', '.join(columns)})
-            VALUES ({', '.join(placeholders)})
+    def __init__(self, db_path: str = "data/history/download_history.db"):
         """
+        Initialize the history manager with database path.
         
-        cursor.execute(query, values)
-        conn.commit()
-        
-        logger.info(f"Added/updated task: {task_data['task_id']} ({task_data['task_type']})")
-        
-    except Exception as e:
-        logger.error(f"Error adding task to history: {e}", exc_info=True)
-    finally:
-        if conn:
-            conn.close()
-
-
-def add_status_update(task_id: str, status_type: str, status_data: Dict):
-    """Add a status update to the status history."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO status_history (task_id, status_type, status_data, timestamp)
-            VALUES (?, ?, ?, ?)
-        """, (task_id, status_type, json.dumps(status_data), time.time()))
-        
-        # Also update the current status in main table
-        cursor.execute("""
-            UPDATE download_tasks 
-            SET status_current = ?, timestamp_updated = ?
-            WHERE task_id = ?
-        """, (status_type, time.time(), task_id))
-        
-        conn.commit()
-        logger.debug(f"Added status update for {task_id}: {status_type}")
-        
-    except Exception as e:
-        logger.error(f"Error adding status update: {e}", exc_info=True)
-    finally:
-        if conn:
-            conn.close()
-
-
-def add_child_track(parent_task_id: str, track_data: Dict):
-    """Add a track to a child table (album or playlist) with comprehensive data extraction."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-        
-        # Find the parent task to get the children table name
-        cursor.execute("SELECT children_table FROM download_tasks WHERE task_id = ?", (parent_task_id,))
-        result = cursor.fetchone()
-        
-        if not result or not result[0]:
-            logger.error(f"No children table found for parent task: {parent_task_id}")
-            return
-        
-        table_name = result[0]
-        
-        # Generate track ID if not provided
-        track_id = track_data.get("track_id", f"{parent_task_id}_track_{uuid.uuid4().hex[:8]}")
-        
-        # Extract track object data if provided
-        track_obj = track_data.get("track_data", {})
-        if isinstance(track_obj, str):
-            try:
-                track_obj = json.loads(track_obj)
-            except json.JSONDecodeError:
-                track_obj = {}
-        
-        # Prepare comprehensive track record
-        track_record = {
-            "track_id": track_id,
-            "parent_task_id": parent_task_id,
-            "position": track_data.get("position") or track_obj.get("position", 0),
-            "disc_number": track_obj.get("disc_number", 1),
-            "track_number": track_obj.get("track_number", 0),
-            "title": track_obj.get("title", "Unknown Track"),
-            "duration_ms": track_obj.get("duration_ms", 0),
-            "explicit": track_obj.get("explicit", False),
-            "track_data": json.dumps(track_obj) if track_obj else None,
-            "artists_data": json.dumps(track_obj.get("artists", [])),
-            "album_data": json.dumps(track_obj.get("album", {})) if track_obj.get("album") else None,
-            "ids_data": json.dumps(track_obj.get("ids", {})),
-            "status_current": track_data.get("status_current", "initializing"),
-            "status_final": track_data.get("status_final"),
-            "status_history": json.dumps(track_data.get("status_history", [])),
-            "timestamp_created": track_data.get("timestamp_created", time.time()),
-            "timestamp_started": track_data.get("timestamp_started"),
-            "timestamp_completed": track_data.get("timestamp_completed"),
-            "time_elapsed": track_data.get("time_elapsed"),
-            "retry_count": track_data.get("retry_count", 0),
-            "error_info": json.dumps(track_data.get("error_info", {})) if track_data.get("error_info") else None,
-            "progress_info": json.dumps(track_data.get("progress_info", {})) if track_data.get("progress_info") else None,
-            "config": json.dumps(track_data.get("config", {})) if track_data.get("config") else None,
-            "download_path": track_data.get("download_path"),
-            "file_size": track_data.get("file_size"),
-            "quality_achieved": track_data.get("quality_achieved")
-        }
-        
-        # Filter out None values to avoid issues
-        track_record = {k: v for k, v in track_record.items() if v is not None}
-        
-        # Insert into child table
-        columns = list(track_record.keys())
-        placeholders = ["?" for _ in columns]
-        values = [track_record[col] for col in columns]
-        
-        query = f"""
-            INSERT OR REPLACE INTO {table_name} ({', '.join(columns)})
-            VALUES ({', '.join(placeholders)})
+        Args:
+            db_path: Path to SQLite database file
         """
-        
-        cursor.execute(query, values)
-        conn.commit()
-        
-        logger.info(f"Added track to {table_name}: {track_id} - {track_record.get('title', 'Unknown')}")
-        
-        return track_id
-        
-    except Exception as e:
-        logger.error(f"Error adding child track: {e}", exc_info=True)
-        return None
-    finally:
-        if conn:
-            conn.close()
-
-
-def get_task_history(
-    limit: int = 25,
-    offset: int = 0,
-    sort_by: str = "timestamp_updated",
-    sort_order: str = "DESC",
-    filters: Optional[Dict] = None,
-    include_children: bool = False
-) -> tuple[List[Dict], int]:
-    """Get task history with enhanced filtering and optional child data."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Build query
-        base_query = "FROM download_tasks"
-        where_clauses = []
-        params = []
-        
-        if filters:
-            for column, value in filters.items():
-                if column in MAIN_TASKS_SCHEMA:
-                    if value is None:
-                        where_clauses.append(f"{column} IS NULL")
-                    else:
-                        where_clauses.append(f"{column} = ?")
-                        params.append(value)
-        
-        if where_clauses:
-            base_query += " WHERE " + " AND ".join(where_clauses)
-        
-        # Get total count
-        cursor.execute(f"SELECT COUNT(*) {base_query}", params)
-        total_count = cursor.fetchone()[0]
-        
-        # Validate sort parameters
-        if sort_by not in MAIN_TASKS_SCHEMA:
-            sort_by = "timestamp_updated"
-        if sort_order.upper() not in ["ASC", "DESC"]:
-            sort_order = "DESC"
-        
-        # Get paginated results
-        query = f"SELECT * {base_query} ORDER BY {sort_by} {sort_order} LIMIT ? OFFSET ?"
-        cursor.execute(query, params + [limit, offset])
-        
-        tasks = []
-        for row in cursor.fetchall():
-            task = dict(row)
-            
-            # Parse JSON fields
-            json_fields = ["artists", "ids", "metadata", "config", "error_info", "progress", "summary"]
-            for field in json_fields:
-                if task[field]:
-                    try:
-                        task[field] = json.loads(task[field])
-                    except json.JSONDecodeError:
-                        pass
-            
-            # Include child tracks if requested
-            if include_children and task["children_table"]:
-                task["child_tracks"] = get_child_tracks(task["children_table"])
-            
-            tasks.append(task)
-        
-        return tasks, total_count
-        
-    except Exception as e:
-        logger.error(f"Error getting task history: {e}", exc_info=True)
-        return [], 0
-    finally:
-        if conn:
-            conn.close()
-
-
-def add_track_status_update(track_id: str, table_name: str, status_type: str, status_data: Dict, 
-                           progress_info: Dict = None, error_info: Dict = None):
-    """Add a status update to a track's mini-history."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-        
-        # Get current status history
-        cursor.execute(f"SELECT status_history, retry_count FROM {table_name} WHERE track_id = ?", (track_id,))
-        result = cursor.fetchone()
-        
-        if not result:
-            logger.warning(f"Track {track_id} not found in table {table_name}")
-            return
-        
-        current_history = []
-        retry_count = result[1] or 0
-        
-        if result[0]:
-            try:
-                current_history = json.loads(result[0])
-            except json.JSONDecodeError:
-                current_history = []
-        
-        # Add new status update
-        status_update = {
-            "timestamp": time.time(),
-            "status_type": status_type,
-            "status_data": status_data
-        }
-        
-        if progress_info:
-            status_update["progress_info"] = progress_info
-        if error_info:
-            status_update["error_info"] = error_info
-            
-        current_history.append(status_update)
-        
-        # Update fields based on status
-        update_fields = {
-            "status_current": status_type,
-            "status_history": json.dumps(current_history),
-            "timestamp_updated": time.time()
-        }
-        
-        # Handle specific status transitions
-        if status_type == "real-time":
-            if not result or not cursor.execute(f"SELECT timestamp_started FROM {table_name} WHERE track_id = ?", (track_id,)).fetchone()[0]:
-                update_fields["timestamp_started"] = time.time()
-            if progress_info:
-                update_fields["progress_info"] = json.dumps(progress_info)
-                
-        elif status_type == "retrying":
-            update_fields["retry_count"] = retry_count + 1
-            if error_info:
-                update_fields["error_info"] = json.dumps(error_info)
-                
-        elif status_type in ["done", "error", "skipped"]:
-            update_fields["timestamp_completed"] = time.time()
-            update_fields["status_final"] = {
-                "done": "COMPLETED",
-                "error": "ERROR", 
-                "skipped": "SKIPPED"
-            }[status_type]
-            
-            if error_info:
-                update_fields["error_info"] = json.dumps(error_info)
-                
-            # Calculate time elapsed if we have start time
-            cursor.execute(f"SELECT timestamp_started FROM {table_name} WHERE track_id = ?", (track_id,))
-            start_result = cursor.fetchone()
-            if start_result and start_result[0]:
-                update_fields["time_elapsed"] = time.time() - start_result[0]
-        
-        # Update the track record
-        set_clauses = [f"{key} = ?" for key in update_fields.keys()]
-        values = list(update_fields.values()) + [track_id]
-        
-        query = f"UPDATE {table_name} SET {', '.join(set_clauses)} WHERE track_id = ?"
-        cursor.execute(query, values)
-        conn.commit()
-        
-        logger.debug(f"Updated track {track_id} status to {status_type}")
-        
-    except Exception as e:
-        logger.error(f"Error updating track status: {e}", exc_info=True)
-    finally:
-        if conn:
-            conn.close()
-
-
-def get_child_tracks(table_name: str) -> List[Dict]:
-    """Get all tracks from a child table with parsed JSON fields."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute(f"SELECT * FROM {table_name} ORDER BY disc_number, track_number, position")
-        tracks = []
-        
-        for row in cursor.fetchall():
-            track = dict(row)
-            
-            # Parse JSON fields
-            json_fields = ["track_data", "artists_data", "album_data", "ids_data", 
-                          "status_history", "error_info", "progress_info", "config"]
-            
-            for field in json_fields:
-                if track.get(field):
-                    try:
-                        track[field] = json.loads(track[field])
-                    except json.JSONDecodeError:
-                        pass
-            
-            tracks.append(track)
-        
-        return tracks
-        
-    except Exception as e:
-        logger.error(f"Error getting child tracks from {table_name}: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-
-def get_status_history(task_id: str) -> List[Dict]:
-    """Get complete status history for a task."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT * FROM status_history 
-            WHERE task_id = ? 
-            ORDER BY timestamp ASC
-        """, (task_id,))
-        
-        history = []
-        for row in cursor.fetchall():
-            entry = dict(row)
-            if entry["status_data"]:
-                try:
-                    entry["status_data"] = json.loads(entry["status_data"])
-                except json.JSONDecodeError:
-                    pass
-            history.append(entry)
-        
-        return history
-        
-    except Exception as e:
-        logger.error(f"Error getting status history for {task_id}: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-
-def process_callback_object(callback_obj: Dict, task_id: str = None):
-    """Process a callback object and update history accordingly."""
-    try:
-        if not task_id:
-            task_id = str(uuid.uuid4())
-        
-        # Determine callback type and extract data
-        if "track" in callback_obj:
-            _process_track_callback(callback_obj, task_id)
-        elif "album" in callback_obj:
-            _process_album_callback(callback_obj, task_id)
-        elif "playlist" in callback_obj:
-            _process_playlist_callback(callback_obj, task_id)
-        else:
-            logger.warning(f"Unknown callback object type for task {task_id}")
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._ensure_database_exists()
     
-    except Exception as e:
-        logger.error(f"Error processing callback object: {e}", exc_info=True)
-
-
-def _process_track_callback(callback_obj: Dict, task_id: str):
-    """Process a trackCallbackObject with comprehensive status tracking."""
-    track_data = callback_obj.get("track", {})
-    status_info = callback_obj.get("status_info", {})
-    parent_info = callback_obj.get("parent")
+    def _ensure_database_exists(self):
+        """Create database and main table if they don't exist."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS download_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    download_type TEXT NOT NULL,  -- 'track', 'album', 'playlist'
+                    title TEXT NOT NULL,
+                    artists TEXT,  -- JSON array of artist names
+                    timestamp REAL NOT NULL,
+                    status TEXT NOT NULL,  -- 'completed', 'failed', 'skipped', 'in_progress'
+                    service TEXT,  -- 'spotify', 'deezer'
+                    quality_format TEXT,  -- 'mp3', 'flac', etc.
+                    quality_bitrate TEXT,  -- '320', '1411', etc.
+                    total_tracks INTEGER,  -- For albums/playlists
+                    successful_tracks INTEGER,  -- For albums/playlists
+                    failed_tracks INTEGER,  -- For albums/playlists  
+                    skipped_tracks INTEGER,  -- For albums/playlists
+                    children_table TEXT,  -- Table name for nested tracks
+                    task_id TEXT,
+                    external_ids TEXT,  -- JSON object with service IDs
+                    metadata TEXT,  -- JSON object with additional data
+                    release_date TEXT,  -- JSON object with date info
+                    genres TEXT,  -- JSON array of genres
+                    images TEXT,  -- JSON array of image objects
+                    owner TEXT,  -- For playlists - JSON object
+                    album_type TEXT,  -- 'album', 'ep', 'single', etc.
+                    duration_total_ms INTEGER,  -- Total duration for albums/playlists
+                    explicit BOOLEAN,  -- For individual tracks
+                    UNIQUE(task_id, download_type, external_ids)
+                )
+            """)
+            
+            # Create index for faster queries
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_download_history_timestamp 
+                ON download_history(timestamp DESC)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_download_history_task_id 
+                ON download_history(task_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_download_history_type_status 
+                ON download_history(download_type, status)
+            """)
     
-    # Check if this is a child track (part of album/playlist)
-    if parent_info and parent_info.get("task_id"):
-        parent_task_id = parent_info["task_id"]
-        
-        # Find parent task's children table
+    @contextmanager
+    def _get_connection(self):
+        """Get database connection with proper error handling."""
         conn = None
         try:
-            conn = sqlite3.connect(HISTORY_DB_FILE)
-            cursor = conn.cursor()
-            cursor.execute("SELECT children_table FROM download_tasks WHERE task_id = ?", (parent_task_id,))
-            result = cursor.fetchone()
-            
-            if result and result[0]:
-                table_name = result[0]
-                
-                # Extract progress and error info
-                progress_info = None
-                error_info = None
-                
-                if status_info.get("status") == "real-time":
-                    progress_info = {
-                        "time_elapsed": status_info.get("time_elapsed", 0),
-                        "progress": status_info.get("progress", 0)
-                    }
-                elif status_info.get("status") == "retrying":
-                    error_info = {
-                        "retry_count": status_info.get("retry_count", 0),
-                        "seconds_left": status_info.get("seconds_left", 0),
-                        "error": status_info.get("error", "")
-                    }
-                elif status_info.get("status") == "error":
-                    error_info = {
-                        "message": status_info.get("error", "Unknown error")
-                    }
-                elif status_info.get("status") == "skipped":
-                    error_info = {
-                        "reason": status_info.get("reason", "Unknown reason")
-                    }
-                
-                # Update track status in child table
-                add_track_status_update(
-                    track_id=task_id,
-                    table_name=table_name,
-                    status_type=status_info.get("status", "initializing"),
-                    status_data=status_info,
-                    progress_info=progress_info,
-                    error_info=error_info
-                )
-                
+            conn = sqlite3.connect(str(self.db_path))
+            conn.row_factory = sqlite3.Row  # Enable dict-like row access
+            yield conn
+            conn.commit()
         except Exception as e:
-            logger.error(f"Error processing child track callback: {e}", exc_info=True)
+            if conn:
+                conn.rollback()
+            logger.error(f"Database error: {e}")
+            raise
         finally:
             if conn:
                 conn.close()
-    else:
-        # Handle standalone track
-        task_entry = {
-            "task_id": task_id,
-            "task_type": "track",
-            "title": track_data.get("title", ""),
-            "artists": [{"name": artist.get("name", "")} for artist in track_data.get("artists", [])],
-            "ids": track_data.get("ids", {}),
-            "metadata": track_data,
-            "status_current": status_info.get("status", "initializing"),
-            "position": callback_obj.get("current_track")
-        }
+    
+    def _create_children_table(self, table_name: str):
+        """
+        Create a children table for storing individual tracks of an album/playlist.
         
-        # Set final status based on status_info
-        if status_info.get("status") == "done":
-            task_entry["status_final"] = "COMPLETED"
-            task_entry["timestamp_completed"] = time.time()
-        elif status_info.get("status") == "error":
-            task_entry["status_final"] = "ERROR"
-            task_entry["error_info"] = {"message": status_info.get("error", "")}
-        elif status_info.get("status") == "skipped":
-            task_entry["status_final"] = "SKIPPED"
+        Args:
+            table_name: Name of the children table (e.g., 'album_abc123')
+        """
+        with self._get_connection() as conn:
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    artists TEXT,  -- JSON array of artist names
+                    album_title TEXT,
+                    duration_ms INTEGER,
+                    track_number INTEGER,
+                    disc_number INTEGER,
+                    explicit BOOLEAN,
+                    status TEXT NOT NULL,  -- 'completed', 'failed', 'skipped'
+                    external_ids TEXT,  -- JSON object with service IDs
+                    genres TEXT,  -- JSON array of genres
+                    isrc TEXT,
+                    timestamp REAL NOT NULL,
+                    position INTEGER,  -- For playlist tracks
+                    metadata TEXT  -- JSON object with additional track data
+                )
+            """)
+    
+    def _extract_artists(self, obj: Dict) -> List[str]:
+        """Extract artist names from various object types."""
+        artists = obj.get("artists", [])
+        if not artists:
+            return []
         
-        add_task_to_history(task_entry)
-        add_status_update(task_id, status_info.get("status", "initializing"), status_info)
-
-
-def _process_album_callback(callback_obj: Dict, task_id: str):
-    """Process an albumCallbackObject with comprehensive track management."""
-    album_data = callback_obj.get("album", {})
-    status_info = callback_obj.get("status_info", {})
-    
-    # Create children table for tracks
-    children_table = create_child_table(task_id, "album")
-    
-    # Create main task entry
-    task_entry = {
-        "task_id": task_id,
-        "task_type": "album",
-        "title": album_data.get("title", ""),
-        "artists": [{"name": artist.get("name", "")} for artist in album_data.get("artists", [])],
-        "ids": album_data.get("ids", {}),
-        "metadata": album_data,
-        "children_table": children_table,
-        "status_current": status_info.get("status", "initializing")
-    }
-    
-    # Initialize tracks in child table when album processing starts
-    if status_info.get("status") == "initializing" and album_data.get("tracks"):
-        for i, track in enumerate(album_data["tracks"]):
-            track_data = {
-                "track_data": track,
-                "position": i + 1,
-                "status_current": "initializing",
-                "timestamp_created": time.time()
-            }
-            add_child_track(task_id, track_data)
-    
-    # Handle completion with summary
-    if status_info.get("status") == "done" and status_info.get("summary"):
-        task_entry["status_final"] = "COMPLETED"
-        task_entry["timestamp_completed"] = time.time()
-        task_entry["summary"] = status_info["summary"]
+        artist_names = []
+        for artist in artists:
+            if isinstance(artist, dict):
+                name = artist.get("name", "")
+                if name:
+                    artist_names.append(name)
+            elif isinstance(artist, str):
+                artist_names.append(artist)
         
-        # Update individual tracks in child table based on summary
-        summary = status_info["summary"]
-        
-        # Process successful tracks
-        for track in summary.get("successful_tracks", []):
-            if isinstance(track, dict):
-                # Find matching track in child table and update status
-                conn = None
-                try:
-                    conn = sqlite3.connect(HISTORY_DB_FILE)
-                    cursor = conn.cursor()
-                    
-                    # Try to match by title and artist
-                    track_title = track.get("title", "")
-                    cursor.execute(
-                        f"SELECT track_id FROM {children_table} WHERE title = ? AND parent_task_id = ?",
-                        (track_title, task_id)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        add_track_status_update(
-                            track_id=result[0],
-                            table_name=children_table,
-                            status_type="done",
-                            status_data={"status": "done"},
-                            progress_info={"progress": 100}
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating successful track: {e}")
-                finally:
-                    if conn:
-                        conn.close()
-        
-        # Process skipped tracks
-        for track in summary.get("skipped_tracks", []):
-            if isinstance(track, dict):
-                # Similar matching and update logic
-                conn = None
-                try:
-                    conn = sqlite3.connect(HISTORY_DB_FILE)
-                    cursor = conn.cursor()
-                    
-                    track_title = track.get("title", "")
-                    cursor.execute(
-                        f"SELECT track_id FROM {children_table} WHERE title = ? AND parent_task_id = ?",
-                        (track_title, task_id)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        add_track_status_update(
-                            track_id=result[0],
-                            table_name=children_table,
-                            status_type="skipped",
-                            status_data={"status": "skipped"},
-                            error_info={"reason": "Skipped during processing"}
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating skipped track: {e}")
-                finally:
-                    if conn:
-                        conn.close()
-        
-        # Process failed tracks
-        for failed_track in summary.get("failed_tracks", []):
-            track = failed_track.get("track", {}) if isinstance(failed_track, dict) else failed_track
-            reason = failed_track.get("reason", "Unknown error") if isinstance(failed_track, dict) else "Download failed"
-            
-            if isinstance(track, dict):
-                conn = None
-                try:
-                    conn = sqlite3.connect(HISTORY_DB_FILE)
-                    cursor = conn.cursor()
-                    
-                    track_title = track.get("title", "")
-                    cursor.execute(
-                        f"SELECT track_id FROM {children_table} WHERE title = ? AND parent_task_id = ?",
-                        (track_title, task_id)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        add_track_status_update(
-                            track_id=result[0],
-                            table_name=children_table,
-                            status_type="error",
-                            status_data={"status": "error"},
-                            error_info={"message": reason}
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating failed track: {e}")
-                finally:
-                    if conn:
-                        conn.close()
+        return artist_names
     
-    add_task_to_history(task_entry)
-    add_status_update(task_id, status_info.get("status", "initializing"), status_info)
-
-
-def _process_playlist_callback(callback_obj: Dict, task_id: str):
-    """Process a playlistCallbackObject with comprehensive track management."""
-    playlist_data = callback_obj.get("playlist", {})
-    status_info = callback_obj.get("status_info", {})
+    def _extract_external_ids(self, obj: Dict) -> Dict:
+        """Extract external service IDs from object."""
+        return obj.get("ids", {})
     
-    # Create children table for tracks
-    children_table = create_child_table(task_id, "playlist")
+    def _extract_images(self, obj: Dict) -> List[Dict]:
+        """Extract image information from object."""
+        return obj.get("images", [])
     
-    # Create main task entry  
-    task_entry = {
-        "task_id": task_id,
-        "task_type": "playlist",
-        "title": playlist_data.get("title", ""),
-        "metadata": playlist_data,
-        "children_table": children_table,
-        "status_current": status_info.get("status", "initializing")
-    }
+    def _extract_release_date(self, obj: Dict) -> Dict:
+        """Extract release date information from object."""
+        return obj.get("release_date", {})
     
-    # Add playlist owner info to metadata if available
-    if playlist_data.get("owner"):
-        task_entry["metadata"]["owner_info"] = playlist_data["owner"]
+    def _calculate_total_duration(self, tracks: List[Dict]) -> int:
+        """Calculate total duration from tracks list."""
+        total = 0
+        for track in tracks:
+            duration = track.get("duration_ms", 0)
+            if duration:
+                total += duration
+        return total
     
-    # Initialize tracks in child table when playlist processing starts
-    if status_info.get("status") == "initializing" and playlist_data.get("tracks"):
-        for track in playlist_data["tracks"]:
-            track_data = {
-                "track_data": track,
-                "position": track.get("position", 0),
-                "status_current": "initializing",
-                "timestamp_created": time.time()
-            }
-            add_child_track(task_id, track_data)
-    
-    # Handle completion with summary
-    if status_info.get("status") == "done" and status_info.get("summary"):
-        task_entry["status_final"] = "COMPLETED"
-        task_entry["timestamp_completed"] = time.time()
-        task_entry["summary"] = status_info["summary"]
-        
-        # Update individual tracks in child table based on summary
-        summary = status_info["summary"]
-        
-        # Process successful tracks
-        for track in summary.get("successful_tracks", []):
-            if isinstance(track, dict):
-                # Find matching track in child table and update status
-                conn = None
-                try:
-                    conn = sqlite3.connect(HISTORY_DB_FILE)
-                    cursor = conn.cursor()
-                    
-                    # Try to match by title and position
-                    track_title = track.get("title", "")
-                    track_position = track.get("position", 0)
-                    cursor.execute(
-                        f"SELECT track_id FROM {children_table} WHERE title = ? AND position = ? AND parent_task_id = ?",
-                        (track_title, track_position, task_id)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        add_track_status_update(
-                            track_id=result[0],
-                            table_name=children_table,
-                            status_type="done",
-                            status_data={"status": "done"},
-                            progress_info={"progress": 100}
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating successful playlist track: {e}")
-                finally:
-                    if conn:
-                        conn.close()
-        
-        # Process skipped tracks
-        for track in summary.get("skipped_tracks", []):
-            if isinstance(track, dict):
-                conn = None
-                try:
-                    conn = sqlite3.connect(HISTORY_DB_FILE)  
-                    cursor = conn.cursor()
-                    
-                    track_title = track.get("title", "")
-                    track_position = track.get("position", 0)
-                    cursor.execute(
-                        f"SELECT track_id FROM {children_table} WHERE title = ? AND position = ? AND parent_task_id = ?",
-                        (track_title, track_position, task_id)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        add_track_status_update(
-                            track_id=result[0],
-                            table_name=children_table,
-                            status_type="skipped",
-                            status_data={"status": "skipped"},
-                            error_info={"reason": "Skipped during processing"}
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating skipped playlist track: {e}")
-                finally:
-                    if conn:
-                        conn.close()
-        
-        # Process failed tracks
-        for failed_track in summary.get("failed_tracks", []):
-            track = failed_track.get("track", {}) if isinstance(failed_track, dict) else failed_track
-            reason = failed_track.get("reason", "Unknown error") if isinstance(failed_track, dict) else "Download failed"
-            
-            if isinstance(track, dict):
-                conn = None
-                try:
-                    conn = sqlite3.connect(HISTORY_DB_FILE)
-                    cursor = conn.cursor()
-                    
-                    track_title = track.get("title", "")
-                    track_position = track.get("position", 0)
-                    cursor.execute(
-                        f"SELECT track_id FROM {children_table} WHERE title = ? AND position = ? AND parent_task_id = ?",
-                        (track_title, track_position, task_id)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        add_track_status_update(
-                            track_id=result[0],
-                            table_name=children_table,
-                            status_type="error",
-                            status_data={"status": "error"},
-                            error_info={"message": reason}
-                        )
-                except Exception as e:
-                    logger.error(f"Error updating failed playlist track: {e}")
-                finally:
-                    if conn:
-                        conn.close()
-    
-    add_task_to_history(task_entry)
-    add_status_update(task_id, status_info.get("status", "initializing"), status_info)
-
-
-# Legacy compatibility functions
-def add_entry_to_history(history_data: dict):
-    """Legacy compatibility function - converts old format to new."""
-    logger.warning("Using legacy add_entry_to_history - consider migrating to add_task_to_history")
-    
-    converted = _convert_old_record_to_new(history_data)
-    if converted:
-        add_task_to_history(converted)
-
-
-def add_tracks_from_summary(summary_data, parent_task_id, parent_history_data=None):
-    """Legacy compatibility function - processes a summary object from a completed task and adds individual track entries.
-    
-    Args:
-        summary_data (dict): The summary data containing track lists
-        parent_task_id (str): The ID of the parent task
-        parent_history_data (dict, optional): The history data of the parent task
-    
-    Returns:
-        dict: Summary of processed tracks
-    """
-    logger.warning("Using legacy add_tracks_from_summary - consider migrating to add_child_track and process_callback_object")
-    
-    processed = {
-        "successful": 0,
-        "skipped": 0,
-        "failed": 0
-    }
-    
-    if not summary_data:
-        logger.warning(f"No summary data provided for task {parent_task_id}")
-        return processed
-    
-    # Check if parent task has a children table, if not create one
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT children_table, task_type FROM download_tasks WHERE task_id = ?", (parent_task_id,))
-        result = cursor.fetchone()
-        
-        children_table = None
-        if result:
-            children_table = result[0]
-            task_type = result[1] or "album"
-            
-            # Create children table if it doesn't exist
-            if not children_table:
-                children_table = create_child_table(parent_task_id, task_type)
-                cursor.execute("UPDATE download_tasks SET children_table = ? WHERE task_id = ?", 
-                             (children_table, parent_task_id))
-                conn.commit()
+    def _get_primary_service(self, external_ids: Dict) -> str:
+        """Determine primary service from external IDs."""
+        if "spotify" in external_ids:
+            return "spotify"
+        elif "deezer" in external_ids:
+            return "deezer"
         else:
-            # Parent task doesn't exist, create a basic one
-            logger.warning(f"Parent task {parent_task_id} not found, creating basic entry...")
-            task_data = {
-                "task_id": parent_task_id,
-                "task_type": "album",
-                "title": "Unknown Album",
-                "status_final": "COMPLETED",
-                "children_table": create_child_table(parent_task_id, "album")
+            return "unknown"
+    
+    def create_children_table_for_album(self, callback_data: Dict, task_id: str) -> str:
+        """
+        Create children table for album download at the start and return table name.
+        
+        Args:
+            callback_data: Album callback object from deezspot  
+            task_id: Celery task ID
+            
+        Returns:
+            Children table name
+        """
+        # Generate children table name
+        album_uuid = str(uuid.uuid4()).replace("-", "")[:10]
+        children_table = f"album_{album_uuid}"
+        
+        # Create the children table
+        self._create_children_table(children_table)
+        
+        logger.info(f"Created album children table {children_table} for task {task_id}")
+        return children_table
+    
+    def create_children_table_for_playlist(self, callback_data: Dict, task_id: str) -> str:
+        """
+        Create children table for playlist download at the start and return table name.
+        
+        Args:
+            callback_data: Playlist callback object from deezspot
+            task_id: Celery task ID
+            
+        Returns:
+            Children table name
+        """
+        # Generate children table name
+        playlist_uuid = str(uuid.uuid4()).replace("-", "")[:10]
+        children_table = f"playlist_{playlist_uuid}"
+        
+        # Create the children table
+        self._create_children_table(children_table)
+        
+        logger.info(f"Created playlist children table {children_table} for task {task_id}")
+        return children_table
+    
+    def store_track_history(self, callback_data: Dict, task_id: str, status: str = "completed", table: str = "download_history"):
+        """
+        Store individual track download history.
+        
+        Args:
+            callback_data: Track callback object from deezspot
+            task_id: Celery task ID
+            status: Download status ('completed', 'failed', 'skipped')
+            table: Target table name (defaults to 'download_history', can be a children table name)
+        """
+        try:
+            track = callback_data.get("track", {})
+            status_info = callback_data.get("status_info", {})
+            
+            if not track:
+                logger.warning(f"No track data in callback for task {task_id}")
+                return
+            
+            artists = self._extract_artists(track)
+            external_ids = self._extract_external_ids(track)
+            
+            album = track.get("album", {})
+            album_title = album.get("title", "")
+            
+            # Prepare metadata
+            metadata = {
+                "callback_type": "track",
+                "parent": callback_data.get("parent"),
+                "current_track": callback_data.get("current_track"),
+                "total_tracks": callback_data.get("total_tracks"),
+                "album": album,
+                "status_info": status_info
             }
-            add_task_to_history(task_data)
-            children_table = task_data["children_table"]
-    
-    except Exception as e:
-        logger.error(f"Error setting up children table for {parent_task_id}: {e}")
-    finally:
-        if conn:
-            conn.close()
-    
-    # Process successful tracks
-    for track_entry in summary_data.get("successful_tracks", []):
-        try:
-            # Parse "track_name - artist_name" format or handle trackObject
-            if isinstance(track_entry, dict):
-                # Handle trackObject
-                track_data = {
-                    "track_data": track_entry,
-                    "status_final": "COMPLETED",
-                    "timestamp_completed": time.time()
-                }
-            else:
-                # Handle string format "track_name - artist_name"
-                parts = track_entry.split(" - ", 1)
-                if len(parts) == 2:
-                    track_name, artist_name = parts
-                    track_data = {
-                        "track_data": {
-                            "title": track_name,
-                            "artists": [{"name": artist_name}]
-                        },
-                        "status_final": "COMPLETED",
-                        "timestamp_completed": time.time()
-                    }
-                else:
-                    logger.warning(f"Could not parse track entry: {track_entry}")
-                    continue
             
-            add_child_track(parent_task_id, track_data)
-            processed["successful"] += 1
+            with self._get_connection() as conn:
+                if table == "download_history":
+                    # Store in main download_history table
+                    logger.info(f"Storing track '{track.get('title', 'Unknown')}' in MAIN table for task {task_id}")
+                    conn.execute("""
+                        INSERT OR REPLACE INTO download_history (
+                            download_type, title, artists, timestamp, status, service,
+                            quality_format, quality_bitrate, task_id, external_ids,
+                            metadata, release_date, genres, explicit, album_type,
+                            duration_total_ms
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        "track",
+                        track.get("title", "Unknown"),
+                        json.dumps(artists),
+                        callback_data.get("timestamp", time.time()),
+                        status,
+                        self._get_primary_service(external_ids),
+                        status_info.get("convert_to"),
+                        status_info.get("bitrate"),
+                        task_id,
+                        json.dumps(external_ids),
+                        json.dumps(metadata),
+                        json.dumps(self._extract_release_date(album)),
+                        json.dumps(track.get("genres", [])),
+                        track.get("explicit", False),
+                        album.get("album_type"),
+                        track.get("duration_ms", 0)
+                    ))
+                else:
+                    # Store in children table (for album/playlist tracks)
+                    logger.info(f"Storing track '{track.get('title', 'Unknown')}' in CHILDREN table '{table}' for task {task_id}")
+                    # Extract ISRC
+                    isrc = external_ids.get("isrc", "")
+                    
+                    # Prepare children table metadata
+                    children_metadata = {
+                        "album": album,
+                        "type": track.get("type", ""),
+                        "callback_type": "track",
+                        "parent": callback_data.get("parent"),
+                        "current_track": callback_data.get("current_track"),
+                        "total_tracks": callback_data.get("total_tracks"),
+                        "status_info": status_info
+                    }
+                    
+                    conn.execute(f"""
+                        INSERT INTO {table} (
+                            title, artists, album_title, duration_ms, track_number,
+                            disc_number, explicit, status, external_ids, genres,
+                            isrc, timestamp, position, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        track.get("title", "Unknown"),
+                        json.dumps(artists),
+                        album_title,
+                        track.get("duration_ms", 0),
+                        track.get("track_number", 0),
+                        track.get("disc_number", 1),
+                        track.get("explicit", False),
+                        status,
+                        json.dumps(external_ids),
+                        json.dumps(track.get("genres", [])),
+                        isrc,
+                        callback_data.get("timestamp", time.time()),
+                        track.get("position", 0),  # For playlist tracks
+                        json.dumps(children_metadata)
+                    ))
+            
+            logger.info(f"Successfully stored track '{track.get('title')}' in table '{table}' (task: {task_id})")
             
         except Exception as e:
-            logger.error(f"Error processing successful track {track_entry}: {e}", exc_info=True)
+            logger.error(f"Failed to store track history for task {task_id}: {e}")
     
-    # Process skipped tracks
-    for track_entry in summary_data.get("skipped_tracks", []):
-        try:
-            if isinstance(track_entry, dict):
-                # Handle trackObject
-                track_data = {
-                    "track_data": track_entry,
-                    "status_final": "SKIPPED",
-                    "timestamp_completed": time.time()
-                }
-            else:
-                # Handle string format
-                parts = track_entry.split(" - ", 1)
-                if len(parts) == 2:
-                    track_name, artist_name = parts
-                    track_data = {
-                        "track_data": {
-                            "title": track_name,
-                            "artists": [{"name": artist_name}]
-                        },
-                        "status_final": "SKIPPED",
-                        "timestamp_completed": time.time()
-                    }
-                else:
-                    logger.warning(f"Could not parse skipped track entry: {track_entry}")
-                    continue
+    def store_album_history(self, callback_data: Dict, task_id: str, status: str = "completed"):
+        """
+        Store album download history with children table for individual tracks.
+        
+        Args:
+            callback_data: Album callback object from deezspot  
+            task_id: Celery task ID
+            status: Download status ('completed', 'failed', 'in_progress')
             
-            add_child_track(parent_task_id, track_data)
-            processed["skipped"] += 1
+        Returns:
+            Children table name when status is 'in_progress', None otherwise
+        """
+        try:
+            album = callback_data.get("album", {})
+            status_info = callback_data.get("status_info", {})
+            
+            if not album:
+                logger.warning(f"No album data in callback for task {task_id}")
+                return None
+            
+            if status == "in_progress":
+                # Phase 1: Create children table at start, don't store album entry yet
+                children_table = self.create_children_table_for_album(callback_data, task_id)
+                logger.info(f"Album download started for task {task_id}, children table: {children_table}")
+                return children_table
+            
+            # Phase 2: Store album entry in main table (for completed/failed status)
+            artists = self._extract_artists(album)
+            external_ids = self._extract_external_ids(album)
+            
+            # For completed/failed, we need to find the existing children table
+            # This should be stored in task info by the celery task
+            from routes.utils.celery_tasks import get_task_info
+            task_info = get_task_info(task_id)
+            children_table = task_info.get("children_table")
+            
+            if not children_table:
+                # Fallback: generate new children table name (shouldn't happen in normal flow)
+                album_uuid = str(uuid.uuid4()).replace("-", "")[:10]
+                children_table = f"album_{album_uuid}"
+                logger.warning(f"No children table found for album task {task_id}, generating new: {children_table}")
+            
+            # Extract summary data if available (from 'done' status)
+            summary = status_info.get("summary", {})
+            successful_tracks = summary.get("total_successful", 0)
+            failed_tracks = summary.get("total_failed", 0) 
+            skipped_tracks = summary.get("total_skipped", 0)
+            total_tracks = album.get("total_tracks", 0)
+            
+            # Calculate total duration
+            tracks = album.get("tracks", [])
+            total_duration = self._calculate_total_duration(tracks)
+            
+            # Prepare metadata
+            metadata = {
+                "callback_type": "album",
+                "status_info": status_info,
+                "copyrights": album.get("copyrights", []),
+                "tracks": tracks  # Store track list in metadata
+            }
+            
+            with self._get_connection() as conn:
+                # Store main album entry
+                conn.execute("""
+                    INSERT OR REPLACE INTO download_history (
+                        download_type, title, artists, timestamp, status, service,
+                        quality_format, quality_bitrate, total_tracks, successful_tracks,
+                        failed_tracks, skipped_tracks, children_table, task_id,
+                        external_ids, metadata, release_date, genres, images,
+                        album_type, duration_total_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    "album",
+                    album.get("title", "Unknown"),
+                    json.dumps(artists),
+                    callback_data.get("timestamp", time.time()),
+                    status,
+                    self._get_primary_service(external_ids),
+                    status_info.get("convert_to"),
+                    status_info.get("bitrate"),
+                    total_tracks,
+                    successful_tracks,
+                    failed_tracks,
+                    skipped_tracks,
+                    children_table,
+                    task_id,
+                    json.dumps(external_ids),
+                    json.dumps(metadata),
+                    json.dumps(self._extract_release_date(album)),
+                    json.dumps(album.get("genres", [])),
+                    json.dumps(self._extract_images(album)),
+                    album.get("album_type"),
+                    total_duration
+                ))
+            
+            # Children table is populated progressively during track processing, not from summary
+            
+            logger.info(f"Stored album history for '{album.get('title')}' (task: {task_id}, children: {children_table})")
+            return None
             
         except Exception as e:
-            logger.error(f"Error processing skipped track {track_entry}: {e}", exc_info=True)
+            logger.error(f"Failed to store album history for task {task_id}: {e}")
+            return None
     
-    # Process failed tracks  
-    for track_entry in summary_data.get("failed_tracks", []):
-        try:
-            if isinstance(track_entry, dict):
-                # Handle failedTrackObject or trackObject
-                if "track" in track_entry:
-                    # failedTrackObject format
-                    track_obj = track_entry["track"]
-                    error_reason = track_entry.get("reason", "Unknown error")
-                    track_data = {
-                        "track_data": track_obj,
-                        "status_final": "ERROR",
-                        "error_info": {"message": error_reason},
-                        "timestamp_completed": time.time()
-                    }
-                else:
-                    # Plain trackObject
-                    track_data = {
-                        "track_data": track_entry,
-                        "status_final": "ERROR",
-                        "timestamp_completed": time.time()
-                    }
-            else:
-                # Handle string format
-                parts = track_entry.split(" - ", 1)
-                if len(parts) == 2:
-                    track_name, artist_name = parts
-                    track_data = {
-                        "track_data": {
-                            "title": track_name,
-                            "artists": [{"name": artist_name}]
-                        },
-                        "status_final": "ERROR",
-                        "timestamp_completed": time.time()
-                    }
-                else:
-                    logger.warning(f"Could not parse failed track entry: {track_entry}")
-                    continue
+    def store_playlist_history(self, callback_data: Dict, task_id: str, status: str = "completed"):
+        """
+        Store playlist download history with children table for individual tracks.
+        
+        Args:
+            callback_data: Playlist callback object from deezspot
+            task_id: Celery task ID  
+            status: Download status ('completed', 'failed', 'in_progress')
             
-            add_child_track(parent_task_id, track_data)
-            processed["failed"] += 1
+        Returns:
+            Children table name when status is 'in_progress', None otherwise
+        """
+        try:
+            playlist = callback_data.get("playlist", {})
+            status_info = callback_data.get("status_info", {})
+            
+            if not playlist:
+                logger.warning(f"No playlist data in callback for task {task_id}")
+                return None
+            
+            if status == "in_progress":
+                # Phase 1: Create children table at start, don't store playlist entry yet
+                children_table = self.create_children_table_for_playlist(callback_data, task_id)
+                logger.info(f"Playlist download started for task {task_id}, children table: {children_table}")
+                return children_table
+            
+            # Phase 2: Store playlist entry in main table (for completed/failed status)
+            external_ids = self._extract_external_ids(playlist)
+            
+            # For completed/failed, we need to find the existing children table
+            # This should be stored in task info by the celery task
+            from routes.utils.celery_tasks import get_task_info
+            task_info = get_task_info(task_id)
+            children_table = task_info.get("children_table")
+            
+            if not children_table:
+                # Fallback: generate new children table name (shouldn't happen in normal flow)
+                playlist_uuid = str(uuid.uuid4()).replace("-", "")[:10]
+                children_table = f"playlist_{playlist_uuid}"
+                logger.warning(f"No children table found for playlist task {task_id}, generating new: {children_table}")
+            
+            # Extract summary data if available
+            summary = status_info.get("summary", {})
+            successful_tracks = summary.get("total_successful", 0)
+            failed_tracks = summary.get("total_failed", 0)
+            skipped_tracks = summary.get("total_skipped", 0)
+            
+            tracks = playlist.get("tracks", [])
+            total_tracks = len(tracks)
+            total_duration = self._calculate_total_duration(tracks)
+            
+            # Extract owner information
+            owner = playlist.get("owner", {})
+            
+            # Prepare metadata  
+            metadata = {
+                "callback_type": "playlist",
+                "status_info": status_info,
+                "description": playlist.get("description", ""),
+                "tracks": tracks  # Store track list in metadata
+            }
+            
+            with self._get_connection() as conn:
+                # Store main playlist entry
+                conn.execute("""
+                    INSERT OR REPLACE INTO download_history (
+                        download_type, title, artists, timestamp, status, service,
+                        quality_format, quality_bitrate, total_tracks, successful_tracks,
+                        failed_tracks, skipped_tracks, children_table, task_id,
+                        external_ids, metadata, genres, images, owner,
+                        duration_total_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    "playlist", 
+                    playlist.get("title", "Unknown"),
+                    json.dumps([owner.get("name", "Unknown")]),  # Use owner as "artist"
+                    callback_data.get("timestamp", time.time()),
+                    status,
+                    self._get_primary_service(external_ids),
+                    status_info.get("convert_to"),
+                    status_info.get("bitrate"),
+                    total_tracks,
+                    successful_tracks,
+                    failed_tracks,
+                    skipped_tracks,
+                    children_table,
+                    task_id,
+                    json.dumps(external_ids),
+                    json.dumps(metadata),
+                    json.dumps([]),  # Playlists don't have genres typically
+                    json.dumps(self._extract_images(playlist)),
+                    json.dumps(owner),
+                    total_duration
+                ))
+            
+            # Children table is populated progressively during track processing, not from summary
+            
+            logger.info(f"Stored playlist history for '{playlist.get('title')}' (task: {task_id}, children: {children_table})")
+            return None
             
         except Exception as e:
-            logger.error(f"Error processing failed track {track_entry}: {e}", exc_info=True)
+            logger.error(f"Failed to store playlist history for task {task_id}: {e}")
+            return None
     
-    logger.info(
-        f"Added {processed['successful']} successful, {processed['skipped']} skipped, "
-        f"and {processed['failed']} failed track entries for task {parent_task_id}"
-    )
+    def _populate_album_children_table(self, table_name: str, summary: Dict, album_title: str):
+        """Populate children table with individual track records from album summary."""
+        try:
+            all_tracks = []
+            
+            # Add successful tracks
+            for track in summary.get("successful_tracks", []):
+                track_data = self._prepare_child_track_data(track, album_title, "completed")
+                all_tracks.append(track_data)
+            
+            # Add failed tracks  
+            for failed_item in summary.get("failed_tracks", []):
+                track = failed_item.get("track", {})
+                track_data = self._prepare_child_track_data(track, album_title, "failed")
+                track_data["metadata"]["failure_reason"] = failed_item.get("reason", "Unknown error")
+                all_tracks.append(track_data)
+            
+            # Add skipped tracks
+            for track in summary.get("skipped_tracks", []):
+                track_data = self._prepare_child_track_data(track, album_title, "skipped")
+                all_tracks.append(track_data)
+            
+            # Insert all tracks
+            with self._get_connection() as conn:
+                for track_data in all_tracks:
+                    conn.execute(f"""
+                        INSERT INTO {table_name} (
+                            title, artists, album_title, duration_ms, track_number,
+                            disc_number, explicit, status, external_ids, genres,
+                            isrc, timestamp, position, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, track_data["values"])
+            
+            logger.info(f"Populated {len(all_tracks)} tracks in children table {table_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to populate album children table {table_name}: {e}")
     
-    return processed
-
-
-def get_history_entries(limit=25, offset=0, sort_by="timestamp_completed", sort_order="DESC", filters=None):
-    """Legacy compatibility function."""
-    logger.warning("Using legacy get_history_entries - consider migrating to get_task_history")
+    def _populate_playlist_children_table(self, table_name: str, summary: Dict):
+        """Populate children table with individual track records from playlist summary."""
+        try:
+            all_tracks = []
+            
+            # Add successful tracks
+            for track in summary.get("successful_tracks", []):
+                track_data = self._prepare_child_track_data(track, "", "completed")
+                all_tracks.append(track_data)
+            
+            # Add failed tracks
+            for failed_item in summary.get("failed_tracks", []):
+                track = failed_item.get("track", {})
+                track_data = self._prepare_child_track_data(track, "", "failed")
+                track_data["metadata"]["failure_reason"] = failed_item.get("reason", "Unknown error")
+                all_tracks.append(track_data)
+            
+            # Add skipped tracks  
+            for track in summary.get("skipped_tracks", []):
+                track_data = self._prepare_child_track_data(track, "", "skipped")
+                all_tracks.append(track_data)
+            
+            # Insert all tracks
+            with self._get_connection() as conn:
+                for track_data in all_tracks:
+                    conn.execute(f"""
+                        INSERT INTO {table_name} (
+                            title, artists, album_title, duration_ms, track_number,
+                            disc_number, explicit, status, external_ids, genres,
+                            isrc, timestamp, position, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, track_data["values"])
+            
+            logger.info(f"Populated {len(all_tracks)} tracks in children table {table_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to populate playlist children table {table_name}: {e}")
     
-    # Map old sort_by to new fields
-    sort_mapping = {
-        "timestamp_completed": "timestamp_completed",
-        "timestamp_added": "timestamp_created",
-        "item_name": "title"
-    }
-    
-    new_sort_by = sort_mapping.get(sort_by, "timestamp_updated")
-    return get_task_history(limit, offset, new_sort_by, sort_order, filters)
-
-
-def get_track_mini_history(track_id: str, table_name: str) -> Dict:
-    """Get comprehensive mini-history for a specific track."""
-    conn = None
-    try:
-        conn = sqlite3.connect(HISTORY_DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+    def _prepare_child_track_data(self, track: Dict, default_album: str, status: str) -> Dict:
+        """Prepare track data for insertion into children table."""
+        artists = self._extract_artists(track)
+        external_ids = self._extract_external_ids(track)
         
-        cursor.execute(f"SELECT * FROM {table_name} WHERE track_id = ?", (track_id,))
-        result = cursor.fetchone()
+        # Get album info
+        album = track.get("album", {})
+        album_title = album.get("title", default_album)
         
-        if not result:
-            return {}
+        # Extract ISRC
+        isrc = external_ids.get("isrc", "")
         
-        track_info = dict(result)
-        
-        # Parse JSON fields
-        json_fields = ["track_data", "artists_data", "album_data", "ids_data", 
-                      "status_history", "error_info", "progress_info", "config"]
-        
-        for field in json_fields:
-            if track_info.get(field):
-                try:
-                    track_info[field] = json.loads(track_info[field])
-                except json.JSONDecodeError:
-                    pass
-        
-        # Calculate duration statistics
-        if track_info.get("timestamp_started") and track_info.get("timestamp_completed"):
-            track_info["calculated_duration"] = track_info["timestamp_completed"] - track_info["timestamp_started"]
-        
-        # Add progress timeline
-        if track_info.get("status_history"):
-            track_info["timeline"] = []
-            for entry in track_info["status_history"]:
-                timeline_entry = {
-                    "timestamp": entry.get("timestamp"),
-                    "status": entry.get("status_type"),
-                    "readable_time": datetime.fromtimestamp(entry.get("timestamp", 0)).isoformat() if entry.get("timestamp") else None
-                }
-                if entry.get("progress_info"):
-                    timeline_entry["progress"] = entry["progress_info"]
-                if entry.get("error_info"):
-                    timeline_entry["error"] = entry["error_info"]
-                track_info["timeline"].append(timeline_entry)
-        
-        return track_info
-        
-    except Exception as e:
-        logger.error(f"Error getting track mini-history: {e}")
-        return {}
-    finally:
-        if conn:
-            conn.close()
-
-
-if __name__ == "__main__":
-    # Test the enhanced system
-    logging.basicConfig(level=logging.INFO)
-    init_history_db()
-    
-    # Test track task
-    track_task = {
-        "task_id": "test_track_001",
-        "task_type": "track",
-        "title": "Test Song",
-        "artists": [{"name": "Test Artist"}],
-        "ids": {"spotify": "track123"},
-        "status_final": "COMPLETED",
-        "metadata": {
-            "type": "track",
-            "title": "Test Song",
-            "duration_ms": 240000,
-            "artists": [{"name": "Test Artist"}]
-        },
-        "config": {"quality_profile": "NORMAL", "service_used": "Spotify"}
-    }
-    
-    add_task_to_history(track_task)
-    
-    # Test album task with comprehensive track management
-    album_task = {
-        "task_id": "test_album_001", 
-        "task_type": "album",
-        "title": "Test Album",
-        "artists": [{"name": "Test Artist"}],
-        "ids": {"spotify": "album123"},
-        "children_table": create_child_table("test_album_001", "album")
-    }
-    
-    add_task_to_history(album_task)
-    
-    # Add tracks with comprehensive data to the album
-    for i in range(3):
-        track_data = {
-            "track_data": {
-                "title": f"Track {i+1}",
-                "track_number": i+1,
-                "disc_number": 1,
-                "duration_ms": 180000 + (i * 20000),
-                "explicit": False,
-                "artists": [{"name": "Test Artist", "ids": {"spotify": f"artist{i}"}}],
-                "ids": {"spotify": f"track{i}", "isrc": f"TEST{i:03d}"}
-            },
-            "position": i+1,
-            "status_current": "initializing",
-            "status_history": [
-                {
-                    "timestamp": time.time() - 300,
-                    "status_type": "initializing", 
-                    "status_data": {"status": "initializing"}
-                },
-                {
-                    "timestamp": time.time() - 200,
-                    "status_type": "real-time",
-                    "status_data": {"status": "real-time", "progress": 50},
-                    "progress_info": {"progress": 50, "time_elapsed": 100}
-                },
-                {
-                    "timestamp": time.time() - 100,
-                    "status_type": "done",
-                    "status_data": {"status": "done"},
-                    "progress_info": {"progress": 100}
-                }
-            ],
-            "timestamp_started": time.time() - 300,
-            "timestamp_completed": time.time() - 100,
-            "status_final": "COMPLETED",
-            "time_elapsed": 200,
-            "quality_achieved": "FLAC 1411kbps",
-            "file_size": 45000000 + (i * 5000000),
-            "download_path": f"/downloads/Test Album/Track {i+1}.flac"
+        # Prepare metadata
+        metadata = {
+            "album": album,
+            "type": track.get("type", "")
         }
-        track_id = add_child_track("test_album_001", track_data)
-        print(f"Added track with comprehensive data: {track_id}")
+        
+        values = (
+            track.get("title", "Unknown"),
+            json.dumps(artists),
+            album_title,
+            track.get("duration_ms", 0),
+            track.get("track_number", 0),
+            track.get("disc_number", 1),
+            track.get("explicit", False),
+            status,
+            json.dumps(external_ids),
+            json.dumps(track.get("genres", [])),
+            isrc,
+            time.time(),
+            track.get("position", 0),  # For playlist tracks
+            json.dumps(metadata)
+        )
+        
+        return {"values": values, "metadata": metadata}
     
-    # Test retrieval
-    tasks, total = get_task_history(limit=10, include_children=True)
-    print(f"\nFound {total} tasks:")
-    for task in tasks:
-        print(f"- {task['title']} ({task['task_type']}) - {task.get('status_final', 'N/A')}")
-        if task.get('child_tracks'):
-            print(f"  {len(task['child_tracks'])} child tracks:")
-            for child in task['child_tracks'][:2]:  # Show first 2 tracks
-                print(f"    • {child.get('title', 'Unknown')} - {child.get('status_final', 'N/A')}")
-                if child.get("status_history"):
-                    print(f"      Status changes: {len(child['status_history'])}")
-                if child.get("quality_achieved"):
-                    print(f"      Quality: {child['quality_achieved']}")
+    def update_download_status(self, task_id: str, status: str):
+        """Update download status for existing history entry."""
+        try:
+            with self._get_connection() as conn:
+                conn.execute("""
+                    UPDATE download_history 
+                    SET status = ? 
+                    WHERE task_id = ?
+                """, (status, task_id))
+            
+            logger.info(f"Updated download status to '{status}' for task {task_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to update download status for task {task_id}: {e}")
     
-    # Test track mini-history
-    if tasks:
-        for task in tasks:
-            if task.get('child_tracks'):
-                first_track = task['child_tracks'][0]
-                mini_history = get_track_mini_history(first_track['track_id'], task['children_table'])
-                if mini_history.get('timeline'):
-                    print(f"\nMini-history for '{mini_history.get('title', 'Unknown')}':")
-                    for event in mini_history['timeline']:
-                        print(f"  {event['readable_time']}: {event['status']}")
-                        if event.get('progress'):
-                            print(f"    Progress: {event['progress']}")
-                break
+    def get_download_history(self, limit: int = 100, offset: int = 0, 
+                           download_type: Optional[str] = None,
+                           status: Optional[str] = None) -> List[Dict]:
+        """
+        Retrieve download history with optional filtering.
+        
+        Args:
+            limit: Maximum number of records to return
+            offset: Number of records to skip
+            download_type: Filter by download type ('track', 'album', 'playlist')
+            status: Filter by status ('completed', 'failed', 'skipped', 'in_progress')
+            
+        Returns:
+            List of download history records
+        """
+        try:
+            query = "SELECT * FROM download_history"
+            params = []
+            conditions = []
+            
+            if download_type:
+                conditions.append("download_type = ?")
+                params.append(download_type)
+            
+            if status:
+                conditions.append("status = ?")
+                params.append(status)
+            
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            
+            query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            
+            with self._get_connection() as conn:
+                cursor = conn.execute(query, params)
+                rows = cursor.fetchall()
+                
+                # Convert to list of dicts
+                result = []
+                for row in rows:
+                    record = dict(row)
+                    # Parse JSON fields
+                    for field in ['artists', 'external_ids', 'metadata', 'release_date', 
+                                'genres', 'images', 'owner']:
+                        if record.get(field):
+                            try:
+                                record[field] = json.loads(record[field])
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                    result.append(record)
+                
+                return result
+                
+        except Exception as e:
+            logger.error(f"Failed to retrieve download history: {e}")
+            return []
+    
+    def get_children_history(self, children_table: str) -> List[Dict]:
+        """
+        Retrieve track history from a children table.
+        
+        Args:
+            children_table: Name of the children table
+            
+        Returns:
+            List of track records
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute(f"""
+                    SELECT * FROM {children_table} 
+                    ORDER BY track_number, position
+                """)
+                rows = cursor.fetchall()
+                
+                # Convert to list of dicts
+                result = []
+                for row in rows:
+                    record = dict(row)
+                    # Parse JSON fields
+                    for field in ['artists', 'external_ids', 'genres', 'metadata']:
+                        if record.get(field):
+                            try:
+                                record[field] = json.loads(record[field])
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                    result.append(record)
+                
+                return result
+                
+        except Exception as e:
+            logger.error(f"Failed to retrieve children history from {children_table}: {e}")
+            return []
+    
+    def get_download_stats(self) -> Dict:
+        """Get download statistics."""
+        try:
+            with self._get_connection() as conn:
+                # Total downloads by type
+                cursor = conn.execute("""
+                    SELECT download_type, status, COUNT(*) as count
+                    FROM download_history
+                    GROUP BY download_type, status
+                """)
+                type_stats = {}
+                for row in cursor.fetchall():
+                    download_type = row['download_type']
+                    status = row['status']
+                    count = row['count']
+                    
+                    if download_type not in type_stats:
+                        type_stats[download_type] = {}
+                    type_stats[download_type][status] = count
+                
+                # Total tracks downloaded (including from albums/playlists)
+                cursor = conn.execute("""
+                    SELECT SUM(
+                        CASE 
+                            WHEN download_type = 'track' AND status = 'completed' THEN 1
+                            ELSE COALESCE(successful_tracks, 0)
+                        END
+                    ) as total_successful_tracks
+                    FROM download_history
+                """)
+                total_tracks = cursor.fetchone()['total_successful_tracks'] or 0
+                
+                # Recent downloads (last 7 days)
+                week_ago = time.time() - (7 * 24 * 60 * 60)
+                cursor = conn.execute("""
+                    SELECT COUNT(*) as count
+                    FROM download_history
+                    WHERE timestamp > ?
+                """, (week_ago,))
+                recent_downloads = cursor.fetchone()['count']
+                
+                return {
+                    "by_type_and_status": type_stats,
+                    "total_successful_tracks": total_tracks,
+                    "recent_downloads_7d": recent_downloads
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get download stats: {e}")
+            return {}
+    
+    def search_history(self, query: str, limit: int = 50) -> List[Dict]:
+        """
+        Search download history by title or artist.
+        
+        Args:
+            query: Search query for title or artist
+            limit: Maximum number of results
+            
+        Returns:
+            List of matching download records
+        """
+        try:
+            search_pattern = f"%{query}%"
+            
+            with self._get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT * FROM download_history
+                    WHERE title LIKE ? OR artists LIKE ?
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, (search_pattern, search_pattern, limit))
+                
+                rows = cursor.fetchall()
+                
+                # Convert to list of dicts
+                result = []
+                for row in rows:
+                    record = dict(row)
+                    # Parse JSON fields
+                    for field in ['artists', 'external_ids', 'metadata', 'release_date', 
+                                'genres', 'images', 'owner']:
+                        if record.get(field):
+                            try:
+                                record[field] = json.loads(record[field])
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                    result.append(record)
+                
+                return result
+                
+        except Exception as e:
+            logger.error(f"Failed to search download history: {e}")
+            return []
+    
+    def get_download_by_task_id(self, task_id: str) -> Optional[Dict]:
+        """
+        Get download history entry by task ID.
+        
+        Args:
+            task_id: Celery task ID
+            
+        Returns:
+            Download record or None if not found
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT * FROM download_history
+                    WHERE task_id = ?
+                    LIMIT 1
+                """, (task_id,))
+                
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                
+                record = dict(row)
+                # Parse JSON fields
+                for field in ['artists', 'external_ids', 'metadata', 'release_date', 
+                            'genres', 'images', 'owner']:
+                    if record.get(field):
+                        try:
+                            record[field] = json.loads(record[field])
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                
+                return record
+                
+        except Exception as e:
+            logger.error(f"Failed to get download by task ID {task_id}: {e}")
+            return None
+    
+    def get_recent_downloads(self, limit: int = 20) -> List[Dict]:
+        """Get most recent downloads."""
+        return self.get_download_history(limit=limit, offset=0)
+    
+    def get_failed_downloads(self, limit: int = 50) -> List[Dict]:
+        """Get failed downloads."""
+        return self.get_download_history(limit=limit, status="failed")
+    
+    def clear_old_history(self, days_old: int = 30) -> int:
+        """
+        Clear download history older than specified days.
+        
+        Args:
+            days_old: Number of days old to keep (default 30)
+            
+        Returns:
+            Number of records deleted
+        """
+        try:
+            cutoff_time = time.time() - (days_old * 24 * 60 * 60)
+            
+            with self._get_connection() as conn:
+                # Get list of children tables to delete
+                cursor = conn.execute("""
+                    SELECT children_table FROM download_history
+                    WHERE timestamp < ? AND children_table IS NOT NULL
+                """, (cutoff_time,))
+                
+                children_tables = [row['children_table'] for row in cursor.fetchall()]
+                
+                # Delete main history records
+                cursor = conn.execute("""
+                    DELETE FROM download_history
+                    WHERE timestamp < ?
+                """, (cutoff_time,))
+                
+                deleted_count = cursor.rowcount
+                
+                # Drop children tables
+                for table_name in children_tables:
+                    try:
+                        conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to drop children table {table_name}: {e}")
+                
+                logger.info(f"Cleared {deleted_count} old history records and {len(children_tables)} children tables")
+                return deleted_count
+                
+        except Exception as e:
+            logger.error(f"Failed to clear old history: {e}")
+            return 0
+
+
+# Global history manager instance
+history_manager = HistoryManager() 

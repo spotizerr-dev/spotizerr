@@ -28,8 +28,8 @@ from routes.utils.watch.db import (
     add_or_update_album_for_artist,
 )
 
-# Import history manager function
-from .history_manager import add_entry_to_history, add_tracks_from_summary
+# Import for download history management
+from routes.utils.history_manager import history_manager
 
 # Create Redis connection for storing task data that's not part of the Celery result backend
 import redis
@@ -217,131 +217,6 @@ def get_all_tasks():
         return []
 
 
-
-# --- History Logging Helper ---
-def _log_task_to_history(task_id, final_status_str, error_msg=None):
-    """Helper function to gather task data and log it to the history database."""
-    try:
-        task_info = get_task_info(task_id)
-        last_status_obj = get_last_task_status(task_id)
-
-        if not task_info:
-            logger.warning(
-                f"History: No task_info found for task_id {task_id}. Cannot log to history."
-            )
-            return
-
-        # Determine service_used and quality_profile
-        main_service_name = str(
-            task_info.get("main", "Unknown")
-        ).capitalize()  # e.g. Spotify, Deezer from their respective .env values
-        fallback_service_name = str(task_info.get("fallback", "")).capitalize()
-
-        service_used_str = main_service_name
-        if (
-            task_info.get("fallback") and fallback_service_name
-        ):  # Check if fallback was configured
-            # Try to infer actual service used if possible, otherwise show configured.
-            # This part is a placeholder for more accurate determination if deezspot gives explicit feedback.
-            # For now, we assume 'main' was used unless an error hints otherwise.
-            # A more robust solution would involve deezspot callback providing this.
-            service_used_str = (
-                f"{main_service_name} (Fallback: {fallback_service_name})"
-            )
-            # If error message indicates fallback, we could try to parse it.
-            # e.g. if error_msg and "fallback" in error_msg.lower(): service_used_str = f"{fallback_service_name} (Used Fallback)"
-
-        # Determine quality profile (primarily from the 'quality' field)
-        # 'quality' usually holds the primary service's quality (e.g., spotifyQuality, deezerQuality)
-        quality_profile_str = str(task_info.get("quality", "N/A"))
-
-        # Get convertTo and bitrate
-        convert_to_str = str(
-            task_info.get("convertTo", "")
-        )  # Empty string if None or not present
-        bitrate_str = str(
-            task_info.get("bitrate", "")
-        )  # Empty string if None or not present
-
-        # Extract Spotify ID from item URL if possible
-        spotify_id = None
-        item_url = task_info.get("url", "")
-        if item_url:
-            try:
-                spotify_id = item_url.split("/")[-1]
-                # Further validation if it looks like a Spotify ID (e.g., 22 chars, alphanumeric)
-                if not (spotify_id and len(spotify_id) == 22 and spotify_id.isalnum()):
-                    spotify_id = None  # Reset if not a valid-looking ID
-            except Exception:
-                spotify_id = None  # Ignore errors in parsing
-
-        # Check for the new summary object in the last status
-        summary_obj = last_status_obj.get("summary") if last_status_obj else None
-
-        history_entry = {
-            "task_id": task_id,
-            "download_type": task_info.get("download_type"),
-            "item_name": task_info.get("name"),
-            "item_artist": task_info.get("artist"),
-            "item_album": task_info.get(
-                "album",
-                task_info.get("name")
-                if task_info.get("download_type") == "album"
-                else None,
-            ),
-            "item_url": item_url,
-            "spotify_id": spotify_id,
-            "status_final": final_status_str,
-            "error_message": error_msg
-            if error_msg
-            else (last_status_obj.get("error") if last_status_obj else None),
-            "timestamp_added": task_info.get("created_at", time.time()),
-            "timestamp_completed": last_status_obj.get("timestamp", time.time())
-            if last_status_obj
-            else time.time(),
-            "original_request_json": json.dumps(task_info.get("original_request", {})),
-            "last_status_obj_json": json.dumps(
-                last_status_obj if last_status_obj else {}
-            ),
-            "service_used": service_used_str,
-            "quality_profile": quality_profile_str,
-            "convert_to": convert_to_str
-            if convert_to_str
-            else None,  # Store None if empty string
-            "bitrate": bitrate_str
-            if bitrate_str
-            else None,  # Store None if empty string
-            "summary_json": json.dumps(summary_obj) if summary_obj else None,
-            "total_successful": summary_obj.get("total_successful")
-            if summary_obj
-            else None,
-            "total_skipped": summary_obj.get("total_skipped") if summary_obj else None,
-            "total_failed": summary_obj.get("total_failed") if summary_obj else None,
-        }
-        
-        # Add the main history entry for the task
-        add_entry_to_history(history_entry)
-        
-        # Process track-level entries from summary if this is a multi-track download
-        if summary_obj and task_info.get("download_type") in ["album", "playlist"]:
-            tracks_processed = add_tracks_from_summary(
-                summary_data=summary_obj,
-                parent_task_id=task_id,
-                parent_history_data=history_entry
-            )
-            logger.info(
-                f"Track-level history: Processed {tracks_processed['successful']} successful, "
-                f"{tracks_processed['skipped']} skipped, and {tracks_processed['failed']} failed tracks for task {task_id}"
-            )
-            
-    except Exception as e:
-        logger.error(
-            f"History: Error preparing or logging history for task {task_id}: {e}",
-            exc_info=True,
-        )
-# --- End History Logging Helper ---
-
-
 def cancel_task(task_id):
     """Cancel a task by its ID"""
     try:
@@ -357,9 +232,6 @@ def cancel_task(task_id):
 
         # Try to revoke the Celery task if it hasn't started yet
         celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
-
-        # Log cancellation to history
-        _log_task_to_history(task_id, "CANCELLED", "Task cancelled by user")
 
         # Schedule deletion of task data after 30 seconds
         delayed_delete_task_data.apply_async(
@@ -592,8 +464,12 @@ class ProgressTrackingTask(Task):
         if "timestamp" not in progress_data:
             progress_data["timestamp"] = time.time()
 
-        status = progress_data.get("status", "unknown")
+        # Extract status from status_info (deezspot callback format)
+        status_info = progress_data.get("status_info", {})
+        status = status_info.get("status", progress_data.get("status", "unknown"))
         task_info = get_task_info(task_id)
+        
+        logger.debug(f"Task {task_id}: Extracted status: '{status}' from callback")
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -609,12 +485,18 @@ class ProgressTrackingTask(Task):
         elif status in ["real_time", "track_progress"]:
             self._handle_real_time(task_id, progress_data)
         elif status == "skipped":
+            # Re-fetch task_info to ensure we have the latest children_table info
+            task_info = get_task_info(task_id)
             self._handle_skipped(task_id, progress_data, task_info)
         elif status == "retrying":
             self._handle_retrying(task_id, progress_data, task_info)
         elif status == "error":
+            # Re-fetch task_info to ensure we have the latest children_table info
+            task_info = get_task_info(task_id)
             self._handle_error(task_id, progress_data, task_info)
         elif status == "done":
+            # Re-fetch task_info to ensure we have the latest children_table info
+            task_info = get_task_info(task_id)
             self._handle_done(task_id, progress_data, task_info)
         else:
             logger.info(
@@ -627,9 +509,46 @@ class ProgressTrackingTask(Task):
     def _handle_initializing(self, task_id, data, task_info):
         """Handle initializing status from deezspot"""
         logger.info(f"Task {task_id} initializing...")
+        
         # Initializing object is now very basic, mainly for acknowledging the start.
         # More detailed info comes with 'progress' or 'downloading' states.
         data["status"] = ProgressState.INITIALIZING
+        
+        # Store initial history entry for download start
+        try:
+            # Check for album/playlist FIRST since their callbacks contain both parent and track info
+            if "album" in data:
+                # Album download - create children table and store name in task info
+                logger.info(f"Task {task_id}: Creating album children table")
+                children_table = history_manager.store_album_history(data, task_id, "in_progress")
+                if children_table:
+                    task_info["children_table"] = children_table
+                    store_task_info(task_id, task_info)
+                    logger.info(f"Task {task_id}: Created and stored children table '{children_table}' in task info")
+                else:
+                    logger.error(f"Task {task_id}: Failed to create album children table")
+            elif "playlist" in data:
+                # Playlist download - create children table and store name in task info
+                logger.info(f"Task {task_id}: Creating playlist children table")
+                children_table = history_manager.store_playlist_history(data, task_id, "in_progress")
+                if children_table:
+                    task_info["children_table"] = children_table
+                    store_task_info(task_id, task_info)
+                    logger.info(f"Task {task_id}: Created and stored children table '{children_table}' in task info")
+                else:
+                    logger.error(f"Task {task_id}: Failed to create playlist children table")
+            elif "track" in data:
+                # Individual track download - check if it's part of an album/playlist
+                children_table = task_info.get("children_table")
+                if children_table:
+                    # Track is part of album/playlist - don't store in main table during initialization
+                    logger.info(f"Task {task_id}: Skipping track initialization storage (part of album/playlist, children table: {children_table})")
+                else:
+                    # Individual track download - store in main table
+                    logger.info(f"Task {task_id}: Storing individual track history (initializing)")
+                    history_manager.store_track_history(data, task_id, "in_progress")
+        except Exception as e:
+            logger.error(f"Failed to store initial history for task {task_id}: {e}", exc_info=True)
 
     def _handle_downloading(self, task_id, data, task_info):
         """Handle downloading status from deezspot"""
@@ -725,7 +644,7 @@ class ProgressTrackingTask(Task):
                     )
 
         # Log at debug level
-        logger.debug(f"Task {task_id} track progress: {title} by {artist}: {percent}%")
+        logger.debug(f"Task {task_id} track progress: {track_name} by {artist}: {percent}%")
 
         # Set appropriate status
         # data["status"] = (
@@ -736,7 +655,25 @@ class ProgressTrackingTask(Task):
 
     def _handle_skipped(self, task_id, data, task_info):
         """Handle skipped status from deezspot"""
-        # Extract track info
+        
+        # Store skipped history for deezspot callback format
+        try:
+            if "track" in data:
+                # Individual track skipped - check if we should use children table
+                children_table = task_info.get("children_table")
+                logger.debug(f"Task {task_id}: Skipped track, children_table = '{children_table}'")
+                if children_table:
+                    # Part of album/playlist - store progressively in children table
+                    logger.info(f"Task {task_id}: Storing skipped track in children table '{children_table}' (progressive)")
+                    history_manager.store_track_history(data, task_id, "skipped", children_table)
+                else:
+                    # Individual track download - store in main table
+                    logger.info(f"Task {task_id}: Storing skipped track in main table (individual download)")
+                    history_manager.store_track_history(data, task_id, "skipped")
+        except Exception as e:
+            logger.error(f"Failed to store skipped history for task {task_id}: {e}")
+        
+        # Extract track info (legacy format support)
         title = data.get("song", "Unknown")
         artist = data.get("artist", "Unknown")
         reason = data.get("reason", "Unknown reason")
@@ -809,7 +746,34 @@ class ProgressTrackingTask(Task):
 
     def _handle_error(self, task_id, data, task_info):
         """Handle error status from deezspot"""
-        # Extract error info
+        
+        # Store error history for deezspot callback format
+        try:
+            # Check for album/playlist FIRST since their callbacks contain both parent and track info
+            if "album" in data:
+                # Album failed - store in main table
+                logger.info(f"Task {task_id}: Storing album history (failed)")
+                history_manager.store_album_history(data, task_id, "failed")
+            elif "playlist" in data:
+                # Playlist failed - store in main table
+                logger.info(f"Task {task_id}: Storing playlist history (failed)")
+                history_manager.store_playlist_history(data, task_id, "failed")
+            elif "track" in data:
+                # Individual track failed - check if we should use children table
+                children_table = task_info.get("children_table")
+                logger.debug(f"Task {task_id}: Failed track, children_table = '{children_table}'")
+                if children_table:
+                    # Part of album/playlist - store progressively in children table
+                    logger.info(f"Task {task_id}: Storing failed track in children table '{children_table}' (progressive)")
+                    history_manager.store_track_history(data, task_id, "failed", children_table)
+                else:
+                    # Individual track download - store in main table
+                    logger.info(f"Task {task_id}: Storing failed track in main table (individual download)")
+                    history_manager.store_track_history(data, task_id, "failed")
+        except Exception as e:
+            logger.error(f"Failed to store error history for task {task_id}: {e}")
+        
+        # Extract error info (legacy format support)
         message = data.get("message", "Unknown error")
 
         # Log error
@@ -826,7 +790,34 @@ class ProgressTrackingTask(Task):
 
     def _handle_done(self, task_id, data, task_info):
         """Handle done status from deezspot"""
-        # Extract data
+        
+        # Store completion history for deezspot callback format
+        try:
+            # Check for album/playlist FIRST since their callbacks contain both parent and track info
+            if "album" in data:
+                # Album completion with summary - store in main table
+                logger.info(f"Task {task_id}: Storing album history (completed)")
+                history_manager.store_album_history(data, task_id, "completed")
+            elif "playlist" in data:
+                # Playlist completion with summary - store in main table
+                logger.info(f"Task {task_id}: Storing playlist history (completed)")
+                history_manager.store_playlist_history(data, task_id, "completed")
+            elif "track" in data:
+                # Individual track completion - check if we should use children table
+                children_table = task_info.get("children_table")
+                logger.debug(f"Task {task_id}: Completed track, children_table = '{children_table}'")
+                if children_table:
+                    # Part of album/playlist - store progressively in children table
+                    logger.info(f"Task {task_id}: Storing completed track in children table '{children_table}' (progressive)")
+                    history_manager.store_track_history(data, task_id, "completed", children_table)
+                else:
+                    # Individual track download - store in main table
+                    logger.info(f"Task {task_id}: Storing completed track in main table (individual download)")
+                    history_manager.store_track_history(data, task_id, "completed")
+        except Exception as e:
+            logger.error(f"Failed to store completion history for task {task_id}: {e}", exc_info=True)
+        
+        # Extract data (legacy format support)
         content_type = data.get("type", "").lower()
         album = data.get("album", "")
         artist = data.get("artist", "")
@@ -1025,9 +1016,6 @@ def task_postrun_handler(
 ):
     """Signal handler when a task finishes"""
     try:
-        # Define download task names
-        download_task_names = ["download_track", "download_album", "download_playlist"]
-
         last_status_for_history = get_last_task_status(task_id)
         if last_status_for_history and last_status_for_history.get("status") in [
             ProgressState.COMPLETE,
@@ -1041,14 +1029,8 @@ def task_postrun_handler(
                 and last_status_for_history.get("status") != ProgressState.CANCELLED
             ):
                 logger.info(
-                    f"Task {task_id} was REVOKED (likely cancelled), logging to history."
+                    f"Task {task_id} was REVOKED (likely cancelled)."
                 )
-                if (
-                    task and task.name in download_task_names
-                ):  # Check if it's a download task
-                    _log_task_to_history(
-                        task_id, "CANCELLED", "Task was revoked/cancelled."
-                    )
             # return # Let status update proceed if necessary
 
         task_info = get_task_info(task_id)
@@ -1065,10 +1047,6 @@ def task_postrun_handler(
             logger.info(
                 f"Task {task_id} completed successfully: {task_info.get('name', 'Unknown')}"
             )
-            if (
-                task and task.name in download_task_names
-            ):  # Check if it's a download task
-                _log_task_to_history(task_id, "COMPLETED")
 
             if (
                 task_info.get("download_type") == "track"
@@ -1189,10 +1167,6 @@ def task_failure_handler(
             )
 
         logger.error(f"Task {task_id} failed: {str(exception)}")
-        if (
-            sender and sender.name in download_task_names
-        ):  # Check if it's a download task
-            _log_task_to_history(task_id, "ERROR", str(exception))
 
         if can_retry:
             logger.info(f"Task {task_id} can be retried ({retry_count}/{max_retries})")
@@ -1552,12 +1526,6 @@ def delete_task_data_and_log(task_id, reason="Task data deleted"):
                     "timestamp": time.time(),
                 },
             )
-            # History logging for COMPLETION, CANCELLATION, or definitive ERROR should have occurred when those states were first reached.
-            # If this cleanup is for a task that *wasn't* in such a state (e.g. stale, still processing), log it now.
-            if final_redis_status == ProgressState.ERROR_AUTO_CLEANED:
-                _log_task_to_history(
-                    task_id, "ERROR", error_message_for_status
-                )  # Or a more specific status if desired
 
         # Delete Redis keys associated with the task
         redis_client.delete(f"task:{task_id}:info")
