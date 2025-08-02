@@ -510,7 +510,13 @@ export const Queue = () => {
   if (!context) return null;
   if (!isVisible) return null;
 
-  const hasActive = items.some((item) => !isTerminalStatus(item.status));
+  const hasActive = items.some((item) => {
+    // Check for status in both possible locations (nested status_info for real-time, or top-level for others)
+    const actualStatus = (item.last_line?.status_info?.status as QueueStatus) || 
+                         (item.last_line?.status as QueueStatus) || 
+                         item.status;
+    return isActiveTaskStatus(actualStatus);
+  });
   const hasFinished = items.some((item) => isTerminalStatus(item.status));
 
   // Handle mobile swipe-to-dismiss

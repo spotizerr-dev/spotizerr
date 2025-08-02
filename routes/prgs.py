@@ -27,7 +27,30 @@ ACTIVE_TASK_STATES = {
     ProgressState.TRACK_PROGRESS,   # "track_progress" - real-time track progress
     ProgressState.REAL_TIME,        # "real_time" - real-time download progress
     ProgressState.RETRYING,         # "retrying" - task is retrying after error
+    "real-time",                    # "real-time" - real-time download progress (hyphenated version)
 }
+
+def get_task_status_from_last_status(last_status):
+    """
+    Extract the task status from last_status, checking both possible locations.
+    
+    Args:
+        last_status: The last status dict from get_last_task_status()
+        
+    Returns:
+        str: The task status string
+    """
+    if not last_status:
+        return "unknown"
+    
+    # Check for status in nested status_info (for real-time downloads)
+    status_info = last_status.get("status_info", {})
+    if isinstance(status_info, dict) and "status" in status_info:
+        return status_info["status"]
+    
+    # Fall back to top-level status (for other task types)
+    return last_status.get("status", "unknown")
+
 
 def is_task_active(task_status):
     """
@@ -138,7 +161,7 @@ def _build_task_response(task_info, last_status, task_id, current_time):
     # Determine last_line content
     if last_status and "raw_callback" in last_status:
         last_line_content = last_status["raw_callback"]
-    elif last_status and last_status.get("status") == "error":
+    elif last_status and get_task_status_from_last_status(last_status) == "error":
         last_line_content = _build_error_callback_object(last_status)
     else:
         last_line_content = last_status
@@ -191,7 +214,7 @@ def get_paginated_tasks(page=1, limit=20, active_only=False):
                 continue
 
             last_status = get_last_task_status(task_id)
-            task_status = last_status.get("status") if last_status else "unknown"
+            task_status = get_task_status_from_last_status(last_status)
             is_active_task = is_task_active(task_status)
             
             # Categorize tasks by status using ProgressState constants
@@ -321,7 +344,7 @@ def get_task_details(task_id):
     # Determine last_line content
     if last_status and "raw_callback" in last_status:
         last_line_content = last_status["raw_callback"]
-    elif last_status and last_status.get("status") == "error":
+    elif last_status and get_task_status_from_last_status(last_status) == "error":
         last_line_content = _build_error_callback_object(last_status)
     else:
         # Fallback for non-error, no raw_callback, or if last_status is None
@@ -405,7 +428,7 @@ def list_tasks():
                 continue
 
             last_status = get_last_task_status(task_id)
-            task_status = last_status.get("status") if last_status else "unknown"
+            task_status = get_task_status_from_last_status(last_status)
             is_active_task = is_task_active(task_status)
             
             # Categorize tasks by status using ProgressState constants
@@ -621,7 +644,7 @@ def get_task_updates():
             task_timestamp = last_status.get("timestamp") if last_status else task_info.get("created_at", 0)
             
             # Determine task status and categorize
-            task_status = last_status.get("status") if last_status else "unknown"
+            task_status = get_task_status_from_last_status(last_status)
             is_active_task = is_task_active(task_status)
             
             # Categorize tasks by status using ProgressState constants

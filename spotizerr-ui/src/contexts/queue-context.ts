@@ -18,8 +18,8 @@ export type QueueStatus =
   | "progress"
   | "track_progress";
 
-// Active task statuses - tasks that are currently working/processing
-// This matches the ACTIVE_TASK_STATES constant in the backend
+// Active task statuses - tasks that are currently working/processing or queued
+// This matches the ACTIVE_TASK_STATES constant in the backend plus queued tasks
 export const ACTIVE_TASK_STATUSES: Set<QueueStatus> = new Set([
   "initializing",     // task is starting up
   "processing",       // task is being processed
@@ -28,6 +28,7 @@ export const ACTIVE_TASK_STATUSES: Set<QueueStatus> = new Set([
   "track_progress",   // real-time track progress
   "real-time",        // real-time download progress
   "retrying",         // task is retrying after error
+  "queued",           // task is queued and waiting to start
 ]);
 
 /**

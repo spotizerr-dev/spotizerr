@@ -55,9 +55,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [totalTasks, setTotalTasks] = useState(0);
   const pageSize = 20; // Number of non-active tasks per page
 
-  // Calculate active downloads count
+  // Calculate active downloads count (active + queued)
   const activeCount = useMemo(() => {
-    return items.filter(item => !isTerminalStatus(item.status)).length;
+    return items.filter(item => {
+      // Check for status in both possible locations (nested status_info for real-time, or top-level for others)
+      const actualStatus = (item.last_line?.status_info?.status as QueueStatus) || 
+                           (item.last_line?.status as QueueStatus) || 
+                           item.status;
+      return isActiveTaskStatus(actualStatus);
+    }).length;
   }, [items]);
 
   const stopPolling = useCallback((internalId: string) => {
@@ -156,15 +162,27 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           total_tasks: number;
           active_tasks: number;
           updated_count: number;
+          task_counts?: {
+            active: number;
+            queued: number;
+            retrying: number;
+            completed: number;
+            error: number;
+            cancelled: number;
+            skipped: number;
+          };
         }>(`/prgs/updates?since=${lastUpdateTimestamp.current}&active_only=true`);
 
-        const { tasks: updatedTasks, current_timestamp, total_tasks } = response.data;
+        const { tasks: updatedTasks, current_timestamp, total_tasks, task_counts } = response.data;
         
         // Update the last timestamp for next poll
         lastUpdateTimestamp.current = current_timestamp;
         
-        // Update total tasks count
-        setTotalTasks(total_tasks || 0);
+        // Update total tasks count - use active + queued if task_counts available
+        const calculatedTotal = task_counts ? 
+          (task_counts.active + task_counts.queued) : 
+          (total_tasks || 0);
+        setTotalTasks(calculatedTotal);
 
         if (updatedTasks.length > 0) {
           console.log(`Smart polling: ${updatedTasks.length} tasks updated (${response.data.active_tasks} active) out of ${response.data.total_tasks} total`);
@@ -236,6 +254,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         pagination: {
           has_more: boolean;
         };
+        task_counts?: {
+          active: number;
+          queued: number;
+          retrying: number;
+          completed: number;
+          error: number;
+          cancelled: number;
+          skipped: number;
+        };
       }>(`/prgs/list?page=${nextPage}&limit=${pageSize}`);
       
       const { tasks: newTasks, pagination } = response.data;
@@ -302,9 +329,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           };
           total_tasks: number;
           timestamp: number;
+          task_counts?: {
+            active: number;
+            queued: number;
+            retrying: number;
+            completed: number;
+            error: number;
+            cancelled: number;
+            skipped: number;
+          };
         }>(`/prgs/list?page=1&limit=${pageSize}`);
         
-        const { tasks, pagination, total_tasks, timestamp } = response.data;
+        const { tasks, pagination, total_tasks, timestamp, task_counts } = response.data;
         
         const backendItems = tasks
           .filter((task: any) => {
@@ -329,7 +365,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
         setItems(backendItems);
         setHasMore(pagination.has_more);
-        setTotalTasks(total_tasks || 0);
+        
+        // Update total tasks count - use active + queued if task_counts available
+        const calculatedTotal = task_counts ? 
+          (task_counts.active + task_counts.queued) : 
+          (total_tasks || 0);
+        setTotalTasks(calculatedTotal);
         
         // Set initial timestamp to current time
         lastUpdateTimestamp.current = timestamp;
@@ -489,7 +530,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cancelAll = useCallback(async () => {
-    const activeItems = items.filter((item) => item.taskId && !isTerminalStatus(item.status));
+    const activeItems = items.filter((item) => {
+      if (!item.taskId) return false;
+      // Check for status in both possible locations (nested status_info for real-time, or top-level for others)
+      const actualStatus = (item.last_line?.status_info?.status as QueueStatus) || 
+                           (item.last_line?.status as QueueStatus) || 
+                           item.status;
+      return isActiveTaskStatus(actualStatus);
+    });
     if (activeItems.length === 0) {
       toast.info("No active downloads to cancel.");
       return;
