@@ -469,8 +469,12 @@ export const Queue = () => {
   const context = useContext(QueueContext);
   const [startY, setStartY] = useState<number | null>(null);
   const [currentY, setCurrentY] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragDistance, setDragDistance] = useState(0);
   const queueRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [canDrag, setCanDrag] = useState(false);
 
   // Extract values from context (with defaults to avoid crashes)
   const { 
@@ -506,6 +510,45 @@ export const Queue = () => {
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, [isVisible, hasMore, isLoadingMore, loadMoreTasks]);
 
+  // Reset drag state when queue visibility changes
+  useEffect(() => {
+    if (!isVisible) {
+      setStartY(null);
+      setCurrentY(null);
+      setIsDragging(false);
+      setDragDistance(0);
+      setCanDrag(false);
+    }
+  }, [isVisible]);
+
+  // Prevent body scroll when queue is visible on mobile
+  useEffect(() => {
+    if (!isVisible) return;
+
+    // Only apply on mobile (when queue covers full screen)
+    const isMobile = window.innerWidth < 768; // md breakpoint
+    if (!isMobile) return;
+
+    // Store original styles
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    const originalPosition = document.body.style.position;
+
+    // Prevent body scroll and interactions
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+
+    // Cleanup function
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+      document.body.style.position = originalPosition;
+      document.body.style.width = '';
+    };
+  }, [isVisible]);
+
   // Early returns after all hooks
   if (!context) return null;
   if (!isVisible) return null;
@@ -519,64 +562,203 @@ export const Queue = () => {
   });
   const hasFinished = items.some((item) => isTerminalStatus(item.status));
 
-  // Handle mobile swipe-to-dismiss
+  // Enhanced mobile touch handling for drag-to-dismiss
   const handleTouchStart = (e: React.TouchEvent) => {
-    setStartY(e.touches[0].clientY);
-    setCurrentY(e.touches[0].clientY);
+    const touch = e.touches[0];
+    const scrollContainer = scrollContainerRef.current;
+    const headerElement = headerRef.current;
+    
+    // Only allow dragging if touch starts on header or if scroll is at top
+    const touchedHeader = headerElement?.contains(e.target as Node);
+    const scrollAtTop = scrollContainer ? scrollContainer.scrollTop <= 5 : true;
+    
+    if (touchedHeader || scrollAtTop) {
+      setCanDrag(true);
+      setStartY(touch.clientY);
+      setCurrentY(touch.clientY);
+      setIsDragging(false);
+      setDragDistance(0);
+    } else {
+      setCanDrag(false);
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (startY === null) return;
-    setCurrentY(e.touches[0].clientY);
+    if (!canDrag || startY === null) return;
     
-    const deltaY = e.touches[0].clientY - startY;
+    const touch = e.touches[0];
+    const currentTouchY = touch.clientY;
+    const deltaY = currentTouchY - startY;
     
-    // Only allow downward swipes to dismiss
+    setCurrentY(currentTouchY);
+    
+    // Only handle downward swipes (positive deltaY)
     if (deltaY > 0) {
-      if (queueRef.current) {
-        queueRef.current.style.transform = `translateY(${Math.min(deltaY, 100)}px)`;
-        queueRef.current.style.opacity = `${Math.max(0.3, 1 - deltaY / 200)}`;
+      // Start dragging if moved more than 10px down
+      if (!isDragging && deltaY > 10) {
+        setIsDragging(true);
+        // Prevent scrolling when dragging starts
+        e.preventDefault();
+      }
+      
+      if (isDragging) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const clampedDelta = Math.min(deltaY, 200); // Max drag distance
+        setDragDistance(clampedDelta);
+        
+        if (queueRef.current) {
+          // Apply transform with resistance curve
+          const resistance = Math.pow(clampedDelta / 200, 0.7);
+          const transformY = clampedDelta * resistance;
+          const opacity = Math.max(0.3, 1 - (clampedDelta / 300));
+          
+          queueRef.current.style.transform = `translateY(${transformY}px)`;
+          queueRef.current.style.opacity = `${opacity}`;
+          queueRef.current.style.transition = 'none';
+        }
+        
+        // Add haptic feedback on certain thresholds
+        if (clampedDelta > 80 && clampedDelta < 85) {
+          // Light haptic feedback when reaching dismiss threshold
+          if ('vibrate' in navigator) {
+            navigator.vibrate(10);
+          }
+        }
+      }
+    } else {
+      // If dragging upward, reset drag state
+      if (isDragging) {
+        setIsDragging(false);
+        setDragDistance(0);
+        if (queueRef.current) {
+          queueRef.current.style.transform = '';
+          queueRef.current.style.opacity = '';
+          queueRef.current.style.transition = '';
+        }
       }
     }
   };
 
-  const handleTouchEnd = () => {
-    if (startY === null || currentY === null) return;
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!canDrag || startY === null || currentY === null) {
+      resetDragState();
+      return;
+    }
     
     const deltaY = currentY - startY;
+    const wasScrolling = !isDragging && Math.abs(deltaY) > 0;
     
     if (queueRef.current) {
-      queueRef.current.style.transform = '';
-      queueRef.current.style.opacity = '';
+      queueRef.current.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+      
+      // Dismiss if dragged down more than 80px or with sufficient velocity
+      if (isDragging && dragDistance > 80) {
+        // Animate out before closing
+        queueRef.current.style.transform = 'translateY(100%)';
+        queueRef.current.style.opacity = '0';
+        
+        // Provide haptic feedback for successful dismiss
+        if ('vibrate' in navigator) {
+          navigator.vibrate(20);
+        }
+        
+        setTimeout(() => {
+          toggleVisibility();
+          resetDragState();
+        }, 300);
+      } else {
+        // Spring back to original position
+        queueRef.current.style.transform = '';
+        queueRef.current.style.opacity = '';
+        
+        setTimeout(() => {
+          if (queueRef.current) {
+            queueRef.current.style.transition = '';
+          }
+        }, 300);
+        
+        resetDragState();
+      }
+    } else {
+      resetDragState();
     }
-    
-    // Dismiss if swiped down more than 50px
-    if (deltaY > 50) {
-      toggleVisibility();
-    }
-    
+  };
+
+  const resetDragState = () => {
     setStartY(null);
     setCurrentY(null);
+    setIsDragging(false);
+    setDragDistance(0);
+    setCanDrag(false);
+  };
+
+  // Handle backdrop click - prevent when dragging
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (!isDragging) {
+      toggleVisibility();
+    }
   };
 
   return (
     <>
-      {/* Mobile backdrop overlay */}
+      {/* Mobile backdrop overlay - improved isolation */}
       <div 
         className="fixed inset-0 bg-black/50 z-40 md:hidden"
-        onClick={toggleVisibility}
+        onClick={handleBackdropClick}
+        onTouchStart={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        style={{
+          touchAction: 'none', // Prevent all default touch behaviors
+          overflowY: 'hidden', // Prevent scrolling on backdrop
+        }}
       />
       
       <div 
         ref={queueRef}
-        className="fixed inset-x-0 bottom-0 md:bottom-4 md:right-4 md:inset-x-auto w-full md:max-w-md bg-surface dark:bg-surface-dark md:rounded-xl shadow-2xl border-t md:border border-border dark:border-border-dark z-50 backdrop-blur-sm md:rounded-b-xl transition-transform transition-opacity"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className="fixed inset-x-0 bottom-0 md:bottom-4 md:right-4 md:inset-x-auto w-full md:max-w-md bg-surface dark:bg-surface-dark md:rounded-xl shadow-2xl border-t md:border border-border dark:border-border-dark z-50 backdrop-blur-sm md:rounded-b-xl"
+        onTouchStart={(e) => {
+          handleTouchStart(e);
+          // Ensure events don't propagate beyond the queue
+          e.stopPropagation();
+        }}
+        onTouchMove={(e) => {
+          handleTouchMove(e);
+          // Always prevent propagation during move to avoid affecting background
+          e.stopPropagation();
+        }}
+        onTouchEnd={(e) => {
+          handleTouchEnd(e);
+          e.stopPropagation();
+        }}
+        style={{
+          touchAction: isDragging ? 'none' : 'auto', // Prevent scrolling when dragging
+          willChange: isDragging ? 'transform, opacity' : 'auto', // Optimize for animations
+          isolation: 'isolate', // Create a new stacking context
+        }}
       >
-        <header className="flex items-center justify-between p-4 md:p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark md:rounded-t-xl">
-          {/* Add drag indicator for mobile */}
-          <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50"></div>
+        <header 
+          ref={headerRef}
+          className="flex items-center justify-between p-4 md:p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark md:rounded-t-xl"
+        >
+          {/* Enhanced drag indicator for mobile */}
+          <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50 transition-all duration-200"
+               style={{
+                 opacity: isDragging ? 0.8 : 0.5,
+                 backgroundColor: isDragging ? 'currentColor' : undefined,
+               }}
+          ></div>
           <h2 className="text-lg md:text-lg font-bold text-content-primary dark:text-content-primary-dark">
             Download Queue ({totalTasks})
           </h2>
@@ -609,6 +791,9 @@ export const Queue = () => {
         <div 
           ref={scrollContainerRef}
           className="p-4 overflow-y-auto max-h-[60vh] md:max-h-96 bg-gradient-to-b from-surface-secondary/30 to-surface/30 dark:from-surface-secondary-dark/30 dark:to-surface-dark/30"
+          style={{
+            touchAction: isDragging ? 'none' : 'pan-y', // Allow vertical scrolling when not dragging
+          }}
         >
           {items.length === 0 ? (
             <div className="text-center py-8 md:py-8">

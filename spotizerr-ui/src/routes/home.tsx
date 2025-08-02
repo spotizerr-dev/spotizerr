@@ -24,6 +24,41 @@ export const Home = () => {
   const context = useContext(QueueContext);
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
+  // Prevent scrolling on mobile only when there are no results (empty state)
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768; // md breakpoint
+    if (!isMobile) return;
+
+    // Only prevent scrolling when there are no results to show
+    const shouldPreventScroll = !isLoading && displayedResults.length === 0 && !query.trim();
+
+    if (!shouldPreventScroll) return;
+
+    // Store original styles
+    const originalOverflow = document.body.style.overflow;
+    const originalHeight = document.body.style.height;
+    
+    // Find the mobile main content container
+    const mobileMain = document.querySelector('.pwa-main') as HTMLElement;
+    const originalMainOverflow = mobileMain?.style.overflow;
+
+    // Prevent body and main container scrolling on mobile when empty
+    document.body.style.overflow = 'hidden';
+    document.body.style.height = '100vh';
+    if (mobileMain) {
+      mobileMain.style.overflow = 'hidden';
+    }
+
+    // Cleanup function
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.height = originalHeight;
+      if (mobileMain) {
+        mobileMain.style.overflow = originalMainOverflow;
+      }
+    };
+  }, [isLoading, displayedResults.length, query]);
+
   useEffect(() => {
     navigate({ search: (prev) => ({ ...prev, q: debouncedQuery, type: searchType }) });
   }, [debouncedQuery, searchType, navigate]);
@@ -129,22 +164,22 @@ export const Home = () => {
   }, [displayedResults, handleDownloadTrack, handleDownloadAlbum]);
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <div className="text-center mb-8">
+    <div className="max-w-4xl mx-auto h-full flex flex-col md:p-4">
+      <div className="text-center mb-4 md:mb-8 px-4 md:px-0">
         <h1 className="text-2xl font-bold text-content-primary dark:text-content-primary-dark">Spotizerr</h1>
       </div>
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row gap-3 mb-4 md:mb-6 px-4 md:px-0 flex-shrink-0">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for a track, album, or artist"
-                      className="flex-1 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+          className="flex-1 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         />
         <select
           value={searchType}
           onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")}
-                      className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+          className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         >
           <option value="track">Track</option>
           <option value="album">Album</option>
@@ -152,15 +187,20 @@ export const Home = () => {
           <option value="playlist">Playlist</option>
         </select>
       </div>
-              {isLoading ? (
+      <div className={`flex-1 px-4 md:px-0 pb-4 ${
+        // Only restrict overflow on mobile when there are results, otherwise allow normal behavior
+        displayedResults.length > 0 ? 'overflow-y-auto md:overflow-visible' : ''
+      }`}>
+        {isLoading ? (
           <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading results...</p>
         ) : (
           <>
             {resultComponent}
             <div ref={loaderRef} />
             {isLoadingMore && <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>}
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 };
