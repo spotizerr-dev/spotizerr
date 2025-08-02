@@ -77,7 +77,7 @@ function ThemeToggle() {
 }
 
 function AppLayout() {
-  const { toggleVisibility, activeCount } = useContext(QueueContext) || {};
+  const { toggleVisibility, activeCount, totalTasks } = useContext(QueueContext) || {};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-surface-secondary via-surface-muted to-surface-accent dark:from-surface-dark dark:via-surface-muted-dark dark:to-surface-secondary-dark text-content-primary dark:text-content-primary-dark flex flex-col">
@@ -100,9 +100,9 @@ function AppLayout() {
             </Link>
             <button onClick={toggleVisibility} className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark relative">
               <img src="/queue.svg" alt="Queue" className="w-6 h-6 logo" />
-              {(activeCount ?? 0) > 0 && (
+              {(totalTasks ?? 0) > 0 && (
                 <span className="absolute -top-1 -right-1 bg-primary text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 shadow-lg animate-pulse">
-                  {(activeCount ?? 0) > 99 ? '99+' : activeCount}
+                  {(totalTasks ?? 0) > 99 ? '99+' : totalTasks}
                 </span>
               )}
             </button>
@@ -151,9 +151,9 @@ function AppLayout() {
             </Link>
             <button onClick={toggleVisibility} className="p-3 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark relative">
               <img src="/queue.svg" alt="Queue" className="w-6 h-6 logo" />
-              {(activeCount ?? 0) > 0 && (
+              {(totalTasks ?? 0) > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 shadow-lg animate-pulse">
-                  {(activeCount ?? 0) > 99 ? '99+' : activeCount}
+                  {(totalTasks ?? 0) > 99 ? '99+' : totalTasks}
                 </span>
               )}
             </button>

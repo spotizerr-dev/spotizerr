@@ -14,7 +14,28 @@ export type QueueStatus =
   | "done"
   | "queued"
   | "retrying"
-  | "real-time";
+  | "real-time"
+  | "progress"
+  | "track_progress";
+
+// Active task statuses - tasks that are currently working/processing
+// This matches the ACTIVE_TASK_STATES constant in the backend
+export const ACTIVE_TASK_STATUSES: Set<QueueStatus> = new Set([
+  "initializing",     // task is starting up
+  "processing",       // task is being processed
+  "downloading",      // actively downloading
+  "progress",         // album/playlist progress updates
+  "track_progress",   // real-time track progress
+  "real-time",        // real-time download progress
+  "retrying",         // task is retrying after error
+]);
+
+/**
+ * Determine if a task status represents an active (working/processing) task
+ */
+export function isActiveTaskStatus(status: string): boolean {
+  return ACTIVE_TASK_STATUSES.has(status as QueueStatus);
+}
 
 export interface QueueItem {
     id: string;
@@ -81,6 +102,11 @@ export interface QueueContextType {
   clearCompleted: () => void;
   cancelAll: () => void;
   cancelItem: (id: string) => void;
+  // Pagination
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  loadMoreTasks: () => void;
+  totalTasks: number;
 }
 
 export const QueueContext = createContext<QueueContextType | undefined>(undefined);

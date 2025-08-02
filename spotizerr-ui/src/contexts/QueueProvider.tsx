@@ -5,6 +5,7 @@ import {
     type QueueItem,
     type DownloadType,
     type QueueStatus,
+    isActiveTaskStatus,
 } from "./queue-context";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
@@ -41,6 +42,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [isVisible, setIsVisible] = useState(false);
   const pollingIntervals = useRef<Record<string, number>>({});
   const cancelledRemovalTimers = useRef<Record<string, number>>({});
+  
+  // Smart polling state
+  const smartPollingInterval = useRef<number | null>(null);
+  const lastUpdateTimestamp = useRef<number>(0);
+  const isInitialized = useRef<boolean>(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const pageSize = 20; // Number of non-active tasks per page
 
   // Calculate active downloads count
   const activeCount = useMemo(() => {
@@ -130,50 +143,175 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     return updatedItem;
   }, [scheduleCancelledTaskRemoval]);
 
+  const startSmartPolling = useCallback(() => {
+    if (smartPollingInterval.current) return; // Already polling
+
+    console.log("Starting smart polling");
+    
+    const intervalId = window.setInterval(async () => {
+      try {
+        const response = await apiClient.get<{
+          tasks: any[];
+          current_timestamp: number;
+          total_tasks: number;
+          active_tasks: number;
+          updated_count: number;
+        }>(`/prgs/updates?since=${lastUpdateTimestamp.current}&active_only=true`);
+
+        const { tasks: updatedTasks, current_timestamp, total_tasks } = response.data;
+        
+        // Update the last timestamp for next poll
+        lastUpdateTimestamp.current = current_timestamp;
+        
+        // Update total tasks count
+        setTotalTasks(total_tasks || 0);
+
+        if (updatedTasks.length > 0) {
+          console.log(`Smart polling: ${updatedTasks.length} tasks updated (${response.data.active_tasks} active) out of ${response.data.total_tasks} total`);
+          
+          // Create a map of updated tasks by task_id for efficient lookup
+          const updatedTasksMap = new Map(updatedTasks.map(task => [task.task_id, task]));
+          
+          setItems(prev => {
+            // Update existing items with new data, and add any new active tasks
+            const updatedItems = prev.map(item => {
+              const updatedTaskData = updatedTasksMap.get(item.taskId || item.id);
+              if (updatedTaskData) {
+                return updateItemFromPrgs(item, updatedTaskData);
+              }
+              return item;
+            });
+
+            // Only add new active tasks that aren't in our current items and aren't in terminal state
+            const currentTaskIds = new Set(prev.map(item => item.taskId || item.id));
+            const newActiveTasks = updatedTasks
+              .filter(task => {
+                const isNew = !currentTaskIds.has(task.task_id);
+                const status = task.last_line?.status_info?.status || task.last_line?.status || "unknown";
+                const isActive = isActiveTaskStatus(status);
+                const isTerminal = ["completed", "error", "cancelled", "skipped", "done"].includes(status);
+                return isNew && isActive && !isTerminal;
+              })
+              .map(task => {
+                const spotifyId = task.original_url?.split("/").pop() || "";
+                const baseItem: QueueItem = {
+                  id: task.task_id,
+                  taskId: task.task_id,
+                  name: task.name || "Unknown",
+                  type: task.download_type || "track",
+                  spotifyId: spotifyId,
+                  status: "initializing",
+                  artist: task.artist,
+                };
+                return updateItemFromPrgs(baseItem, task);
+              });
+
+            return newActiveTasks.length > 0 ? [...newActiveTasks, ...updatedItems] : updatedItems;
+          });
+        }
+      } catch (error) {
+        console.error("Smart polling failed:", error);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    smartPollingInterval.current = intervalId;
+  }, [updateItemFromPrgs]);
+
+  const stopSmartPolling = useCallback(() => {
+    if (smartPollingInterval.current) {
+      console.log("Stopping smart polling");
+      clearInterval(smartPollingInterval.current);
+      smartPollingInterval.current = null;
+    }
+  }, []);
+
+  const loadMoreTasks = useCallback(async () => {
+    if (!hasMore || isLoadingMore) return;
+    
+    setIsLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      const response = await apiClient.get<{
+        tasks: any[];
+        pagination: {
+          has_more: boolean;
+        };
+      }>(`/prgs/list?page=${nextPage}&limit=${pageSize}`);
+      
+      const { tasks: newTasks, pagination } = response.data;
+      
+      if (newTasks.length > 0) {
+        // Add new tasks to the end of the list (avoiding duplicates and filtering out terminal state tasks)
+        setItems(prev => {
+          const existingTaskIds = new Set(prev.map(item => item.taskId || item.id));
+          const uniqueNewTasks = newTasks
+            .filter(task => {
+              // Skip if already exists
+              if (existingTaskIds.has(task.task_id)) return false;
+              
+              // Filter out terminal state tasks
+              const status = task.last_line?.status_info?.status || task.last_line?.status || "unknown";
+              const isTerminal = ["completed", "error", "cancelled", "skipped", "done"].includes(status);
+              return !isTerminal;
+            })
+            .map(task => {
+              const spotifyId = task.original_url?.split("/").pop() || "";
+              const baseItem: QueueItem = {
+                id: task.task_id,
+                taskId: task.task_id,
+                name: task.name || "Unknown",
+                type: task.download_type || "track",
+                spotifyId: spotifyId,
+                status: "initializing",
+                artist: task.artist,
+              };
+              return updateItemFromPrgs(baseItem, task);
+            });
+          
+          return [...prev, ...uniqueNewTasks];
+        });
+        
+        setCurrentPage(nextPage);
+      }
+      
+      setHasMore(pagination.has_more);
+    } catch (error) {
+      console.error("Failed to load more tasks:", error);
+      toast.error("Failed to load more tasks");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [hasMore, isLoadingMore, currentPage, pageSize, updateItemFromPrgs]);
+
   const startPolling = useCallback(
     (taskId: string) => {
-        if (pollingIntervals.current[taskId]) return;
-
-        const intervalId = window.setInterval(async () => {
-            try {
-                const response = await apiClient.get<any>(`/prgs/${taskId}`);
-                setItems(prev =>
-                    prev.map(item => {
-                        if (item.taskId !== taskId) return item;
-                        const updatedItem = updateItemFromPrgs(item, response.data);
-                        if (isTerminalStatus(updatedItem.status as QueueStatus)) {
-                            stopPolling(taskId);
-                        }
-                        return updatedItem;
-                    }),
-                );
-            } catch (error) {
-                console.error(`Polling failed for task ${taskId}:`, error);
-                stopPolling(taskId);
-                setItems(prev =>
-                    prev.map(i =>
-                        i.taskId === taskId
-                            ? { ...i, status: "error", error: "Connection lost" }
-                            : i,
-                    ),
-                );
-            }
-        }, 2000);
-
-        pollingIntervals.current[taskId] = intervalId;
+      // Legacy function - now just ensures smart polling is active
+      startSmartPolling();
     },
-    [stopPolling, updateItemFromPrgs, scheduleCancelledTaskRemoval],
+    [startSmartPolling],
   );
 
   useEffect(() => {
     const fetchQueue = async () => {
       try {
-        const response = await apiClient.get<any[]>("/prgs/list");
-        const backendItems = response.data
+        console.log("Fetching initial queue with pagination");
+        const response = await apiClient.get<{
+          tasks: any[];
+          pagination: {
+            has_more: boolean;
+          };
+          total_tasks: number;
+          timestamp: number;
+        }>(`/prgs/list?page=1&limit=${pageSize}`);
+        
+        const { tasks, pagination, total_tasks, timestamp } = response.data;
+        
+        const backendItems = tasks
           .filter((task: any) => {
-            // Filter out cancelled tasks on initial fetch
+            // Filter out terminal state tasks on initial fetch
             const status = task.last_line?.status_info?.status || task.last_line?.status || task.status;
-            return status !== "cancelled";
+            const isTerminal = ["completed", "error", "cancelled", "skipped", "done"].includes(status);
+            return !isTerminal;
           })
           .map((task: any) => {
             const spotifyId = task.original_url?.split("/").pop() || "";
@@ -190,12 +328,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           });
 
         setItems(backendItems);
+        setHasMore(pagination.has_more);
+        setTotalTasks(total_tasks || 0);
+        
+        // Set initial timestamp to current time
+        lastUpdateTimestamp.current = timestamp;
+        isInitialized.current = true;
 
-        backendItems.forEach((item: QueueItem) => {
-          if (item.taskId && !isTerminalStatus(item.status)) {
-            startPolling(item.taskId);
-          }
-        });
+        // Start smart polling for real-time updates
+        startSmartPolling();
       } catch (error) {
         console.error("Failed to fetch queue from backend:", error);
         toast.error("Could not load queue. Please refresh the page.");
@@ -203,6 +344,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
 
     fetchQueue();
+    
+    // Cleanup function to stop polling when component unmounts
+    return () => {
+      stopSmartPolling();
+      // Clean up any remaining individual polling intervals (legacy cleanup)
+      Object.values(pollingIntervals.current).forEach(clearInterval);
+      pollingIntervals.current = {};
+      // Clean up removal timers
+      Object.values(cancelledRemovalTimers.current).forEach(clearTimeout);
+      cancelledRemovalTimers.current = {};
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -230,7 +382,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           ),
         );
 
-        startPolling(taskId);
+        // Ensure smart polling is active for the new task
+        startSmartPolling();
       } catch (error: any) {
         console.error(`Failed to start download for ${item.name}:`, error);
         toast.error(`Failed to start download for ${item.name}`);
@@ -247,7 +400,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         );
       }
     },
-    [isVisible, startPolling],
+    [isVisible, startSmartPolling],
   );
 
   const removeItem = useCallback((id: string) => {
@@ -319,11 +472,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               : i,
           ),
         );
-        startPolling(item.taskId);
+        // Ensure smart polling is active for the retry
+        startSmartPolling();
         toast.info(`Retrying download: ${item.name}`);
       }
     },
-    [items, startPolling],
+    [items, startSmartPolling],
   );
 
   const toggleVisibility = useCallback(() => {
@@ -389,88 +543,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, [items, stopPolling, scheduleCancelledTaskRemoval]);
 
-  const clearAllPolls = useCallback(() => {
-    Object.values(pollingIntervals.current).forEach(clearInterval);
-  }, []);
 
-  useEffect(() => {
-    interface PrgsListEntry {
-      task_id: string;
-      name?: string;
-      download_type?: string;
-      status?: string;
-      original_request?: { url?: string };
-      last_status_obj?: {
-        progress?: number;
-        current_track?: number;
-        total_tracks?: number;
-        error?: string;
-        can_retry?: boolean;
-      };
-      summary?: SummaryObject;
-    }
-
-    const syncActiveTasks = async () => {
-      try {
-        const response = await apiClient.get<PrgsListEntry[]>("/prgs/list");
-        const activeTasks: QueueItem[] = response.data
-          .filter((task) => {
-            const status = task.status?.toLowerCase();
-            return status && !isTerminalStatus(status as QueueStatus);
-          })
-          .map((task) => {
-            const url = task.original_request?.url || "";
-            const spotifyId = url.includes("spotify.com") ? url.split("/").pop() || "" : "";
-            let type: DownloadType = "track";
-            if (task.download_type === "album") type = "album";
-            if (task.download_type === "playlist") type = "playlist";
-            if (task.download_type === "artist") type = "artist";
-
-            const queueItem: QueueItem = {
-              id: task.task_id,
-              taskId: task.task_id,
-              name: task.name || "Unknown",
-              type,
-              spotifyId,
-              status: (task.status?.toLowerCase() || "pending") as QueueStatus,
-              progress: task.last_status_obj?.progress,
-              currentTrackNumber: task.last_status_obj?.current_track,
-              totalTracks: task.last_status_obj?.total_tracks,
-              error: task.last_status_obj?.error,
-              canRetry: task.last_status_obj?.can_retry,
-              summary: task.summary,
-            };
-            return queueItem;
-          });
-
-        setItems((prevItems) => {
-          const newItems = [...prevItems];
-          activeTasks.forEach((task) => {
-            const existingIndex = newItems.findIndex((item) => item.id === task.id);
-            if (existingIndex === -1) {
-              newItems.push(task);
-            } else {
-              newItems[existingIndex] = { ...newItems[existingIndex], ...task };
-            }
-            if (task.taskId && !isTerminalStatus(task.status)) {
-              if (task.taskId && !isTerminalStatus(task.status)) {
-                startPolling(task.taskId);
-              }
-            }
-          });
-          return newItems;
-        });
-      } catch (error) {
-        console.error("Failed to sync active tasks:", error);
-      }
-    };
-
-    syncActiveTasks();
-    return () => {
-      clearAllPolls();
-      Object.values(cancelledRemovalTimers.current).forEach(clearTimeout);
-    };
-  }, [startPolling, clearAllPolls]);
 
   const value = {
     items,
@@ -483,6 +556,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     clearCompleted,
     cancelAll,
     cancelItem,
+    // Pagination
+    hasMore,
+    isLoadingMore,
+    loadMoreTasks,
+    totalTasks,
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

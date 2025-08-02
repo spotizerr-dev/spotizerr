@@ -361,7 +361,7 @@ def check_watched_playlists(specific_playlist_id: str = None):
                         logger.warning(
                             f"Playlist Watch Manager: No tracks returned for playlist {playlist_spotify_id} at offset {offset}"
                         )
-                    break
+                        break
 
                     batch_items = tracks_batch.get("items", [])
                     if not batch_items:

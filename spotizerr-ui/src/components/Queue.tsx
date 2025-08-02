@@ -1,4 +1,4 @@
-import { useContext, useState, useRef } from "react";
+import { useContext, useState, useRef, useEffect } from "react";
 import {
   FaTimes,
   FaSync,
@@ -8,7 +8,7 @@ import {
   FaMusic,
   FaCompactDisc,
 } from "react-icons/fa";
-import { QueueContext, type QueueItem, type QueueStatus } from "@/contexts/queue-context";
+import { QueueContext, type QueueItem, type QueueStatus, isActiveTaskStatus } from "@/contexts/queue-context";
 
 const isTerminalStatus = (status: QueueStatus) =>
   ["completed", "error", "cancelled", "skipped", "done"].includes(status);
@@ -100,6 +100,20 @@ const statusStyles: Record<
     bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
     borderColor: "border-info/30 dark:border-info/40",
     name: "Real-time Download",
+  },
+  progress: {
+    icon: <FaSync className="animate-spin icon-accent" />,
+    color: "text-info",
+    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
+    borderColor: "border-info/30 dark:border-info/40",
+    name: "Progress",
+  },
+  track_progress: {
+    icon: <FaSync className="animate-spin icon-accent" />,
+    color: "text-info",
+    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
+    borderColor: "border-info/30 dark:border-info/40",
+    name: "Track Progress",
   },
 };
 
@@ -227,7 +241,7 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
       return null;
     }
 
-    if (actualStatus === "downloading" || actualStatus === "processing") {
+    if (actualStatus === "downloading" || actualStatus === "processing" || actualStatus === "progress" || actualStatus === "track_progress") {
       if (type === "track") {
         return progress !== undefined ? `${progress.toFixed(0)}%` : null;
       }
@@ -456,10 +470,44 @@ export const Queue = () => {
   const [startY, setStartY] = useState<number | null>(null);
   const [currentY, setCurrentY] = useState<number | null>(null);
   const queueRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Extract values from context (with defaults to avoid crashes)
+  const { 
+    items = [], 
+    isVisible = false, 
+    toggleVisibility = () => {}, 
+    cancelAll = () => {}, 
+    clearCompleted = () => {}, 
+    hasMore = false, 
+    isLoadingMore = false, 
+    loadMoreTasks = () => {}, 
+    totalTasks = 0 
+  } = context || {};
+
+  // Infinite scroll effect - MUST be called before any conditional returns
+  useEffect(() => {
+    if (!isVisible) return; // Early return if not visible
+
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+      
+      // Load more when user has scrolled 80% of the way down
+      if (scrollPercentage > 0.8 && hasMore && !isLoadingMore) {
+        loadMoreTasks();
+      }
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [isVisible, hasMore, isLoadingMore, loadMoreTasks]);
+
+  // Early returns after all hooks
   if (!context) return null;
-  const { items, isVisible, toggleVisibility, cancelAll, clearCompleted } = context;
-
   if (!isVisible) return null;
 
   const hasActive = items.some((item) => !isTerminalStatus(item.status));
@@ -524,7 +572,7 @@ export const Queue = () => {
           {/* Add drag indicator for mobile */}
           <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50"></div>
           <h2 className="text-lg md:text-lg font-bold text-content-primary dark:text-content-primary-dark">
-            Download Queue ({items.length})
+            Download Queue ({totalTasks})
           </h2>
           <div className="flex gap-1 md:gap-2">
             <button
@@ -552,7 +600,10 @@ export const Queue = () => {
             </button>
           </div>
         </header>
-        <div className="p-4 overflow-y-auto max-h-[60vh] md:max-h-96 bg-gradient-to-b from-surface-secondary/30 to-surface/30 dark:from-surface-secondary-dark/30 dark:to-surface-dark/30">
+        <div 
+          ref={scrollContainerRef}
+          className="p-4 overflow-y-auto max-h-[60vh] md:max-h-96 bg-gradient-to-b from-surface-secondary/30 to-surface/30 dark:from-surface-secondary-dark/30 dark:to-surface-dark/30"
+        >
           {items.length === 0 ? (
             <div className="text-center py-8 md:py-8">
               <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
@@ -562,7 +613,80 @@ export const Queue = () => {
               <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
             </div>
           ) : (
-            items.map((item) => <QueueItemCard key={item.id} item={item} />)
+            (() => {
+              // Sort items by priority hierarchy
+              const sortedItems = [...items].sort((a, b) => {
+                // Extract actual status for both items
+                const statusA = (a.last_line?.status_info?.status as QueueStatus) || 
+                               (a.last_line?.status as QueueStatus) || 
+                               a.status;
+                const statusB = (b.last_line?.status_info?.status as QueueStatus) || 
+                               (b.last_line?.status as QueueStatus) || 
+                               b.status;
+
+                // Define priority groups (lower number = higher priority)
+                const getPriority = (status: QueueStatus) => {
+                  switch (status) {
+                    case "real-time": return 1;
+                    case "downloading": return 2;
+                    case "processing": return 3;
+                    case "initializing": return 4;
+                    case "retrying": return 5;
+                    case "queued": return 6;
+                    case "pending": return 7;
+                    case "completed":
+                    case "done": return 8;
+                    case "error": return 9;
+                    case "cancelled": return 10;
+                    case "skipped": return 11;
+                    default: return 12;
+                  }
+                };
+
+                const priorityA = getPriority(statusA);
+                const priorityB = getPriority(statusB);
+
+                // First sort by priority
+                if (priorityA !== priorityB) {
+                  return priorityA - priorityB;
+                }
+
+                // Within same priority group, maintain original order (FIFO)
+                // Assuming items have some sort of timestamp or creation order
+                return 0;
+              });
+
+              return (
+                <>
+                  {sortedItems.map((item) => <QueueItemCard key={item.id} item={item} />)}
+                  
+                  {/* Loading indicator for infinite scroll */}
+                  {isLoadingMore && (
+                    <div className="flex justify-center mt-4 py-4">
+                      <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark">
+                        <div className="w-4 h-4 border-2 border-content-muted dark:border-content-muted-dark border-t-transparent rounded-full animate-spin" />
+                        Loading more tasks...
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Load More Button (fallback for manual loading) */}
+                  {hasMore && !isLoadingMore && (
+                    <div className="flex justify-center mt-4">
+                      <button
+                        onClick={loadMoreTasks}
+                        className="px-3 py-1 text-xs bg-surface-muted dark:bg-surface-muted-dark text-content-secondary dark:text-content-secondary-dark rounded border border-border dark:border-border-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors flex items-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        Load More
+                      </button>
+                    </div>
+                  )}
+                </>
+              );
+            })()
           )}
         </div>
       </div>
