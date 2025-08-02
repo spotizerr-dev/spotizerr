@@ -235,12 +235,12 @@ def cancel_task(task_id):
         # Try to revoke the Celery task if it hasn't started yet
         celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
 
-        # Schedule deletion of task data after 30 seconds
+        # Schedule deletion of task data after 3 seconds
         delayed_delete_task_data.apply_async(
-            args=[task_id, "Task cancelled by user and auto-cleaned."], countdown=30
+            args=[task_id, "Task cancelled by user and auto-cleaned."], countdown=3
         )
         logger.info(
-            f"Task {task_id} cancelled by user. Data scheduled for deletion in 30s."
+            f"Task {task_id} cancelled by user. Data scheduled for deletion in 3s."
         )
 
         return {"status": "cancelled", "task_id": task_id}
@@ -917,7 +917,7 @@ class ProgressTrackingTask(Task):
             # Schedule deletion for completed multi-track downloads
             delayed_delete_task_data.apply_async(
                 args=[task_id, "Task completed successfully and auto-cleaned."],
-                countdown=30,  # Delay in seconds
+                countdown=3,  # Delay in seconds
             )
 
             # If from playlist_watch and successful, add track to DB
@@ -1055,7 +1055,7 @@ def task_postrun_handler(
             ):  # Applies to single track downloads and tracks from playlists/albums
                 delayed_delete_task_data.apply_async(
                     args=[task_id, "Task completed successfully and auto-cleaned."],
-                    countdown=30,
+                    countdown=3,
                 )
 
             original_request = task_info.get("original_request", {})
@@ -1175,14 +1175,14 @@ def task_failure_handler(
         else:
             # If task cannot be retried, schedule its data for deletion
             logger.info(
-                f"Task {task_id} failed and cannot be retried. Data scheduled for deletion in 30s."
+                f"Task {task_id} failed and cannot be retried. Data scheduled for deletion in 3s."
             )
             delayed_delete_task_data.apply_async(
                 args=[
                     task_id,
                     f"Task failed ({str(exception)}) and max retries reached. Auto-cleaned.",
                 ],
-                countdown=30,
+                countdown=3,
             )
 
     except Exception as e:

@@ -1,179 +1,26 @@
 import { useContext, useState, useRef, useEffect } from "react";
-import {
-  FaTimes,
-  FaSync,
-  FaCheckCircle,
-  FaExclamationCircle,
-  FaHourglassHalf,
-  FaMusic,
-  FaCompactDisc,
-} from "react-icons/fa";
-import { QueueContext, type QueueItem, type QueueStatus, isActiveTaskStatus } from "@/contexts/queue-context";
-
-const isTerminalStatus = (status: QueueStatus) =>
-  ["completed", "error", "cancelled", "skipped", "done"].includes(status);
-
-const statusStyles: Record<
-  QueueStatus,
-  { icon: React.ReactNode; color: string; bgColor: string; borderColor: string; name: string }
-> = {
-  queued: {
-    icon: <FaHourglassHalf className="icon-muted" />,
-    color: "text-content-muted dark:text-content-muted-dark",
-    bgColor: "bg-gradient-to-r from-surface-muted to-surface-accent dark:from-surface-muted-dark dark:to-surface-accent-dark",
-    borderColor: "border-border dark:border-border-dark",
-    name: "Queued",
-  },
-  initializing: {
-    icon: <FaSync className="animate-spin icon-accent" />,
-    color: "text-info",
-    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
-    borderColor: "border-info/30 dark:border-info/40",
-    name: "Initializing",
-  },
-  downloading: {
-    icon: <FaSync className="animate-spin icon-accent" />,
-    color: "text-info",
-    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
-    borderColor: "border-info/30 dark:border-info/40",
-    name: "Downloading",
-  },
-  processing: {
-    icon: <FaSync className="animate-spin icon-warning" />,
-    color: "text-processing",
-    bgColor: "bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30",
-    borderColor: "border-processing/30 dark:border-processing/40",
-    name: "Processing",
-  },
-  retrying: {
-    icon: <FaSync className="animate-spin icon-warning" />,
-    color: "text-warning",
-    bgColor: "bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30",
-    borderColor: "border-warning/30 dark:border-warning/40",
-    name: "Retrying",
-  },
-  completed: {
-    icon: <FaCheckCircle className="icon-success" />,
-    color: "text-success",
-    bgColor: "bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30",
-    borderColor: "border-success/30 dark:border-success/40",
-    name: "Completed",
-  },
-  done: {
-    icon: <FaCheckCircle className="icon-success" />,
-    color: "text-success",
-    bgColor: "bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30",
-    borderColor: "border-success/30 dark:border-success/40",
-    name: "Done",
-  },
-  error: {
-    icon: <FaExclamationCircle className="icon-error" />,
-    color: "text-error",
-    bgColor: "bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/30",
-    borderColor: "border-error/30 dark:border-error/40",
-    name: "Error",
-  },
-  cancelled: {
-    icon: <FaTimes className="icon-warning" />,
-    color: "text-warning",
-    bgColor: "bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30",
-    borderColor: "border-warning/30 dark:border-warning/40",
-    name: "Cancelled",
-  },
-  skipped: {
-    icon: <FaTimes className="icon-muted" />,
-    color: "text-content-muted dark:text-content-muted-dark",
-    bgColor: "bg-gradient-to-r from-surface-muted to-surface-accent dark:from-surface-muted-dark dark:to-surface-accent-dark",
-    borderColor: "border-border dark:border-border-dark",
-    name: "Skipped",
-  },
-  pending: {
-    icon: <FaHourglassHalf className="icon-muted" />,
-    color: "text-content-muted dark:text-content-muted-dark",
-    bgColor: "bg-gradient-to-r from-surface-muted to-surface-accent dark:from-surface-muted-dark dark:to-surface-accent-dark",
-    borderColor: "border-border dark:border-border-dark",
-    name: "Pending",
-  },
-  "real-time": {
-    icon: <FaSync className="animate-spin icon-accent" />,
-    color: "text-info",
-    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
-    borderColor: "border-info/30 dark:border-info/40",
-    name: "Real-time Download",
-  },
-  progress: {
-    icon: <FaSync className="animate-spin icon-accent" />,
-    color: "text-info",
-    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
-    borderColor: "border-info/30 dark:border-info/40",
-    name: "Progress",
-  },
-  track_progress: {
-    icon: <FaSync className="animate-spin icon-accent" />,
-    color: "text-info",
-    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
-    borderColor: "border-info/30 dark:border-info/40",
-    name: "Track Progress",
-  },
-};
+import { FaTimes, FaSync, FaCheckCircle, FaExclamationCircle, FaHourglassHalf, FaMusic, FaCompactDisc } from "react-icons/fa";
+import { QueueContext, type QueueItem, getStatus, getProgress, getCurrentTrackInfo, isActiveStatus, isTerminalStatus } from "@/contexts/queue-context";
 
 // Circular Progress Component
 const CircularProgress = ({ 
   progress, 
   isCompleted = false, 
-  isRealProgress = false,
   size = 60, 
-  strokeWidth = 6,
-  className = ""
+  strokeWidth = 6 
 }: { 
   progress: number;
   isCompleted?: boolean;
-  isRealProgress?: boolean;
   size?: number;
   strokeWidth?: number;
-  className?: string;
 }) => {
-  // Apply a logarithmic curve to make progress slower near the end - ONLY for fake progress
-  const getAdjustedProgress = (rawProgress: number) => {
-    if (isCompleted) return 100;
-    if (rawProgress <= 0) return 0;
-    
-    // If this is real progress data, show it as-is without any artificial manipulation
-    if (isRealProgress) {
-      return Math.min(Math.max(rawProgress, 0), 100);
-    }
-    
-    // Only apply logarithmic curve for fake/simulated progress
-    // Use a logarithmic curve that slows down significantly near 100%
-    // This creates the effect of filling more slowly as it approaches completion
-    const normalized = Math.min(Math.max(rawProgress, 0), 100) / 100;
-    
-    // Apply easing function that slows down dramatically near the end
-    const eased = 1 - Math.pow(1 - normalized, 3); // Cubic ease-out
-    const logarithmic = Math.log(normalized * 9 + 1) / Math.log(10); // Logarithmic scaling
-    
-    // Combine both for a very slow approach to 100%
-    const combined = (eased * 0.7 + logarithmic * 0.3) * 95; // Cap at 95% during download
-    
-    // Ensure minimum visibility for any progress > 0
-    const minVisible = rawProgress > 0 ? Math.max(combined, 8) : 0;
-    
-    return Math.min(minVisible, 95); // Never quite reach 100% during download
-  };
-
-  const adjustedProgress = getAdjustedProgress(progress);
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const strokeDasharray = circumference;
-  const strokeDashoffset = circumference - (adjustedProgress / 100) * circumference;
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className={`relative inline-flex ${className}`}>
-      <svg
-        width={size}
-        height={size}
-        className="transform -rotate-90"
-      >
+    <div className="relative inline-flex">
+      <svg width={size} height={size} className="transform -rotate-90">
         {/* Background circle */}
         <circle
           cx={size / 2}
@@ -193,16 +40,11 @@ const CircularProgress = ({
           stroke="currentColor"
           strokeWidth={strokeWidth}
           strokeLinecap="round"
-          strokeDasharray={strokeDasharray}
-          strokeDashoffset={strokeDashoffset}
+          strokeDasharray={circumference}
+          strokeDashoffset={isCompleted ? 0 : strokeDashoffset}
           className={`transition-all duration-500 ease-out ${
-            isCompleted 
-              ? "text-success" 
-              : "text-info"
+            isCompleted ? "text-success" : "text-info"
           }`}
-          style={{
-            strokeDashoffset: isCompleted ? 0 : strokeDashoffset,
-          }}
         />
       </svg>
       {/* Center content */}
@@ -219,192 +61,235 @@ const CircularProgress = ({
   );
 };
 
-const QueueItemCard = ({ item }: { item: QueueItem }) => {
-  const { removeItem, retryItem, cancelItem } = useContext(QueueContext) || {};
+// Status styling configuration
+const statusStyles = {
+  initializing: {
+    icon: <FaSync className="animate-spin icon-accent" />,
+    color: "text-info",
+    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
+    borderColor: "border-info/30 dark:border-info/40",
+    name: "Initializing",
+  },
+  processing: {
+    icon: <FaSync className="animate-spin icon-warning" />,
+    color: "text-processing",
+    bgColor: "bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30",
+    borderColor: "border-processing/30 dark:border-processing/40",
+    name: "Processing",
+  },
+  downloading: {
+    icon: <FaSync className="animate-spin icon-accent" />,
+    color: "text-info",
+    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
+    borderColor: "border-info/30 dark:border-info/40",
+    name: "Downloading",
+  },
+  "real-time": {
+    icon: <FaSync className="animate-spin icon-accent" />,
+    color: "text-info",
+    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
+    borderColor: "border-info/30 dark:border-info/40",
+    name: "Downloading",
+  },
+  done: {
+    icon: <FaCheckCircle className="icon-success" />,
+    color: "text-success",
+    bgColor: "bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30",
+    borderColor: "border-success/30 dark:border-success/40",
+    name: "Done",
+  },
+  completed: {
+    icon: <FaCheckCircle className="icon-success" />,
+    color: "text-success",
+    bgColor: "bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30",
+    borderColor: "border-success/30 dark:border-success/40",
+    name: "Completed",
+  },
+  error: {
+    icon: <FaExclamationCircle className="icon-error" />,
+    color: "text-error",
+    bgColor: "bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/30",
+    borderColor: "border-error/30 dark:border-error/40",
+    name: "Error",
+  },
+  cancelled: {
+    icon: <FaTimes className="icon-warning" />,
+    color: "text-warning",
+    bgColor: "bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30",
+    borderColor: "border-warning/30 dark:border-warning/40",
+    name: "Cancelled",
+  },
+  queued: {
+    icon: <FaHourglassHalf className="icon-muted" />,
+    color: "text-content-muted dark:text-content-muted-dark",
+    bgColor: "bg-gradient-to-r from-surface-muted to-surface-accent dark:from-surface-muted-dark dark:to-surface-accent-dark",
+    borderColor: "border-border dark:border-border-dark",
+    name: "Queued",
+  },
+  retrying: {
+    icon: <FaSync className="animate-spin icon-warning" />,
+    color: "text-warning",
+    bgColor: "bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30",
+    borderColor: "border-warning/30 dark:border-warning/40",
+    name: "Retrying",
+  },
+} as const;
+
+// Cancelled Task Component
+const CancelledTaskCard = ({ item }: { item: QueueItem }) => {
+  const { removeItem } = useContext(QueueContext) || {};
   
-  // Extract the actual status - prioritize status_info.status, then last_line.status, then item.status
-  const actualStatus = (item.last_line?.status_info?.status as QueueStatus) || 
-                       (item.last_line?.status as QueueStatus) || 
-                       item.status;
-  const statusInfo = statusStyles[actualStatus] || statusStyles.queued;
-  const isTerminal = isTerminalStatus(actualStatus);
-
-  const getProgressText = () => {
-    const { type, progress, totalTracks, summary, last_line } = item;
-
-    // Handle real-time downloads
-    if (actualStatus === "real-time") {
-      const realTimeProgress = last_line?.status_info?.progress;
-      if (type === "track" && realTimeProgress !== undefined) {
-        return `${realTimeProgress.toFixed(0)}%`;
-      }
-      return null;
-    }
-
-    if (actualStatus === "downloading" || actualStatus === "processing" || actualStatus === "progress" || actualStatus === "track_progress") {
-      if (type === "track") {
-        return progress !== undefined ? `${progress.toFixed(0)}%` : null;
-      }
-      // For albums/playlists, detailed progress is in the main body
-      return null;
-    }
-
-    if ((actualStatus === "completed" || actualStatus === "done") && summary) {
-      if (type === "track") {
-        // For single tracks, don't show redundant text since status badge already shows "Done"
-        return null;
-      }
-      return `${summary.total_successful}/${totalTracks} tracks`;
-    }
-
-    return null;
-  };
-
-  const progressText = getProgressText();
+  const trackInfo = getCurrentTrackInfo(item);
+  const TypeIcon = item.downloadType === "album" ? FaCompactDisc : FaMusic;
 
   return (
-    <div className={`p-4 md:p-4 rounded-xl border-2 shadow-lg mb-3 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] ${statusInfo.bgColor} ${statusInfo.borderColor}`}>
-      {/* Mobile-first layout: stack status and actions on mobile, inline on desktop */}
+    <div className="p-4 rounded-xl border-2 shadow-lg mb-3 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/30 border-warning/30 dark:border-warning/40">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-0">
+        
+        {/* Main content */}
         <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
-          <div className={`text-2xl md:text-2xl ${statusInfo.color} bg-white/80 dark:bg-surface-dark/80 p-2 md:p-2 rounded-full shadow-sm flex-shrink-0`}>
-            {statusInfo.icon}
+          <div className="text-2xl text-warning bg-white/80 dark:bg-surface-dark/80 p-2 rounded-full shadow-sm flex-shrink-0">
+            <FaTimes className="icon-warning" />
           </div>
+          
           <div className="flex-grow min-w-0">
-            {item.type === "track" && (
-              <>
-                <div className="flex items-center gap-2">
-                  <FaMusic className="icon-muted text-sm flex-shrink-0" />
-                  <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
-                    {item.name}
-                  </p>
-                </div>
-                <p className="text-sm md:text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
-                  {item.artist}
-                </p>
-                {item.albumName && (
-                  <p className="text-xs md:text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.albumName}>
-                    {item.albumName}
-                  </p>
-                )}
-              </>
-            )}
-            {item.type === "album" && (
-              <>
-                <div className="flex items-center gap-2">
-                  <FaCompactDisc className="icon-muted text-sm flex-shrink-0" />
-                  <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
-                    {item.name}
-                  </p>
-                </div>
-                <p className="text-sm md:text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
-                  {item.artist}
-                </p>
-                {item.currentTrackTitle && (
-                  <p className="text-xs md:text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.currentTrackTitle}>
-                    {item.currentTrackNumber}/{item.totalTracks}: {item.currentTrackTitle}
-                  </p>
-                )}
-              </>
-            )}
-            {item.type === "playlist" && (
-              <>
-                <div className="flex items-center gap-2">
-                  <FaMusic className="icon-muted text-sm flex-shrink-0" />
-                  <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
-                    {item.name}
-                  </p>
-                </div>
-                <p className="text-sm md:text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.playlistOwner}>
-                  {item.playlistOwner}
-                </p>
-                {item.currentTrackTitle && (
-                  <p className="text-xs md:text-xs text-content-muted dark:text-content-muted-dark truncate" title={item.currentTrackTitle}>
-                    {item.currentTrackNumber}/{item.totalTracks}: {item.currentTrackTitle}
-                  </p>
-                )}
-              </>
+            <div className="flex items-center gap-2">
+              <TypeIcon className="icon-muted text-sm flex-shrink-0" />
+              <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
+                {item.name}
+              </p>
+            </div>
+            
+            <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
+              {item.artist}
+            </p>
+            
+            {/* Show current track info for parent downloads */}
+            {(item.downloadType === "album" || item.downloadType === "playlist") && trackInfo.title && (
+              <p className="text-xs text-content-muted dark:text-content-muted-dark truncate" title={trackInfo.title}>
+                {trackInfo.current}/{trackInfo.total}: {trackInfo.title}
+              </p>
             )}
           </div>
         </div>
         
-        {/* Status and actions - stacked on mobile, inline on desktop */}
+        {/* Status and actions */}
         <div className="flex items-center justify-between md:justify-end gap-3 md:gap-3 md:ml-4">
           <div className="flex-1 md:flex-none md:text-right">
-            <div className={`inline-flex items-center px-3 py-1 md:px-3 md:py-1 rounded-full text-sm md:text-xs font-semibold ${statusInfo.color} bg-white/60 dark:bg-surface-dark/60 shadow-sm`}>
-              {statusInfo.name}
+            <div className="inline-flex items-center px-3 py-1 rounded-full text-sm md:text-xs font-semibold text-warning bg-white/60 dark:bg-surface-dark/60 shadow-sm">
+              Cancelled
             </div>
-            {(() => {
-              // Only show text progress if we're not showing circular progress
-              const hasCircularProgress = item.type === "track" && !isTerminal && 
-                (item.last_line?.status_info?.progress !== undefined || item.progress !== undefined);
-              
-              return !hasCircularProgress && progressText && (
-                <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">{progressText}</p>
-              );
-            })()}
           </div>
           
-          {/* Add circular progress for downloading tracks */}
-          {(() => {
-            // Calculate progress based on item type and data availability
-            let currentProgress: number | undefined;
-            let isRealProgress = false;
-            
-            if (item.type === "track") {
-              // For tracks, use direct progress
-              const realTimeProgress = item.last_line?.status_info?.progress;
-              const fallbackProgress = item.progress;
-              currentProgress = realTimeProgress ?? fallbackProgress;
-              isRealProgress = realTimeProgress !== undefined;
-            } else if ((item.type === "album" || item.type === "playlist") && item.last_line?.status_info?.progress !== undefined) {
-              // For albums/playlists with real-time data, calculate overall progress
-              const trackProgress = item.last_line.status_info.progress;
-              const currentTrack = item.last_line.current_track || 1;
-              const totalTracks = item.last_line.total_tracks || item.totalTracks || 1;
-              
-              // Formula: ((completed_tracks + current_track_progress/100) / total_tracks) * 100
-              const completedTracks = currentTrack - 1; // current_track is 1-indexed
-              currentProgress = ((completedTracks + (trackProgress / 100)) / totalTracks) * 100;
-              isRealProgress = true;
-            } else if ((item.type === "album" || item.type === "playlist") && item.progress !== undefined) {
-              // Fallback for albums/playlists without real-time data
-              currentProgress = item.progress;
-              isRealProgress = false;
-            }
-            
-            // Show circular progress for items that are not in terminal state 
-            const shouldShowProgress = !isTerminal && currentProgress !== undefined;
-            
-            return shouldShowProgress && (
-              <div className="flex-shrink-0">
-                <CircularProgress 
-                  progress={currentProgress!} 
-                  isCompleted={false}
-                  isRealProgress={isRealProgress}
-                  size={44}
-                  strokeWidth={4}
-                  className="md:mr-2"
-                />
-              </div>
-            );
-          })()}
+          {/* Remove button */}
+          <div className="flex gap-2 md:gap-1 flex-shrink-0">
+            <button
+              onClick={() => removeItem?.(item.id)}
+              className="p-3 md:p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-error hover:bg-error/10 transition-all duration-200 shadow-sm min-h-[44px] md:min-h-auto flex items-center justify-center"
+              aria-label="Remove"
+            >
+              <FaTimes className="text-base md:text-sm" />
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Cancellation reason */}
+      {item.error && (
+        <div className="mt-3 p-3 md:p-2 bg-warning/10 border border-warning/20 rounded-lg">
+          <p className="text-sm md:text-xs text-warning font-medium break-words">
+            Cancelled: {item.error}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const QueueItemCard = ({ item }: { item: QueueItem }) => {
+  const { removeItem, cancelItem } = useContext(QueueContext) || {};
+  
+  const status = getStatus(item);
+  const progress = getProgress(item);
+  const trackInfo = getCurrentTrackInfo(item);
+  const styleInfo = statusStyles[status as keyof typeof statusStyles] || statusStyles.queued;
+  const isTerminal = isTerminalStatus(status);
+  const isActive = isActiveStatus(status);
+
+  // Get type icon
+  const TypeIcon = item.downloadType === "album" ? FaCompactDisc : FaMusic;
+
+  return (
+    <div className={`p-4 rounded-xl border-2 shadow-lg mb-3 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] ${styleInfo.bgColor} ${styleInfo.borderColor}`}>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-0">
+        
+        {/* Main content */}
+        <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+          <div className={`text-2xl ${styleInfo.color} bg-white/80 dark:bg-surface-dark/80 p-2 rounded-full shadow-sm flex-shrink-0`}>
+            {styleInfo.icon}
+          </div>
           
-          {/* Show completed circular progress for completed tracks */}
-          {(actualStatus === "completed" || actualStatus === "done") && 
-           item.type === "track" && (
+          <div className="flex-grow min-w-0">
+            <div className="flex items-center gap-2">
+              <TypeIcon className="icon-muted text-sm flex-shrink-0" />
+              <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
+                {item.name}
+              </p>
+            </div>
+            
+            <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
+              {item.artist}
+            </p>
+            
+            {/* Show current track info for parent downloads */}
+            {(item.downloadType === "album" || item.downloadType === "playlist") && trackInfo.title && (
+              <p className="text-xs text-content-muted dark:text-content-muted-dark truncate" title={trackInfo.title}>
+                {trackInfo.current}/{trackInfo.total}: {trackInfo.title}
+              </p>
+            )}
+          </div>
+        </div>
+        
+        {/* Status and progress */}
+        <div className="flex items-center justify-between md:justify-end gap-3 md:gap-3 md:ml-4">
+          <div className="flex-1 md:flex-none md:text-right">
+            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm md:text-xs font-semibold ${styleInfo.color} bg-white/60 dark:bg-surface-dark/60 shadow-sm`}>
+              {styleInfo.name}
+            </div>
+            
+            {/* Summary info for completed downloads */}
+            {isTerminal && item.summary && item.downloadType !== "track" && (
+              <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">
+                {item.summary.total_successful}/{trackInfo.total || item.summary.total_successful + item.summary.total_failed + item.summary.total_skipped} tracks
+              </p>
+            )}
+          </div>
+          
+          {/* Circular progress for active downloads */}
+          {isActive && progress !== undefined && (
             <div className="flex-shrink-0">
               <CircularProgress 
-                progress={100} 
-                isCompleted={true}
-                isRealProgress={true}
+                progress={progress} 
+                isCompleted={false}
                 size={44}
                 strokeWidth={4}
-                className="md:mr-2"
               />
             </div>
           )}
           
+          {/* Completed progress for finished downloads */}
+          {isTerminal && status === "done" && item.downloadType === "track" && (
+            <div className="flex-shrink-0">
+              <CircularProgress 
+                progress={100} 
+                isCompleted={true}
+                size={44}
+                strokeWidth={4}
+              />
+            </div>
+          )}
+          
+          {/* Action buttons */}
           <div className="flex gap-2 md:gap-1 flex-shrink-0">
             {isTerminal ? (
               <button
@@ -423,26 +308,21 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
                 <FaTimes className="text-base md:text-sm" />
               </button>
             )}
-            {item.canRetry && (
-              <button
-                onClick={() => retryItem?.(item.id)}
-                className="p-3 md:p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-info hover:bg-info/10 transition-all duration-200 shadow-sm min-h-[44px] md:min-h-auto flex items-center justify-center"
-                aria-label="Retry"
-              >
-                <FaSync className="text-base md:text-sm" />
-              </button>
-            )}
           </div>
         </div>
       </div>
-      {(actualStatus === "error" || actualStatus === "retrying" || actualStatus === "cancelled") && (item.error || item.last_line?.error || item.last_line?.status_info?.error) && (
+      
+      {/* Error message */}
+      {item.error && (
         <div className="mt-3 p-3 md:p-2 bg-error/10 border border-error/20 rounded-lg">
           <p className="text-sm md:text-xs text-error font-medium break-words">
-            {actualStatus === "cancelled" ? "Cancelled: " : "Error: "}
-            {item.last_line?.status_info?.error || item.last_line?.error || item.error}
+            {status === "cancelled" ? "Cancelled: " : "Error: "}
+            {item.error}
           </p>
         </div>
       )}
+      
+      {/* Summary for failed/skipped tracks */}
       {isTerminal && item.summary && (item.summary.total_failed > 0 || item.summary.total_skipped > 0) && (
         <div className="mt-3 p-3 md:p-2 bg-surface/50 dark:bg-surface-dark/50 rounded-lg">
           <div className="flex flex-wrap gap-3 md:gap-4 text-sm md:text-xs">
@@ -468,7 +348,6 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
 export const Queue = () => {
   const context = useContext(QueueContext);
   const [startY, setStartY] = useState<number | null>(null);
-  const [currentY, setCurrentY] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragDistance, setDragDistance] = useState(0);
   const queueRef = useRef<HTMLDivElement>(null);
@@ -476,7 +355,6 @@ export const Queue = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const [canDrag, setCanDrag] = useState(false);
 
-  // Extract values from context (with defaults to avoid crashes)
   const { 
     items = [], 
     isVisible = false, 
@@ -489,18 +367,15 @@ export const Queue = () => {
     totalTasks = 0 
   } = context || {};
 
-  // Infinite scroll effect - MUST be called before any conditional returns
+  // Infinite scroll
   useEffect(() => {
-    if (!isVisible) return; // Early return if not visible
-
+    if (!isVisible) return;
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
       const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-      
-      // Load more when user has scrolled 80% of the way down
       if (scrollPercentage > 0.8 && hasMore && !isLoadingMore) {
         loadMoreTasks();
       }
@@ -510,72 +385,18 @@ export const Queue = () => {
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, [isVisible, hasMore, isLoadingMore, loadMoreTasks]);
 
-  // Reset drag state when queue visibility changes
-  useEffect(() => {
-    if (!isVisible) {
-      setStartY(null);
-      setCurrentY(null);
-      setIsDragging(false);
-      setDragDistance(0);
-      setCanDrag(false);
-    }
-  }, [isVisible]);
-
-  // Prevent body scroll when queue is visible on mobile
-  useEffect(() => {
-    if (!isVisible) return;
-
-    // Only apply on mobile (when queue covers full screen)
-    const isMobile = window.innerWidth < 768; // md breakpoint
-    if (!isMobile) return;
-
-    // Store original styles
-    const originalOverflow = document.body.style.overflow;
-    const originalTouchAction = document.body.style.touchAction;
-    const originalPosition = document.body.style.position;
-
-    // Prevent body scroll and interactions
-    document.body.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-
-    // Cleanup function
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.touchAction = originalTouchAction;
-      document.body.style.position = originalPosition;
-      document.body.style.width = '';
-    };
-  }, [isVisible]);
-
-  // Early returns after all hooks
-  if (!context) return null;
-  if (!isVisible) return null;
-
-  const hasActive = items.some((item) => {
-    // Check for status in both possible locations (nested status_info for real-time, or top-level for others)
-    const actualStatus = (item.last_line?.status_info?.status as QueueStatus) || 
-                         (item.last_line?.status as QueueStatus) || 
-                         item.status;
-    return isActiveTaskStatus(actualStatus);
-  });
-  const hasFinished = items.some((item) => isTerminalStatus(item.status));
-
-  // Enhanced mobile touch handling for drag-to-dismiss
+  // Mobile drag-to-dismiss
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
     const scrollContainer = scrollContainerRef.current;
     const headerElement = headerRef.current;
     
-    // Only allow dragging if touch starts on header or if scroll is at top
     const touchedHeader = headerElement?.contains(e.target as Node);
     const scrollAtTop = scrollContainer ? scrollContainer.scrollTop <= 5 : true;
     
     if (touchedHeader || scrollAtTop) {
       setCanDrag(true);
       setStartY(touch.clientY);
-      setCurrentY(touch.clientY);
       setIsDragging(false);
       setDragDistance(0);
     } else {
@@ -587,17 +408,11 @@ export const Queue = () => {
     if (!canDrag || startY === null) return;
     
     const touch = e.touches[0];
-    const currentTouchY = touch.clientY;
-    const deltaY = currentTouchY - startY;
+    const deltaY = touch.clientY - startY;
     
-    setCurrentY(currentTouchY);
-    
-    // Only handle downward swipes (positive deltaY)
     if (deltaY > 0) {
-      // Start dragging if moved more than 10px down
       if (!isDragging && deltaY > 10) {
         setIsDragging(true);
-        // Prevent scrolling when dragging starts
         e.preventDefault();
       }
       
@@ -605,11 +420,10 @@ export const Queue = () => {
         e.preventDefault();
         e.stopPropagation();
         
-        const clampedDelta = Math.min(deltaY, 200); // Max drag distance
+        const clampedDelta = Math.min(deltaY, 200);
         setDragDistance(clampedDelta);
         
         if (queueRef.current) {
-          // Apply transform with resistance curve
           const resistance = Math.pow(clampedDelta / 200, 0.7);
           const transformY = clampedDelta * resistance;
           const opacity = Math.max(0.3, 1 - (clampedDelta / 300));
@@ -618,58 +432,28 @@ export const Queue = () => {
           queueRef.current.style.opacity = `${opacity}`;
           queueRef.current.style.transition = 'none';
         }
-        
-        // Add haptic feedback on certain thresholds
-        if (clampedDelta > 80 && clampedDelta < 85) {
-          // Light haptic feedback when reaching dismiss threshold
-          if ('vibrate' in navigator) {
-            navigator.vibrate(10);
-          }
-        }
-      }
-    } else {
-      // If dragging upward, reset drag state
-      if (isDragging) {
-        setIsDragging(false);
-        setDragDistance(0);
-        if (queueRef.current) {
-          queueRef.current.style.transform = '';
-          queueRef.current.style.opacity = '';
-          queueRef.current.style.transition = '';
-        }
       }
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!canDrag || startY === null || currentY === null) {
+  const handleTouchEnd = () => {
+    if (!canDrag || startY === null) {
       resetDragState();
       return;
     }
     
-    const deltaY = currentY - startY;
-    const wasScrolling = !isDragging && Math.abs(deltaY) > 0;
-    
     if (queueRef.current) {
       queueRef.current.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
       
-      // Dismiss if dragged down more than 80px or with sufficient velocity
       if (isDragging && dragDistance > 80) {
-        // Animate out before closing
         queueRef.current.style.transform = 'translateY(100%)';
         queueRef.current.style.opacity = '0';
-        
-        // Provide haptic feedback for successful dismiss
-        if ('vibrate' in navigator) {
-          navigator.vibrate(20);
-        }
         
         setTimeout(() => {
           toggleVisibility();
           resetDragState();
         }, 300);
       } else {
-        // Spring back to original position
         queueRef.current.style.transform = '';
         queueRef.current.style.opacity = '';
         
@@ -688,86 +472,90 @@ export const Queue = () => {
 
   const resetDragState = () => {
     setStartY(null);
-    setCurrentY(null);
     setIsDragging(false);
     setDragDistance(0);
     setCanDrag(false);
   };
 
-  // Handle backdrop click - prevent when dragging
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (!isDragging) {
-      toggleVisibility();
-    }
-  };
+  // Prevent body scroll on mobile
+  useEffect(() => {
+    if (!isVisible) return;
+    const isMobile = window.innerWidth < 768;
+    if (!isMobile) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    
+    document.body.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+    };
+  }, [isVisible]);
+
+  if (!context || !isVisible) return null;
+
+  const hasActive = items.some(item => isActiveStatus(getStatus(item)));
+  const hasFinished = items.some(item => isTerminalStatus(getStatus(item)));
+
+  // Sort items by priority
+  const sortedItems = [...items].sort((a, b) => {
+    const statusA = getStatus(a);
+    const statusB = getStatus(b);
+    
+    const getPriority = (status: string) => {
+      const priorities = {
+        "real-time": 1, downloading: 2, processing: 3, initializing: 4,
+        retrying: 5, queued: 6, done: 7, completed: 7, error: 8, cancelled: 9
+      };
+      return priorities[status as keyof typeof priorities] || 10;
+    };
+
+    return getPriority(statusA) - getPriority(statusB);
+  });
 
   return (
     <>
-      {/* Mobile backdrop overlay - improved isolation */}
+      {/* Mobile backdrop */}
       <div 
         className="fixed inset-0 bg-black/50 z-40 md:hidden"
-        onClick={handleBackdropClick}
-        onTouchStart={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onTouchMove={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onTouchEnd={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        style={{
-          touchAction: 'none', // Prevent all default touch behaviors
-          overflowY: 'hidden', // Prevent scrolling on backdrop
-        }}
+        onClick={!isDragging ? toggleVisibility : undefined}
+        onTouchStart={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
+        onTouchEnd={(e) => e.preventDefault()}
+        style={{ touchAction: 'none', overflowY: 'hidden' }}
       />
       
       <div 
         ref={queueRef}
-        className="fixed inset-x-0 bottom-0 md:bottom-4 md:right-4 md:inset-x-auto w-full md:max-w-md bg-surface dark:bg-surface-dark md:rounded-xl shadow-2xl border-t md:border border-border dark:border-border-dark z-50 backdrop-blur-sm md:rounded-b-xl"
-        onTouchStart={(e) => {
-          handleTouchStart(e);
-          // Ensure events don't propagate beyond the queue
-          e.stopPropagation();
-        }}
-        onTouchMove={(e) => {
-          handleTouchMove(e);
-          // Always prevent propagation during move to avoid affecting background
-          e.stopPropagation();
-        }}
-        onTouchEnd={(e) => {
-          handleTouchEnd(e);
-          e.stopPropagation();
-        }}
+        className="fixed inset-x-0 bottom-0 md:bottom-4 md:right-4 md:inset-x-auto w-full md:max-w-md bg-surface dark:bg-surface-dark md:rounded-xl shadow-2xl border-t md:border border-border dark:border-border-dark z-50 backdrop-blur-sm"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         style={{
-          touchAction: isDragging ? 'none' : 'auto', // Prevent scrolling when dragging
-          willChange: isDragging ? 'transform, opacity' : 'auto', // Optimize for animations
-          isolation: 'isolate', // Create a new stacking context
+          touchAction: isDragging ? 'none' : 'auto',
+          willChange: isDragging ? 'transform, opacity' : 'auto',
+          isolation: 'isolate',
         }}
       >
         <header 
           ref={headerRef}
-          className="flex items-center justify-between p-4 md:p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark md:rounded-t-xl"
+          className="flex items-center justify-between p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark md:rounded-t-xl"
         >
-          {/* Enhanced drag indicator for mobile */}
-          <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50 transition-all duration-200"
-               style={{
-                 opacity: isDragging ? 0.8 : 0.5,
-                 backgroundColor: isDragging ? 'currentColor' : undefined,
-               }}
-          ></div>
-          <h2 className="text-lg md:text-lg font-bold text-content-primary dark:text-content-primary-dark">
+          {/* Drag indicator for mobile */}
+          <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50 transition-all duration-200" />
+          
+          <h2 className="text-lg font-bold text-content-primary dark:text-content-primary-dark">
             Download Queue ({totalTasks})
           </h2>
+          
           <div className="flex gap-1 md:gap-2">
             <button
               onClick={cancelAll}
               className="text-xs md:text-sm text-content-muted dark:text-content-muted-dark hover:text-warning transition-colors px-3 py-2 md:px-2 md:py-1 rounded-md hover:bg-warning/10 min-h-[44px] md:min-h-auto"
               disabled={!hasActive}
-              aria-label="Cancel all active downloads"
             >
               Cancel All
             </button>
@@ -775,110 +563,70 @@ export const Queue = () => {
               onClick={clearCompleted}
               className="text-xs md:text-sm text-content-muted dark:text-content-muted-dark hover:text-success transition-colors px-3 py-2 md:px-2 md:py-1 rounded-md hover:bg-success/10 min-h-[44px] md:min-h-auto"
               disabled={!hasFinished}
-              aria-label="Clear all finished downloads"
             >
               Clear Finished
             </button>
             <button 
               onClick={toggleVisibility} 
               className="text-content-muted dark:text-content-muted-dark hover:text-content-primary dark:hover:text-content-primary-dark p-3 md:p-1 rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark transition-colors min-h-[44px] md:min-h-auto flex items-center justify-center" 
-              aria-label="Close queue"
             >
               <FaTimes className="text-base md:text-sm" />
             </button>
           </div>
         </header>
+        
         <div 
           ref={scrollContainerRef}
           className="p-4 overflow-y-auto max-h-[60vh] md:max-h-96 bg-gradient-to-b from-surface-secondary/30 to-surface/30 dark:from-surface-secondary-dark/30 dark:to-surface-dark/30"
-          style={{
-            touchAction: isDragging ? 'none' : 'pan-y', // Allow vertical scrolling when not dragging
-          }}
+          style={{ touchAction: isDragging ? 'none' : 'pan-y' }}
         >
-          {items.length === 0 ? (
-            <div className="text-center py-8 md:py-8">
-              <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
-                <FaMusic className="text-3xl md:text-2xl icon-muted" />
+          {(() => {
+            const visibleItems = sortedItems.filter(item => !isTerminalStatus(getStatus(item)) || (item.lastCallback && 'timestamp' in item.lastCallback));
+            
+            return visibleItems.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
+                  <FaMusic className="text-3xl md:text-2xl icon-muted" />
+                </div>
+                <p className="text-base md:text-sm text-content-muted dark:text-content-muted-dark">The queue is empty.</p>
+                <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
               </div>
-              <p className="text-base md:text-sm text-content-muted dark:text-content-muted-dark">The queue is empty.</p>
-              <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
-            </div>
-          ) : (
-            (() => {
-              // Sort items by priority hierarchy
-              const sortedItems = [...items].sort((a, b) => {
-                // Extract actual status for both items
-                const statusA = (a.last_line?.status_info?.status as QueueStatus) || 
-                               (a.last_line?.status as QueueStatus) || 
-                               a.status;
-                const statusB = (b.last_line?.status_info?.status as QueueStatus) || 
-                               (b.last_line?.status as QueueStatus) || 
-                               b.status;
-
-                // Define priority groups (lower number = higher priority)
-                const getPriority = (status: QueueStatus) => {
-                  switch (status) {
-                    case "real-time": return 1;
-                    case "downloading": return 2;
-                    case "processing": return 3;
-                    case "initializing": return 4;
-                    case "retrying": return 5;
-                    case "queued": return 6;
-                    case "pending": return 7;
-                    case "completed":
-                    case "done": return 8;
-                    case "error": return 9;
-                    case "cancelled": return 10;
-                    case "skipped": return 11;
-                    default: return 12;
+            ) : (
+              <>
+                {visibleItems.map(item => {
+                  if (getStatus(item) === "cancelled") {
+                    return <CancelledTaskCard key={item.id} item={item} />;
                   }
-                };
-
-                const priorityA = getPriority(statusA);
-                const priorityB = getPriority(statusB);
-
-                // First sort by priority
-                if (priorityA !== priorityB) {
-                  return priorityA - priorityB;
-                }
-
-                // Within same priority group, maintain original order (FIFO)
-                // Assuming items have some sort of timestamp or creation order
-                return 0;
-              });
-
-              return (
-                <>
-                  {sortedItems.map((item) => <QueueItemCard key={item.id} item={item} />)}
-                  
-                  {/* Loading indicator for infinite scroll */}
-                  {isLoadingMore && (
-                    <div className="flex justify-center mt-4 py-4">
-                      <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark">
-                        <div className="w-4 h-4 border-2 border-content-muted dark:border-content-muted-dark border-t-transparent rounded-full animate-spin" />
-                        Loading more tasks...
-                      </div>
+                  return <QueueItemCard key={item.id} item={item} />;
+                })}
+                
+                {/* Loading indicator */}
+                {isLoadingMore && (
+                  <div className="flex justify-center mt-4 py-4">
+                    <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark">
+                      <div className="w-4 h-4 border-2 border-content-muted dark:border-content-muted-dark border-t-transparent rounded-full animate-spin" />
+                      Loading more tasks...
                     </div>
-                  )}
-                  
-                  {/* Load More Button (fallback for manual loading) */}
-                  {hasMore && !isLoadingMore && (
-                    <div className="flex justify-center mt-4">
-                      <button
-                        onClick={loadMoreTasks}
-                        className="px-3 py-1 text-xs bg-surface-muted dark:bg-surface-muted-dark text-content-secondary dark:text-content-secondary-dark rounded border border-border dark:border-border-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors flex items-center gap-1"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        Load More
-                      </button>
-                    </div>
-                  )}
-                </>
-              );
-            })()
-          )}
+                  </div>
+                )}
+                
+                {/* Load more button */}
+                {hasMore && !isLoadingMore && (
+                  <div className="flex justify-center mt-4">
+                    <button
+                      onClick={loadMoreTasks}
+                      className="px-3 py-1 text-xs bg-surface-muted dark:bg-surface-muted-dark text-content-secondary dark:text-content-secondary-dark rounded border border-border dark:border-border-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      Load More
+                    </button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
     </>
