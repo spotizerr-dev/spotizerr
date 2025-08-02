@@ -39,3 +39,4 @@ data
 logs/
 .env
 Test.py
+spotizerr-ui/dev-dist

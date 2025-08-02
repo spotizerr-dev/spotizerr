@@ -108,6 +108,14 @@ def get_existing_task_id(url, download_type=None):
         ProgressState.ERROR,
         ProgressState.ERROR_RETRIED,
         ProgressState.ERROR_AUTO_CLEANED,
+        # Include string variants from standardized status_info structure
+        "cancelled",
+        "error",
+        "done",
+        "complete",
+        "completed",
+        "failed",
+        "skipped",
     }
     logger.debug(f"GET_EXISTING_TASK_ID: Terminal states defined as: {TERMINAL_STATES}")
 
@@ -129,7 +137,13 @@ def get_existing_task_id(url, download_type=None):
             logger.debug(f"GET_EXISTING_TASK_ID: No last status object for task_id='{existing_task_id}'. Skipping.")
             continue
         
-        existing_status = existing_last_status_obj.get("status")
+        # Extract status from standard structure (status_info.status) or fallback to top-level status
+        existing_status = None
+        if "status_info" in existing_last_status_obj and existing_last_status_obj["status_info"]:
+            existing_status = existing_last_status_obj["status_info"].get("status")
+        if not existing_status:
+            existing_status = existing_last_status_obj.get("status")
+        
         logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', last_status_obj='{existing_last_status_obj}', extracted status='{existing_status}'.")
 
         # If the task is in a terminal state, ignore it and move to the next one.
@@ -215,6 +229,14 @@ class CeleryDownloadQueueManager:
                 ProgressState.ERROR,
                 ProgressState.ERROR_RETRIED,
                 ProgressState.ERROR_AUTO_CLEANED,
+                # Include string variants from standardized status_info structure
+                "cancelled",
+                "error",
+                "done",
+                "complete",
+                "completed",
+                "failed",
+                "skipped",
             }
 
             all_existing_tasks_summary = get_all_tasks()
@@ -233,7 +255,13 @@ class CeleryDownloadQueueManager:
 
                     existing_url = existing_task_info.get("url")
                     existing_type = existing_task_info.get("download_type")
-                    existing_status = existing_last_status_obj.get("status")
+                    
+                    # Extract status from standard structure (status_info.status) or fallback to top-level status
+                    existing_status = None
+                    if "status_info" in existing_last_status_obj and existing_last_status_obj["status_info"]:
+                        existing_status = existing_last_status_obj["status_info"].get("status")
+                    if not existing_status:
+                        existing_status = existing_last_status_obj.get("status")
 
                     if (
                         existing_url == incoming_url

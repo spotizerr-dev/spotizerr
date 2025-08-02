@@ -224,9 +224,11 @@ def cancel_task(task_id):
         store_task_status(
             task_id,
             {
-                "status": ProgressState.CANCELLED,
-                "error": "Task cancelled by user",
-                "timestamp": time.time(),
+                "status_info": {
+                    "status": ProgressState.CANCELLED,
+                    "error": "Task cancelled by user",
+                    "timestamp": time.time(),
+                }
             },
         )
 

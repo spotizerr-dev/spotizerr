@@ -13,7 +13,8 @@ export type QueueStatus =
   | "cancelled"
   | "done"
   | "queued"
-  | "retrying";
+  | "retrying"
+  | "real-time";
 
 export interface QueueItem {
     id: string;
@@ -39,6 +40,34 @@ export interface QueueItem {
     currentTrackNumber?: number;
     totalTracks?: number;
     summary?: SummaryObject;
+    
+    // Real-time download data
+    last_line?: {
+        // Direct status and error fields
+        status?: string;
+        error?: string;
+        id?: number;
+        timestamp?: number;
+        
+        // Album/playlist progress fields
+        current_track?: number;
+        total_tracks?: number;
+        parent?: any; // Parent album/playlist information
+        
+        // Real-time progress data (when status is "real-time")
+        status_info?: {
+            progress?: number;
+            status?: string;
+            time_elapsed?: number;
+            error?: string;
+            timestamp?: number;
+            ids?: {
+                isrc?: string;
+                spotify?: string;
+            };
+        };
+        track?: any; // Contains detailed track information
+    };
 }
 
 export interface QueueContextType {

@@ -94,17 +94,140 @@ const statusStyles: Record<
     borderColor: "border-border dark:border-border-dark",
     name: "Pending",
   },
+  "real-time": {
+    icon: <FaSync className="animate-spin icon-accent" />,
+    color: "text-info",
+    bgColor: "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30",
+    borderColor: "border-info/30 dark:border-info/40",
+    name: "Real-time Download",
+  },
+};
+
+// Circular Progress Component
+const CircularProgress = ({ 
+  progress, 
+  isCompleted = false, 
+  isRealProgress = false,
+  size = 60, 
+  strokeWidth = 6,
+  className = ""
+}: { 
+  progress: number;
+  isCompleted?: boolean;
+  isRealProgress?: boolean;
+  size?: number;
+  strokeWidth?: number;
+  className?: string;
+}) => {
+  // Apply a logarithmic curve to make progress slower near the end - ONLY for fake progress
+  const getAdjustedProgress = (rawProgress: number) => {
+    if (isCompleted) return 100;
+    if (rawProgress <= 0) return 0;
+    
+    // If this is real progress data, show it as-is without any artificial manipulation
+    if (isRealProgress) {
+      return Math.min(Math.max(rawProgress, 0), 100);
+    }
+    
+    // Only apply logarithmic curve for fake/simulated progress
+    // Use a logarithmic curve that slows down significantly near 100%
+    // This creates the effect of filling more slowly as it approaches completion
+    const normalized = Math.min(Math.max(rawProgress, 0), 100) / 100;
+    
+    // Apply easing function that slows down dramatically near the end
+    const eased = 1 - Math.pow(1 - normalized, 3); // Cubic ease-out
+    const logarithmic = Math.log(normalized * 9 + 1) / Math.log(10); // Logarithmic scaling
+    
+    // Combine both for a very slow approach to 100%
+    const combined = (eased * 0.7 + logarithmic * 0.3) * 95; // Cap at 95% during download
+    
+    // Ensure minimum visibility for any progress > 0
+    const minVisible = rawProgress > 0 ? Math.max(combined, 8) : 0;
+    
+    return Math.min(minVisible, 95); // Never quite reach 100% during download
+  };
+
+  const adjustedProgress = getAdjustedProgress(progress);
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDasharray = circumference;
+  const strokeDashoffset = circumference - (adjustedProgress / 100) * circumference;
+
+  return (
+    <div className={`relative inline-flex ${className}`}>
+      <svg
+        width={size}
+        height={size}
+        className="transform -rotate-90"
+      >
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          className="text-border dark:text-border-dark opacity-60"
+        />
+        {/* Progress circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="transparent"
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={strokeDasharray}
+          strokeDashoffset={strokeDashoffset}
+          className={`transition-all duration-500 ease-out ${
+            isCompleted 
+              ? "text-success" 
+              : "text-info"
+          }`}
+          style={{
+            strokeDashoffset: isCompleted ? 0 : strokeDashoffset,
+          }}
+        />
+      </svg>
+      {/* Center content */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        {isCompleted ? (
+          <FaCheckCircle className="text-success text-lg" />
+        ) : (
+          <span className="text-xs font-semibold text-content-primary dark:text-content-primary-dark">
+            {Math.round(progress)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const QueueItemCard = ({ item }: { item: QueueItem }) => {
   const { removeItem, retryItem, cancelItem } = useContext(QueueContext) || {};
-  const statusInfo = statusStyles[item.status] || statusStyles.queued;
-  const isTerminal = isTerminalStatus(item.status);
+  
+  // Extract the actual status - prioritize status_info.status, then last_line.status, then item.status
+  const actualStatus = (item.last_line?.status_info?.status as QueueStatus) || 
+                       (item.last_line?.status as QueueStatus) || 
+                       item.status;
+  const statusInfo = statusStyles[actualStatus] || statusStyles.queued;
+  const isTerminal = isTerminalStatus(actualStatus);
 
   const getProgressText = () => {
-    const { status, type, progress, totalTracks, summary } = item;
+    const { type, progress, totalTracks, summary, last_line } = item;
 
-    if (status === "downloading" || status === "processing") {
+    // Handle real-time downloads
+    if (actualStatus === "real-time") {
+      const realTimeProgress = last_line?.status_info?.progress;
+      if (type === "track" && realTimeProgress !== undefined) {
+        return `${realTimeProgress.toFixed(0)}%`;
+      }
+      return null;
+    }
+
+    if (actualStatus === "downloading" || actualStatus === "processing") {
       if (type === "track") {
         return progress !== undefined ? `${progress.toFixed(0)}%` : null;
       }
@@ -112,11 +235,10 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
       return null;
     }
 
-    if ((status === "completed" || status === "done") && summary) {
+    if ((actualStatus === "completed" || actualStatus === "done") && summary) {
       if (type === "track") {
-        if (summary.total_successful > 0) return "Completed";
-        if (summary.total_failed > 0) return "Failed";
-        return "Finished";
+        // For single tracks, don't show redundant text since status badge already shows "Done"
+        return null;
       }
       return `${summary.total_successful}/${totalTracks} tracks`;
     }
@@ -198,8 +320,77 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
             <div className={`inline-flex items-center px-3 py-1 md:px-3 md:py-1 rounded-full text-sm md:text-xs font-semibold ${statusInfo.color} bg-white/60 dark:bg-surface-dark/60 shadow-sm`}>
               {statusInfo.name}
             </div>
-            {progressText && <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">{progressText}</p>}
+            {(() => {
+              // Only show text progress if we're not showing circular progress
+              const hasCircularProgress = item.type === "track" && !isTerminal && 
+                (item.last_line?.status_info?.progress !== undefined || item.progress !== undefined);
+              
+              return !hasCircularProgress && progressText && (
+                <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">{progressText}</p>
+              );
+            })()}
           </div>
+          
+          {/* Add circular progress for downloading tracks */}
+          {(() => {
+            // Calculate progress based on item type and data availability
+            let currentProgress: number | undefined;
+            let isRealProgress = false;
+            
+            if (item.type === "track") {
+              // For tracks, use direct progress
+              const realTimeProgress = item.last_line?.status_info?.progress;
+              const fallbackProgress = item.progress;
+              currentProgress = realTimeProgress ?? fallbackProgress;
+              isRealProgress = realTimeProgress !== undefined;
+            } else if ((item.type === "album" || item.type === "playlist") && item.last_line?.status_info?.progress !== undefined) {
+              // For albums/playlists with real-time data, calculate overall progress
+              const trackProgress = item.last_line.status_info.progress;
+              const currentTrack = item.last_line.current_track || 1;
+              const totalTracks = item.last_line.total_tracks || item.totalTracks || 1;
+              
+              // Formula: ((completed_tracks + current_track_progress/100) / total_tracks) * 100
+              const completedTracks = currentTrack - 1; // current_track is 1-indexed
+              currentProgress = ((completedTracks + (trackProgress / 100)) / totalTracks) * 100;
+              isRealProgress = true;
+            } else if ((item.type === "album" || item.type === "playlist") && item.progress !== undefined) {
+              // Fallback for albums/playlists without real-time data
+              currentProgress = item.progress;
+              isRealProgress = false;
+            }
+            
+            // Show circular progress for items that are not in terminal state 
+            const shouldShowProgress = !isTerminal && currentProgress !== undefined;
+            
+            return shouldShowProgress && (
+              <div className="flex-shrink-0">
+                <CircularProgress 
+                  progress={currentProgress!} 
+                  isCompleted={false}
+                  isRealProgress={isRealProgress}
+                  size={44}
+                  strokeWidth={4}
+                  className="md:mr-2"
+                />
+              </div>
+            );
+          })()}
+          
+          {/* Show completed circular progress for completed tracks */}
+          {(actualStatus === "completed" || actualStatus === "done") && 
+           item.type === "track" && (
+            <div className="flex-shrink-0">
+              <CircularProgress 
+                progress={100} 
+                isCompleted={true}
+                isRealProgress={true}
+                size={44}
+                strokeWidth={4}
+                className="md:mr-2"
+              />
+            </div>
+          )}
+          
           <div className="flex gap-2 md:gap-1 flex-shrink-0">
             {isTerminal ? (
               <button
@@ -230,9 +421,12 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
           </div>
         </div>
       </div>
-      {(item.status === "error" || item.status === "retrying") && item.error && (
+      {(actualStatus === "error" || actualStatus === "retrying" || actualStatus === "cancelled") && (item.error || item.last_line?.error || item.last_line?.status_info?.error) && (
         <div className="mt-3 p-3 md:p-2 bg-error/10 border border-error/20 rounded-lg">
-          <p className="text-sm md:text-xs text-error font-medium break-words">Error: {item.error}</p>
+          <p className="text-sm md:text-xs text-error font-medium break-words">
+            {actualStatus === "cancelled" ? "Cancelled: " : "Error: "}
+            {item.last_line?.status_info?.error || item.last_line?.error || item.error}
+          </p>
         </div>
       )}
       {isTerminal && item.summary && (item.summary.total_failed > 0 || item.summary.total_skipped > 0) && (
@@ -253,24 +447,6 @@ const QueueItemCard = ({ item }: { item: QueueItem }) => {
           </div>
         </div>
       )}
-      {(item.status === "downloading" || item.status === "processing") &&
-        item.type === "track" &&
-        item.progress !== undefined && (
-          <div className="mt-4 md:mt-3">
-            <div className="flex justify-between items-center mb-2 md:mb-1">
-              <span className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark">Progress</span>
-              <span className="text-sm md:text-xs font-semibold text-content-primary dark:text-content-primary-dark">{item.progress.toFixed(0)}%</span>
-            </div>
-            <div className="h-3 md:h-2 w-full bg-surface/50 dark:bg-surface-dark/50 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ease-out ${
-                  item.status === "downloading" ? "bg-info" : "bg-processing"
-                }`}
-                style={{ width: `${item.progress}%` }}
-              />
-            </div>
-          </div>
-        )}
     </div>
   );
 };

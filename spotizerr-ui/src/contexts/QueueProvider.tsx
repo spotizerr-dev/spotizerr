@@ -40,6 +40,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const pollingIntervals = useRef<Record<string, number>>({});
+  const cancelledRemovalTimers = useRef<Record<string, number>>({});
 
   // Calculate active downloads count
   const activeCount = useMemo(() => {
@@ -53,6 +54,19 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const scheduleCancelledTaskRemoval = useCallback((taskId: string) => {
+    // Clear any existing timer for this task
+    if (cancelledRemovalTimers.current[taskId]) {
+      clearTimeout(cancelledRemovalTimers.current[taskId]);
+    }
+
+    // Schedule removal after 5 seconds
+    cancelledRemovalTimers.current[taskId] = window.setTimeout(() => {
+      setItems(prevItems => prevItems.filter(item => item.id !== taskId));
+      delete cancelledRemovalTimers.current[taskId];
+    }, 5000);
+  }, []);
+
   const updateItemFromPrgs = useCallback((item: QueueItem, prgsData: any): QueueItem => {
     const updatedItem: QueueItem = { ...item };
     const { last_line, summary, status, name, artist, download_type } = prgsData;
@@ -62,6 +76,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (name) updatedItem.name = name;
     if (artist) updatedItem.artist = artist;
     if (download_type) updatedItem.type = download_type;
+    
+    // Preserve the last_line object for progress tracking
+    if (last_line) updatedItem.last_line = last_line;
+
+    // Check if task is cancelled and schedule removal
+    const actualStatus = last_line?.status_info?.status || last_line?.status || status;
+    if (actualStatus === "cancelled") {
+      scheduleCancelledTaskRemoval(updatedItem.id);
+    }
 
     if (last_line) {
         if (isProcessingCallback(last_line)) {
@@ -83,6 +106,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             updatedItem.status = status_info.status as QueueStatus;
             updatedItem.name = album.title;
             updatedItem.artist = album.artists.map(a => a.name).join(", ");
+            updatedItem.totalTracks = album.total_tracks;
             if (status_info.status === "done") {
                 if (status_info.summary) updatedItem.summary = status_info.summary;
                 updatedItem.currentTrackTitle = undefined;
@@ -104,7 +128,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
 
     return updatedItem;
-  }, []);
+  }, [scheduleCancelledTaskRemoval]);
 
   const startPolling = useCallback(
     (taskId: string) => {
@@ -138,26 +162,32 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
         pollingIntervals.current[taskId] = intervalId;
     },
-    [stopPolling, updateItemFromPrgs],
+    [stopPolling, updateItemFromPrgs, scheduleCancelledTaskRemoval],
   );
 
   useEffect(() => {
     const fetchQueue = async () => {
       try {
         const response = await apiClient.get<any[]>("/prgs/list");
-        const backendItems = response.data.map((task: any) => {
-          const spotifyId = task.original_url?.split("/").pop() || "";
-          const baseItem: QueueItem = {
-            id: task.task_id,
-            taskId: task.task_id,
-            name: task.name || "Unknown",
-            type: task.download_type || "track",
-            spotifyId: spotifyId,
-            status: "initializing",
-            artist: task.artist,
-          };
-          return updateItemFromPrgs(baseItem, task);
-        });
+        const backendItems = response.data
+          .filter((task: any) => {
+            // Filter out cancelled tasks on initial fetch
+            const status = task.last_line?.status_info?.status || task.last_line?.status || task.status;
+            return status !== "cancelled";
+          })
+          .map((task: any) => {
+            const spotifyId = task.original_url?.split("/").pop() || "";
+            const baseItem: QueueItem = {
+              id: task.task_id,
+              taskId: task.task_id,
+              name: task.name || "Unknown",
+              type: task.download_type || "track",
+              spotifyId: spotifyId,
+              status: "initializing",
+              artist: task.artist,
+            };
+            return updateItemFromPrgs(baseItem, task);
+          });
 
         setItems(backendItems);
 
@@ -240,23 +270,38 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       try {
         await apiClient.post(`/prgs/cancel/${item.taskId}`);
         stopPolling(item.taskId);
+        
+        // Immediately update UI to show cancelled status
         setItems(prev =>
           prev.map(i =>
             i.id === id
               ? {
                   ...i,
                   status: "cancelled",
+                  last_line: {
+                    ...i.last_line,
+                    status_info: {
+                      ...i.last_line?.status_info,
+                      status: "cancelled",
+                      error: "Task cancelled by user",
+                      timestamp: Date.now() / 1000,
+                    }
+                  }
                 }
               : i,
           ),
         );
+        
+        // Schedule removal after 5 seconds
+        scheduleCancelledTaskRemoval(id);
+        
         toast.info(`Cancelled download: ${item.name}`);
       } catch (error) {
         console.error(`Failed to cancel task ${item.taskId}:`, error);
         toast.error(`Failed to cancel download: ${item.name}`);
       }
     },
-    [items, stopPolling],
+    [items, stopPolling, scheduleCancelledTaskRemoval],
   );
 
   const retryItem = useCallback(
@@ -396,7 +441,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     };
 
     syncActiveTasks();
-    return () => clearAllPolls();
+    return () => {
+      clearAllPolls();
+      Object.values(cancelledRemovalTimers.current).forEach(clearTimeout);
+    };
   }, [startPolling, clearAllPolls]);
 
   const value = {
