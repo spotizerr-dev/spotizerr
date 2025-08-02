@@ -1,4 +1,5 @@
-from flask import Blueprint, Response, request
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 import json
 import traceback
 import uuid
@@ -8,7 +9,7 @@ from routes.utils.celery_tasks import store_task_info, store_task_status, Progre
 from routes.utils.get_info import get_spotify_info
 from routes.utils.errors import DuplicateDownloadError
 
-album_bp = Blueprint("album", __name__)
+router = APIRouter()
 
 
 def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
@@ -16,8 +17,8 @@ def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
     return f"https://open.spotify.com/{item_type}/{item_id}"
 
 
-@album_bp.route("/download/<album_id>", methods=["GET"])
-def handle_download(album_id):
+@router.get("/download/{album_id}")
+async def handle_download(album_id: str, request: Request):
     # Retrieve essential parameters from the request.
     # name = request.args.get('name')
     # artist = request.args.get('artist')
@@ -33,12 +34,9 @@ def handle_download(album_id):
             or not album_info.get("name")
             or not album_info.get("artists")
         ):
-            return Response(
-                json.dumps(
-                    {"error": f"Could not retrieve metadata for album ID: {album_id}"}
-                ),
-                status=404,
-                mimetype="application/json",
+            return JSONResponse(
+                content={"error": f"Could not retrieve metadata for album ID: {album_id}"},
+                status_code=404
             )
 
         name_from_spotify = album_info.get("name")
@@ -49,27 +47,23 @@ def handle_download(album_id):
         )
 
     except Exception as e:
-        return Response(
-            json.dumps(
-                {"error": f"Failed to fetch metadata for album {album_id}: {str(e)}"}
-            ),
-            status=500,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": f"Failed to fetch metadata for album {album_id}: {str(e)}"},
+            status_code=500
         )
 
     # Validate required parameters
     if not url:
-        return Response(
-            json.dumps({"error": "Missing required parameter: url"}),
-            status=400,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": "Missing required parameter: url"},
+            status_code=400
         )
 
     # Add the task to the queue with only essential parameters
     # The queue manager will now handle all config parameters
     # Include full original request URL in metadata
-    orig_params = request.args.to_dict()
-    orig_params["original_url"] = request.url
+    orig_params = dict(request.query_params)
+    orig_params["original_url"] = str(request.url)
     try:
         task_id = download_queue_manager.add_task(
             {
@@ -81,15 +75,12 @@ def handle_download(album_id):
             }
         )
     except DuplicateDownloadError as e:
-        return Response(
-            json.dumps(
-                {
-                    "error": "Duplicate download detected.",
-                    "existing_task": e.existing_task,
-                }
-            ),
-            status=409,
-            mimetype="application/json",
+        return JSONResponse(
+            content={
+                "error": "Duplicate download detected.",
+                "existing_task": e.existing_task,
+            },
+            status_code=409
         )
     except Exception as e:
         # Generic error handling for other issues during task submission
@@ -116,61 +107,57 @@ def handle_download(album_id):
                 "timestamp": time.time(),
             },
         )
-        return Response(
-            json.dumps(
-                {
-                    "error": f"Failed to queue album download: {str(e)}",
-                    "task_id": error_task_id,
-                }
-            ),
-            status=500,
-            mimetype="application/json",
+        return JSONResponse(
+            content={
+                "error": f"Failed to queue album download: {str(e)}",
+                "task_id": error_task_id,
+            },
+            status_code=500
         )
 
-    return Response(
-        json.dumps({"task_id": task_id}), status=202, mimetype="application/json"
+    return JSONResponse(
+        content={"task_id": task_id}, 
+        status_code=202
     )
 
 
-@album_bp.route("/download/cancel", methods=["GET"])
-def cancel_download():
+@router.get("/download/cancel")
+async def cancel_download(request: Request):
     """
     Cancel a running download process by its task id.
     """
-    task_id = request.args.get("task_id")
+    task_id = request.query_params.get("task_id")
     if not task_id:
-        return Response(
-            json.dumps({"error": "Missing process id (task_id) parameter"}),
-            status=400,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": "Missing process id (task_id) parameter"},
+            status_code=400
         )
 
     # Use the queue manager's cancellation method.
     result = download_queue_manager.cancel_task(task_id)
     status_code = 200 if result.get("status") == "cancelled" else 404
 
-    return Response(json.dumps(result), status=status_code, mimetype="application/json")
+    return JSONResponse(content=result, status_code=status_code)
 
 
-@album_bp.route("/info", methods=["GET"])
-def get_album_info():
+@router.get("/info")
+async def get_album_info(request: Request):
     """
     Retrieve Spotify album metadata given a Spotify album ID.
     Expects a query parameter 'id' that contains the Spotify album ID.
     """
-    spotify_id = request.args.get("id")
+    spotify_id = request.query_params.get("id")
 
     if not spotify_id:
-        return Response(
-            json.dumps({"error": "Missing parameter: id"}),
-            status=400,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": "Missing parameter: id"},
+            status_code=400
         )
 
     try:
         # Use the get_spotify_info function (already imported at top)
         album_info = get_spotify_info(spotify_id, "album")
-        return Response(json.dumps(album_info), status=200, mimetype="application/json")
+        return JSONResponse(content=album_info, status_code=200)
     except Exception as e:
         error_data = {"error": str(e), "traceback": traceback.format_exc()}
-        return Response(json.dumps(error_data), status=500, mimetype="application/json")
+        return JSONResponse(content=error_data, status_code=500)

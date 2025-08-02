@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify
+from fastapi import APIRouter, HTTPException, Request
+import json
+import logging
 from routes.utils.credentials import (
     get_credential,
     list_credentials,
@@ -10,159 +12,210 @@ from routes.utils.credentials import (
     _get_global_spotify_api_creds,
     save_global_spotify_api_creds,
 )
-import logging
 
 logger = logging.getLogger(__name__)
-credentials_bp = Blueprint("credentials", __name__)
+router = APIRouter()
 
-# Initialize the database and tables when the blueprint is loaded
+# Initialize the database and tables when the router is loaded
 init_credentials_db()
 
 
-@credentials_bp.route("/spotify_api_config", methods=["GET", "PUT"])
-def handle_spotify_api_config():
+@router.get("/spotify_api_config")
+@router.put("/spotify_api_config")
+async def handle_spotify_api_config(request: Request):
     """Handles GET and PUT requests for the global Spotify API client_id and client_secret."""
     try:
         if request.method == "GET":
             client_id, client_secret = _get_global_spotify_api_creds()
             if client_id is not None and client_secret is not None:
-                return jsonify(
-                    {"client_id": client_id, "client_secret": client_secret}
-                ), 200
+                return {"client_id": client_id, "client_secret": client_secret}
             else:
                 # If search.json exists but is empty/incomplete, or doesn't exist
-                return jsonify(
-                    {
-                        "warning": "Global Spotify API credentials are not fully configured or file is missing.",
-                        "client_id": client_id or "",
-                        "client_secret": client_secret or "",
-                    }
-                ), 200
+                return {
+                    "warning": "Global Spotify API credentials are not fully configured or file is missing.",
+                    "client_id": client_id or "",
+                    "client_secret": client_secret or "",
+                }
 
         elif request.method == "PUT":
-            data = request.get_json()
+            data = await request.json()
             if not data or "client_id" not in data or "client_secret" not in data:
-                return jsonify(
-                    {
-                        "error": "Request body must contain 'client_id' and 'client_secret'"
-                    }
-                ), 400
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": "Request body must contain 'client_id' and 'client_secret'"}
+                )
 
             client_id = data["client_id"]
             client_secret = data["client_secret"]
 
             if not isinstance(client_id, str) or not isinstance(client_secret, str):
-                return jsonify(
-                    {"error": "'client_id' and 'client_secret' must be strings"}
-                ), 400
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": "'client_id' and 'client_secret' must be strings"}
+                )
 
             if save_global_spotify_api_creds(client_id, client_secret):
-                return jsonify(
-                    {"message": "Global Spotify API credentials updated successfully."}
-                ), 200
+                return {"message": "Global Spotify API credentials updated successfully."}
             else:
-                return jsonify(
-                    {"error": "Failed to save global Spotify API credentials."}
-                ), 500
+                raise HTTPException(
+                    status_code=500,
+                    detail={"error": "Failed to save global Spotify API credentials."}
+                )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in /spotify_api_config: {e}", exc_info=True)
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
 
 
-@credentials_bp.route("/<service>", methods=["GET"])
-def handle_list_credentials(service):
+@router.get("/{service}")
+async def handle_list_credentials(service: str):
     try:
         if service not in ["spotify", "deezer"]:
-            return jsonify(
-                {"error": "Invalid service. Must be 'spotify' or 'deezer'"}
-            ), 400
-        return jsonify(list_credentials(service))
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid service. Must be 'spotify' or 'deezer'"}
+            )
+        return list_credentials(service)
     except ValueError as e:  # Should not happen with service check above
-        return jsonify({"error": str(e)}), 400
+        raise HTTPException(status_code=400, detail={"error": str(e)})
     except Exception as e:
         logger.error(f"Error listing credentials for {service}: {e}", exc_info=True)
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
 
 
-@credentials_bp.route("/<service>/<name>", methods=["GET", "POST", "PUT", "DELETE"])
-def handle_single_credential(service, name):
+@router.get("/{service}/{name}")
+async def handle_get_credential(service: str, name: str):
     try:
         if service not in ["spotify", "deezer"]:
-            return jsonify(
-                {"error": "Invalid service. Must be 'spotify' or 'deezer'"}
-            ), 400
-
-        # cred_type logic is removed for Spotify as API keys are global.
-        # For Deezer, it's always 'credentials' type implicitly.
-
-        if request.method == "GET":
-            # get_credential for Spotify now only returns region and blob_file_path
-            return jsonify(get_credential(service, name))
-
-        elif request.method == "POST":
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "Request body cannot be empty."}), 400
-            # create_credential for Spotify now expects 'region' and 'blob_content'
-            # For Deezer, it expects 'arl' and 'region'
-            # Validation is handled within create_credential utility function
-            result = create_credential(service, name, data)
-            return jsonify(
-                {
-                    "message": f"Credential for '{name}' ({service}) created successfully.",
-                    "details": result,
-                }
-            ), 201
-
-        elif request.method == "PUT":
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "Request body cannot be empty."}), 400
-            # edit_credential for Spotify now handles updates to 'region', 'blob_content'
-            # For Deezer, 'arl', 'region'
-            result = edit_credential(service, name, data)
-            return jsonify(
-                {
-                    "message": f"Credential for '{name}' ({service}) updated successfully.",
-                    "details": result,
-                }
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid service. Must be 'spotify' or 'deezer'"}
             )
 
-        elif request.method == "DELETE":
-            # delete_credential for Spotify also handles deleting the blob directory
-            result = delete_credential(service, name)
-            return jsonify(
-                {
-                    "message": f"Credential for '{name}' ({service}) deleted successfully.",
-                    "details": result,
-                }
-            )
-
+        # get_credential for Spotify now only returns region and blob_file_path
+        return get_credential(service, name)
     except (ValueError, FileNotFoundError, FileExistsError) as e:
         status_code = 400
         if isinstance(e, FileNotFoundError):
             status_code = 404
         elif isinstance(e, FileExistsError):
             status_code = 409
-        logger.warning(f"Client error in /<{service}>/<{name}>: {str(e)}")
-        return jsonify({"error": str(e)}), status_code
+        logger.warning(f"Client error in /{service}/{name}: {str(e)}")
+        raise HTTPException(status_code=status_code, detail={"error": str(e)})
     except Exception as e:
-        logger.error(f"Server error in /<{service}>/<{name}>: {e}", exc_info=True)
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        logger.error(f"Server error in /{service}/{name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
+
+
+@router.post("/{service}/{name}")
+async def handle_create_credential(service: str, name: str, request: Request):
+    try:
+        if service not in ["spotify", "deezer"]:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid service. Must be 'spotify' or 'deezer'"}
+            )
+
+        data = await request.json()
+        if not data:
+            raise HTTPException(status_code=400, detail={"error": "Request body cannot be empty."})
+        
+        # create_credential for Spotify now expects 'region' and 'blob_content'
+        # For Deezer, it expects 'arl' and 'region'
+        # Validation is handled within create_credential utility function
+        result = create_credential(service, name, data)
+        return {
+            "message": f"Credential for '{name}' ({service}) created successfully.",
+            "details": result,
+        }
+    except (ValueError, FileNotFoundError, FileExistsError) as e:
+        status_code = 400
+        if isinstance(e, FileNotFoundError):
+            status_code = 404
+        elif isinstance(e, FileExistsError):
+            status_code = 409
+        logger.warning(f"Client error in /{service}/{name}: {str(e)}")
+        raise HTTPException(status_code=status_code, detail={"error": str(e)})
+    except Exception as e:
+        logger.error(f"Server error in /{service}/{name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
+
+
+@router.put("/{service}/{name}")
+async def handle_update_credential(service: str, name: str, request: Request):
+    try:
+        if service not in ["spotify", "deezer"]:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid service. Must be 'spotify' or 'deezer'"}
+            )
+
+        data = await request.json()
+        if not data:
+            raise HTTPException(status_code=400, detail={"error": "Request body cannot be empty."})
+        
+        # edit_credential for Spotify now handles updates to 'region', 'blob_content'
+        # For Deezer, 'arl', 'region'
+        result = edit_credential(service, name, data)
+        return {
+            "message": f"Credential for '{name}' ({service}) updated successfully.",
+            "details": result,
+        }
+    except (ValueError, FileNotFoundError, FileExistsError) as e:
+        status_code = 400
+        if isinstance(e, FileNotFoundError):
+            status_code = 404
+        elif isinstance(e, FileExistsError):
+            status_code = 409
+        logger.warning(f"Client error in /{service}/{name}: {str(e)}")
+        raise HTTPException(status_code=status_code, detail={"error": str(e)})
+    except Exception as e:
+        logger.error(f"Server error in /{service}/{name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
+
+
+@router.delete("/{service}/{name}")
+async def handle_delete_credential(service: str, name: str):
+    try:
+        if service not in ["spotify", "deezer"]:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid service. Must be 'spotify' or 'deezer'"}
+            )
+
+        # delete_credential for Spotify also handles deleting the blob directory
+        result = delete_credential(service, name)
+        return {
+            "message": f"Credential for '{name}' ({service}) deleted successfully.",
+            "details": result,
+        }
+    except (ValueError, FileNotFoundError, FileExistsError) as e:
+        status_code = 400
+        if isinstance(e, FileNotFoundError):
+            status_code = 404
+        elif isinstance(e, FileExistsError):
+            status_code = 409
+        logger.warning(f"Client error in /{service}/{name}: {str(e)}")
+        raise HTTPException(status_code=status_code, detail={"error": str(e)})
+    except Exception as e:
+        logger.error(f"Server error in /{service}/{name}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
 
 
 # The '/search/<service>/<name>' route is now obsolete for Spotify and has been removed.
 
 
-@credentials_bp.route("/all/<service>", methods=["GET"])
-def handle_all_credentials(service):
+@router.get("/all/{service}")
+async def handle_all_credentials(service: str):
     """Lists all credentials for a given service. For Spotify, API keys are global and not listed per account."""
     try:
         if service not in ["spotify", "deezer"]:
-            return jsonify(
-                {"error": "Invalid service. Must be 'spotify' or 'deezer'"}
-            ), 400
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Invalid service. Must be 'spotify' or 'deezer'"}
+            )
 
         credentials_list = []
         account_names = list_credentials(service)  # This lists names from DB
@@ -190,14 +243,14 @@ def handle_all_credentials(service):
                     }
                 )
 
-        return jsonify(credentials_list)
+        return credentials_list
     except Exception as e:
         logger.error(f"Error in /all/{service}: {e}", exc_info=True)
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
 
 
-@credentials_bp.route("/markets", methods=["GET"])
-def handle_markets():
+@router.get("/markets")
+async def handle_markets():
     """
     Returns a list of unique market regions for Deezer and Spotify accounts.
     """
@@ -229,13 +282,11 @@ def handle_markets():
                     f"Could not retrieve region for spotify account {name}: {e}"
                 )
 
-        return jsonify(
-            {
-                "deezer": sorted(list(deezer_regions)),
-                "spotify": sorted(list(spotify_regions)),
-            }
-        ), 200
+        return {
+            "deezer": sorted(list(deezer_regions)),
+            "spotify": sorted(list(spotify_regions)),
+        }
 
     except Exception as e:
         logger.error(f"Error in /markets: {e}", exc_info=True)
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})

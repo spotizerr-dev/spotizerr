@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify, request
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 import json
 import logging
 import os
@@ -18,7 +19,7 @@ from routes.utils.watch.manager import (
 
 logger = logging.getLogger(__name__)
 
-config_bp = Blueprint("config", __name__)
+router = APIRouter()
 
 
 # Flag for config change notifications
@@ -108,26 +109,28 @@ def save_watch_config_http(watch_config_data):  # Renamed
         return False, str(e)
 
 
-@config_bp.route("/config", methods=["GET"])
-def handle_config():
+@router.get("/config")
+async def handle_config():
     """Handles GET requests for the main configuration."""
     try:
         config = get_config()
-        return jsonify(config)
+        return config
     except Exception as e:
         logger.error(f"Error in GET /config: {e}", exc_info=True)
-        return jsonify(
-            {"error": "Failed to retrieve configuration", "details": str(e)}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to retrieve configuration", "details": str(e)}
+        )
 
 
-@config_bp.route("/config", methods=["POST", "PUT"])
-def update_config():
+@router.post("/config")
+@router.put("/config")
+async def update_config(request: Request):
     """Handles POST/PUT requests to update the main configuration."""
     try:
-        new_config = request.get_json()
+        new_config = await request.json()
         if not isinstance(new_config, dict):
-            return jsonify({"error": "Invalid config format"}), 400
+            raise HTTPException(status_code=400, detail={"error": "Invalid config format"})
 
         # Preserve the explicitFilter setting from environment
         explicit_filter_env = os.environ.get("EXPLICIT_FILTER", "false").lower()
@@ -140,73 +143,83 @@ def update_config():
             if updated_config_values is None:
                 # This case should ideally not be reached if save_config succeeded
                 # and get_config handles errors by returning a default or None.
-                return jsonify(
-                    {"error": "Failed to retrieve configuration after saving"}
-                ), 500
+                raise HTTPException(
+                    status_code=500,
+                    detail={"error": "Failed to retrieve configuration after saving"}
+                )
 
-            return jsonify(updated_config_values)
+            return updated_config_values
         else:
-            return jsonify(
-                {"error": "Failed to update configuration", "details": error_msg}
-            ), 500
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "Failed to update configuration", "details": error_msg}
+            )
     except json.JSONDecodeError:
-        return jsonify({"error": "Invalid JSON data"}), 400
+        raise HTTPException(status_code=400, detail={"error": "Invalid JSON data"})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in POST/PUT /config: {e}", exc_info=True)
-        return jsonify(
-            {"error": "Failed to update configuration", "details": str(e)}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to update configuration", "details": str(e)}
+        )
 
 
-@config_bp.route("/config/check", methods=["GET"])
-def check_config_changes():
+@router.get("/config/check")
+async def check_config_changes():
     # This endpoint seems more related to dynamically checking if config changed
     # on disk, which might not be necessary if settings are applied on restart
     # or by a dedicated manager. For now, just return current config.
     try:
         config = get_config()
-        return jsonify(
-            {"message": "Current configuration retrieved.", "config": config}
-        )
+        return {"message": "Current configuration retrieved.", "config": config}
     except Exception as e:
         logger.error(f"Error in GET /config/check: {e}", exc_info=True)
-        return jsonify(
-            {"error": "Failed to check configuration", "details": str(e)}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to check configuration", "details": str(e)}
+        )
 
 
-@config_bp.route("/config/watch", methods=["GET"])
-def handle_watch_config():
+@router.get("/config/watch")
+async def handle_watch_config():
     """Handles GET requests for the watch configuration."""
     try:
         watch_config = get_watch_config_http()
-        return jsonify(watch_config)
+        return watch_config
     except Exception as e:
         logger.error(f"Error in GET /config/watch: {e}", exc_info=True)
-        return jsonify(
-            {"error": "Failed to retrieve watch configuration", "details": str(e)}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to retrieve watch configuration", "details": str(e)}
+        )
 
 
-@config_bp.route("/config/watch", methods=["POST", "PUT"])
-def update_watch_config():
+@router.post("/config/watch")
+@router.put("/config/watch")
+async def update_watch_config(request: Request):
     """Handles POST/PUT requests to update the watch configuration."""
     try:
-        new_watch_config = request.get_json()
+        new_watch_config = await request.json()
         if not isinstance(new_watch_config, dict):
-            return jsonify({"error": "Invalid watch config format"}), 400
+            raise HTTPException(status_code=400, detail={"error": "Invalid watch config format"})
 
         success, error_msg = save_watch_config_http(new_watch_config)
         if success:
-            return jsonify({"message": "Watch configuration updated successfully"}), 200
+            return {"message": "Watch configuration updated successfully"}
         else:
-            return jsonify(
-                {"error": "Failed to update watch configuration", "details": error_msg}
-            ), 500
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "Failed to update watch configuration", "details": error_msg}
+            )
     except json.JSONDecodeError:
-        return jsonify({"error": "Invalid JSON data for watch config"}), 400
+        raise HTTPException(status_code=400, detail={"error": "Invalid JSON data for watch config"})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in POST/PUT /config/watch: {e}", exc_info=True)
-        return jsonify(
-            {"error": "Failed to update watch configuration", "details": str(e)}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to update watch configuration", "details": str(e)}
+        )
