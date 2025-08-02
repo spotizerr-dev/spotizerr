@@ -343,26 +343,51 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
     try {
       const taskIds = activeItems.map((item) => item.taskId!);
-      await apiClient.post("/prgs/cancel/all", { task_ids: taskIds });
+      const response = await apiClient.post("/prgs/cancel/all", { task_ids: taskIds });
+      
+      // Get the list of successfully cancelled task IDs from response
+      const cancelledTaskIds = response.data.task_ids || taskIds; // Fallback to all if response is different
 
-      activeItems.forEach((item) => stopPolling(item.id));
+      activeItems.forEach((item) => {
+        if (cancelledTaskIds.includes(item.taskId)) {
+          stopPolling(item.taskId!);
+        }
+      });
 
+      // Immediately update UI to show cancelled status for all cancelled tasks
       setItems((prev) =>
         prev.map((item) =>
-          taskIds.includes(item.taskId!)
+          cancelledTaskIds.includes(item.taskId!)
             ? {
                 ...item,
                 status: "cancelled",
+                last_line: {
+                  ...item.last_line,
+                  status_info: {
+                    ...item.last_line?.status_info,
+                    status: "cancelled",
+                    error: "Task cancelled by user",
+                    timestamp: Date.now() / 1000,
+                  }
+                }
               }
             : item,
         ),
       );
-      toast.info("Cancelled all active downloads.");
+
+      // Schedule removal for all cancelled tasks
+      activeItems.forEach((item) => {
+        if (cancelledTaskIds.includes(item.taskId)) {
+          scheduleCancelledTaskRemoval(item.id);
+        }
+      });
+
+      toast.info(`Cancelled ${cancelledTaskIds.length} active downloads.`);
     } catch (error) {
       console.error("Failed to cancel all tasks:", error);
       toast.error("Failed to cancel all downloads.");
     }
-  }, [items, stopPolling]);
+  }, [items, stopPolling, scheduleCancelledTaskRemoval]);
 
   const clearAllPolls = useCallback(() => {
     Object.values(pollingIntervals.current).forEach(clearInterval);
