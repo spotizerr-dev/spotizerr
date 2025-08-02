@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import type { TrackType, PlaylistMetadataType, PlaylistTracksResponseType, PlaylistItemType } from "../types/spotify";
 import { QueueContext } from "../contexts/queue-context";
 import { FaArrowLeft } from "react-icons/fa";
-import { FaDownload } from "react-icons/fa6";
 
 
 
