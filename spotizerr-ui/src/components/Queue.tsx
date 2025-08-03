@@ -354,6 +354,13 @@ export const Queue = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [canDrag, setCanDrag] = useState(false);
+  
+  // Virtual scrolling state
+  const [visibleItemCount, setVisibleItemCount] = useState(7);
+  const [isLoadingMoreItems, setIsLoadingMoreItems] = useState(false);
+  
+  const INITIAL_ITEM_COUNT = 7;
+  const LOAD_MORE_THRESHOLD = 0.8; // Load more when 80% scrolled through visible items
 
   const { 
     items = [], 
@@ -367,7 +374,7 @@ export const Queue = () => {
     totalTasks = 0 
   } = context || {};
 
-  // Infinite scroll
+  // Infinite scroll and virtual scrolling
   useEffect(() => {
     if (!isVisible) return;
     const scrollContainer = scrollContainerRef.current;
@@ -376,14 +383,47 @@ export const Queue = () => {
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
       const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-      if (scrollPercentage > 0.8 && hasMore && !isLoadingMore) {
+      
+      // Virtual scrolling - load more visible items if user has scrolled through most visible items
+      if (scrollPercentage > LOAD_MORE_THRESHOLD && !isLoadingMoreItems) {
+        const totalAvailableItems = items.length;
+        
+        if (visibleItemCount < totalAvailableItems) {
+          setIsLoadingMoreItems(true);
+          
+          // Gradually increase visible items (add 5 more each time)
+          setTimeout(() => {
+            setVisibleItemCount(prev => Math.min(prev + 5, totalAvailableItems));
+            setIsLoadingMoreItems(false);
+          }, 100); // Small delay for smooth UX
+        }
+      }
+      
+      // Server-side pagination - only trigger when we've shown most of our items
+      if (scrollPercentage > 0.9 && hasMore && !isLoadingMore && visibleItemCount >= items.length * 0.8) {
         loadMoreTasks();
       }
     };
 
     scrollContainer.addEventListener('scroll', handleScroll);
     return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, [isVisible, hasMore, isLoadingMore, loadMoreTasks]);
+  }, [isVisible, hasMore, isLoadingMore, loadMoreTasks, visibleItemCount, items.length, isLoadingMoreItems]);
+
+  // Reset visible item count when items change significantly (new downloads, etc.)
+  useEffect(() => {
+    // If we have fewer items than currently visible, adjust down
+    if (items.length < visibleItemCount) {
+      setVisibleItemCount(Math.max(INITIAL_ITEM_COUNT, items.length));
+    }
+  }, [items.length, visibleItemCount]);
+
+  // Reset visible item count when queue visibility changes
+  useEffect(() => {
+    if (isVisible) {
+      // Reset to initial count when queue opens for optimal performance
+      setVisibleItemCount(INITIAL_ITEM_COUNT);
+    }
+  }, [isVisible]);
 
   // Mobile drag-to-dismiss
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -392,13 +432,17 @@ export const Queue = () => {
     const headerElement = headerRef.current;
     
     const touchedHeader = headerElement?.contains(e.target as Node);
-    const scrollAtTop = scrollContainer ? scrollContainer.scrollTop <= 5 : true;
+    const scrollAtTop = scrollContainer ? scrollContainer.scrollTop <= 10 : true;
     
+    // Allow dragging from header or anywhere when scrolled to top
     if (touchedHeader || scrollAtTop) {
       setCanDrag(true);
       setStartY(touch.clientY);
       setIsDragging(false);
       setDragDistance(0);
+      
+      // Prevent event from bubbling to backdrop
+      e.stopPropagation();
     } else {
       setCanDrag(false);
     }
@@ -411,22 +455,24 @@ export const Queue = () => {
     const deltaY = touch.clientY - startY;
     
     if (deltaY > 0) {
-      if (!isDragging && deltaY > 10) {
+      // Start dragging with a smaller threshold for better responsiveness
+      if (!isDragging && deltaY > 5) {
         setIsDragging(true);
         e.preventDefault();
+        e.stopPropagation();
       }
       
       if (isDragging) {
         e.preventDefault();
         e.stopPropagation();
         
-        const clampedDelta = Math.min(deltaY, 200);
+        const clampedDelta = Math.min(deltaY, 250);
         setDragDistance(clampedDelta);
         
         if (queueRef.current) {
-          const resistance = Math.pow(clampedDelta / 200, 0.7);
+          const resistance = Math.pow(clampedDelta / 250, 0.6);
           const transformY = clampedDelta * resistance;
-          const opacity = Math.max(0.3, 1 - (clampedDelta / 300));
+          const opacity = Math.max(0.2, 1 - (clampedDelta / 400));
           
           queueRef.current.style.transform = `translateY(${transformY}px)`;
           queueRef.current.style.opacity = `${opacity}`;
@@ -436,21 +482,30 @@ export const Queue = () => {
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
     if (!canDrag || startY === null) {
       resetDragState();
       return;
     }
     
+    // Prevent event from bubbling to backdrop
+    e.stopPropagation();
+    
     if (queueRef.current) {
       queueRef.current.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
       
-      if (isDragging && dragDistance > 80) {
+      // Lower threshold and ensure both conditions are met
+      if (isDragging && dragDistance > 60) {
         queueRef.current.style.transform = 'translateY(100%)';
         queueRef.current.style.opacity = '0';
         
         setTimeout(() => {
           toggleVisibility();
+          if (queueRef.current) {
+            queueRef.current.style.transform = '';
+            queueRef.current.style.opacity = '';
+            queueRef.current.style.transition = '';
+          }
           resetDragState();
         }, 300);
       } else {
@@ -461,9 +516,8 @@ export const Queue = () => {
           if (queueRef.current) {
             queueRef.current.style.transition = '';
           }
+          resetDragState();
         }, 300);
-        
-        resetDragState();
       }
     } else {
       resetDragState();
@@ -475,6 +529,13 @@ export const Queue = () => {
     setIsDragging(false);
     setDragDistance(0);
     setCanDrag(false);
+    
+    // Ensure queue element is reset
+    if (queueRef.current) {
+      queueRef.current.style.transform = '';
+      queueRef.current.style.opacity = '';
+      queueRef.current.style.transition = '';
+    }
   };
 
   // Prevent body scroll on mobile
@@ -528,10 +589,26 @@ export const Queue = () => {
       <div 
         className="fixed inset-0 bg-black/50 z-40 md:hidden"
         onClick={!isDragging ? toggleVisibility : undefined}
-        onTouchStart={(e) => e.preventDefault()}
-        onTouchMove={(e) => e.preventDefault()}
-        onTouchEnd={(e) => e.preventDefault()}
-        style={{ touchAction: 'none', overflowY: 'hidden' }}
+        onTouchStart={(e) => {
+          // Only prevent default if not touching the queue
+          if (!queueRef.current?.contains(e.target as Node)) {
+            e.preventDefault();
+          }
+        }}
+        onTouchMove={(e) => {
+          // Only prevent default if not dragging the queue
+          if (!isDragging) {
+            e.preventDefault();
+          }
+        }}
+        onTouchEnd={(e) => {
+          // Only prevent default and close if not dragging the queue
+          if (!isDragging && !queueRef.current?.contains(e.target as Node)) {
+            e.preventDefault();
+            toggleVisibility();
+          }
+        }}
+        style={{ touchAction: isDragging ? 'none' : 'auto' }}
       />
       
       <div 
@@ -550,11 +627,32 @@ export const Queue = () => {
           ref={headerRef}
           className="flex items-center justify-between p-4 border-b border-border dark:border-border-dark bg-gradient-to-r from-surface to-surface-secondary dark:from-surface-dark dark:to-surface-secondary-dark md:rounded-t-xl"
         >
-          {/* Drag indicator for mobile */}
-          <div className="md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-content-muted dark:bg-content-muted-dark rounded-full opacity-50 transition-all duration-200" />
+          {/* Enhanced drag indicator for mobile */}
+          <div className={`md:hidden absolute top-2 left-1/2 transform -translate-x-1/2 rounded-full transition-all duration-200 ${
+            isDragging 
+              ? dragDistance > 60 
+                ? "w-16 h-1.5 bg-success animate-pulse" 
+                : "w-14 h-1 bg-warning" 
+              : "w-12 h-1 bg-content-muted dark:bg-content-muted-dark opacity-60 animate-pulse"
+          }`} />
           
           <h2 className="text-lg font-bold text-content-primary dark:text-content-primary-dark">
             Download Queue ({totalTasks})
+            {items.length > INITIAL_ITEM_COUNT && (
+              <span className="text-sm font-normal text-content-muted dark:text-content-muted-dark ml-2">
+                Showing {Math.min(visibleItemCount, items.filter(item => {
+                  const status = getStatus(item);
+                  return !isTerminalStatus(status) || 
+                         (item.lastCallback && 'timestamp' in item.lastCallback) ||
+                         status === "cancelled";
+                }).length)} of {items.filter(item => {
+                  const status = getStatus(item);
+                  return !isTerminalStatus(status) || 
+                         (item.lastCallback && 'timestamp' in item.lastCallback) ||
+                         status === "cancelled";
+                }).length}
+              </span>
+            )}
           </h2>
           
           <div className="flex gap-1 md:gap-2">
@@ -594,6 +692,10 @@ export const Queue = () => {
                      status === "cancelled";
             });
             
+            // Apply virtual scrolling - only show limited number of items
+            const itemsToRender = visibleItems.slice(0, visibleItemCount);
+            const hasMoreVisibleItems = visibleItems.length > visibleItemCount;
+            
             return visibleItems.length === 0 ? (
             <div className="text-center py-8">
               <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
@@ -604,14 +706,36 @@ export const Queue = () => {
             </div>
           ) : (
             <>
-                {visibleItems.map(item => {
-                  if (item._cachedStatus === "cancelled") {
-                    return <CancelledTaskCard key={item.id} item={item} />;
-                  }
-                  return <QueueItemCard key={item.id} item={item} cachedStatus={item._cachedStatus} />;
-                })}
+              {/* Render visible items */}
+              {itemsToRender.map(item => {
+                if (item._cachedStatus === "cancelled") {
+                  return <CancelledTaskCard key={item.id} item={item} />;
+                }
+                return <QueueItemCard key={item.id} item={item} cachedStatus={item._cachedStatus} />;
+              })}
               
-              {/* Loading indicator */}
+              {/* Virtual scrolling loading indicator */}
+              {(isLoadingMoreItems || hasMoreVisibleItems) && (
+                <div className="flex justify-center mt-4 py-2">
+                  <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark text-sm">
+                    {isLoadingMoreItems ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-content-muted dark:border-content-muted-dark border-t-transparent rounded-full animate-spin" />
+                        Loading more items...
+                      </>
+                    ) : hasMoreVisibleItems ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        Scroll to see {visibleItems.length - visibleItemCount} more items
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+              
+              {/* Server-side loading indicator */}
               {isLoadingMore && (
                 <div className="flex justify-center mt-4 py-4">
                   <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark">
@@ -621,8 +745,8 @@ export const Queue = () => {
                 </div>
               )}
               
-              {/* Load more button */}
-              {hasMore && !isLoadingMore && (
+              {/* Server-side load more button */}
+              {hasMore && !isLoadingMore && visibleItemCount >= items.length * 0.8 && (
                 <div className="flex justify-center mt-4">
                   <button
                     onClick={loadMoreTasks}
