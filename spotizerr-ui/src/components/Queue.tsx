@@ -1,5 +1,5 @@
 import { useContext, useState, useRef, useEffect } from "react";
-import { FaTimes, FaSync, FaCheckCircle, FaExclamationCircle, FaHourglassHalf, FaMusic, FaCompactDisc } from "react-icons/fa";
+import { FaTimes, FaSync, FaCheckCircle, FaExclamationCircle, FaHourglassHalf, FaMusic, FaCompactDisc, FaStepForward } from "react-icons/fa";
 import { QueueContext, type QueueItem, getStatus, getProgress, getCurrentTrackInfo, isActiveStatus, isTerminalStatus } from "@/contexts/queue-context";
 
 // Circular Progress Component
@@ -119,6 +119,13 @@ const statusStyles = {
     borderColor: "border-warning/30 dark:border-warning/40",
     name: "Cancelled",
   },
+  skipped: {
+    icon: <FaStepForward className="icon-warning" />,
+    color: "text-warning",
+    bgColor: "bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/30",
+    borderColor: "border-warning/30 dark:border-warning/40",
+    name: "Skipped",
+  },
   queued: {
     icon: <FaHourglassHalf className="icon-muted" />,
     color: "text-content-muted dark:text-content-muted-dark",
@@ -134,6 +141,77 @@ const statusStyles = {
     name: "Retrying",
   },
 } as const;
+
+// Skipped Task Component
+const SkippedTaskCard = ({ item }: { item: QueueItem }) => {
+  const { removeItem } = useContext(QueueContext) || {};
+  
+  const trackInfo = getCurrentTrackInfo(item);
+  const TypeIcon = item.downloadType === "album" ? FaCompactDisc : FaMusic;
+
+  return (
+    <div className="p-4 rounded-xl border-2 shadow-lg mb-3 transition-all duration-300 hover:shadow-xl md:hover:scale-[1.02] bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/30 border-warning/30 dark:border-warning/40">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-0">
+        
+        {/* Main content */}
+        <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+          <div className="text-2xl text-warning bg-white/80 dark:bg-surface-dark/80 p-2 rounded-full shadow-sm flex-shrink-0">
+            <FaStepForward className="icon-warning" />
+          </div>
+          
+          <div className="flex-grow min-w-0">
+            <div className="flex items-center gap-2">
+              <TypeIcon className="icon-muted text-sm flex-shrink-0" />
+              <p className="font-bold text-base md:text-sm text-content-primary dark:text-content-primary-dark truncate" title={item.name}>
+                {item.name}
+              </p>
+            </div>
+            
+            <p className="text-sm text-content-secondary dark:text-content-secondary-dark truncate" title={item.artist}>
+              {item.artist}
+            </p>
+            
+            {/* Show current track info for parent downloads */}
+            {(item.downloadType === "album" || item.downloadType === "playlist") && trackInfo.title && (
+              <p className="text-xs text-content-muted dark:text-content-muted-dark truncate" title={trackInfo.title}>
+                {trackInfo.current}/{trackInfo.total}: {trackInfo.title}
+              </p>
+            )}
+          </div>
+        </div>
+        
+        {/* Status and actions */}
+        <div className="flex items-center justify-between md:justify-end gap-3 md:gap-3 md:ml-4">
+          <div className="flex-1 md:flex-none md:text-right">
+            <div className="inline-flex items-center px-3 py-1 rounded-full text-sm md:text-xs font-semibold text-warning bg-white/60 dark:bg-surface-dark/60 shadow-sm">
+              Skipped
+            </div>
+          </div>
+          
+          {/* Remove button */}
+          <div className="flex gap-2 md:gap-1 flex-shrink-0">
+            <button
+              onClick={() => removeItem?.(item.id)}
+              className="p-3 md:p-2 rounded-full bg-white/60 dark:bg-surface-dark/60 text-content-muted dark:text-content-muted-dark hover:text-error hover:bg-error/10 transition-all duration-200 shadow-sm min-h-[44px] md:min-h-auto flex items-center justify-center"
+              aria-label="Remove"
+            >
+              <FaTimes className="text-base md:text-sm" />
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Skip reason */}
+      {item.error && (
+        <div className="mt-3 p-3 md:p-2 bg-warning/10 border border-warning/20 rounded-lg">
+          <p className="text-sm md:text-xs text-warning font-medium break-words">
+            Skipped: {item.error}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Cancelled Task Component
 const CancelledTaskCard = ({ item }: { item: QueueItem }) => {
@@ -314,18 +392,44 @@ const QueueItemCard = ({ item, cachedStatus }: { item: QueueItem, cachedStatus: 
       
       {/* Error message */}
       {item.error && (
-        <div className="mt-3 p-3 md:p-2 bg-error/10 border border-error/20 rounded-lg">
-          <p className="text-sm md:text-xs text-error font-medium break-words">
-            {status === "cancelled" ? "Cancelled: " : "Error: "}
+        <div className={`mt-3 p-3 md:p-2 rounded-lg ${
+          status === "cancelled" 
+            ? "bg-warning/10 border border-warning/20" 
+            : status === "skipped"
+            ? "bg-warning/10 border border-warning/20"
+            : "bg-error/10 border border-error/20"
+        }`}>
+          <p className={`text-sm md:text-xs font-medium break-words ${
+            status === "cancelled" 
+              ? "text-warning" 
+              : status === "skipped"
+              ? "text-warning"
+              : "text-error"
+          }`}>
+            {status === "cancelled" ? "Cancelled: " : status === "skipped" ? "Skipped: " : "Error: "}
             {item.error}
           </p>
         </div>
       )}
       
-      {/* Summary for failed/skipped tracks */}
-      {isTerminal && item.summary && (item.summary.total_failed > 0 || item.summary.total_skipped > 0) && (
-        <div className="mt-3 p-3 md:p-2 bg-surface/50 dark:bg-surface-dark/50 rounded-lg">
+      {/* Summary for completed downloads with multiple tracks */}
+      {isTerminal && item.summary && item.downloadType !== "track" && (
+        <div className="mt-3 p-3 md:p-2 bg-surface/50 dark:bg-surface-dark/50 rounded-lg border border-border/20 dark:border-border-dark/20">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm md:text-xs font-semibold text-content-primary dark:text-content-primary-dark">
+              Download Summary
+            </h4>
+            <span className="text-xs text-content-muted dark:text-content-muted-dark">
+              {item.summary.total_successful + item.summary.total_failed + item.summary.total_skipped} tracks total
+            </span>
+          </div>
           <div className="flex flex-wrap gap-3 md:gap-4 text-sm md:text-xs">
+            {item.summary.total_successful > 0 && (
+              <span className="flex items-center gap-2 md:gap-1">
+                <div className="w-3 h-3 md:w-2 md:h-2 bg-success rounded-full flex-shrink-0"></div>
+                <span className="text-success font-medium">{item.summary.total_successful} successful</span>
+              </span>
+            )}
             {item.summary.total_failed > 0 && (
               <span className="flex items-center gap-2 md:gap-1">
                 <div className="w-3 h-3 md:w-2 md:h-2 bg-error rounded-full flex-shrink-0"></div>
@@ -359,8 +463,13 @@ export const Queue = () => {
   const [visibleItemCount, setVisibleItemCount] = useState(7);
   const [isLoadingMoreItems, setIsLoadingMoreItems] = useState(false);
   
+  // Track items that recently transitioned to terminal states
+  const [recentlyTerminated, setRecentlyTerminated] = useState<Map<string, number>>(new Map());
+  const previousStatusRef = useRef<Map<string, string>>(new Map());
+  
   const INITIAL_ITEM_COUNT = 7;
   const LOAD_MORE_THRESHOLD = 0.8; // Load more when 80% scrolled through visible items
+  const TERMINAL_STATE_DISPLAY_DURATION = 3000; // 3 seconds
 
   const { 
     items = [], 
@@ -373,6 +482,87 @@ export const Queue = () => {
     loadMoreTasks = () => {}, 
     totalTasks = 0 
   } = context || {};
+
+  // Track status changes and identify transitions to terminal states
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+
+    const currentStatuses = new Map<string, string>();
+    const newlyTerminated = new Map<string, number>();
+    const currentTime = Date.now();
+
+    // Check each item for status changes
+    items.forEach(item => {
+      const currentStatus = getStatus(item);
+      const previousStatus = previousStatusRef.current.get(item.id);
+      currentStatuses.set(item.id, currentStatus);
+
+      // If item transitioned from non-terminal to terminal state
+      if (previousStatus && 
+          !isTerminalStatus(previousStatus) && 
+          isTerminalStatus(currentStatus)) {
+        newlyTerminated.set(item.id, currentTime);
+      }
+    });
+
+    // Update previous statuses
+    previousStatusRef.current = currentStatuses;
+
+    // Add newly terminated items to tracking
+    if (newlyTerminated.size > 0) {
+      setRecentlyTerminated(prev => {
+        const updated = new Map(prev);
+        newlyTerminated.forEach((timestamp, itemId) => {
+          updated.set(itemId, timestamp);
+        });
+        return updated;
+      });
+
+      // Set up cleanup timers for newly terminated items
+      newlyTerminated.forEach((timestamp, itemId) => {
+        setTimeout(() => {
+          setRecentlyTerminated(prev => {
+            const updated = new Map(prev);
+            // Only remove if the timestamp matches (prevents removing newer entries)
+            if (updated.get(itemId) === timestamp) {
+              updated.delete(itemId);
+            }
+            return updated;
+          });
+        }, TERMINAL_STATE_DISPLAY_DURATION);
+      });
+    }
+  }, [items]);
+
+  // Cleanup recently terminated items when items are removed from the queue
+  useEffect(() => {
+    if (!items || items.length === 0) {
+      setRecentlyTerminated(new Map());
+      previousStatusRef.current = new Map();
+      return;
+    }
+
+    // Remove tracking for items that are no longer in the queue
+    const currentItemIds = new Set(items.map(item => item.id));
+    setRecentlyTerminated(prev => {
+      const updated = new Map();
+      prev.forEach((timestamp, itemId) => {
+        if (currentItemIds.has(itemId)) {
+          updated.set(itemId, timestamp);
+        }
+      });
+      return updated;
+    });
+
+    // Clean up previous status tracking for removed items
+    const newPreviousStatuses = new Map();
+    previousStatusRef.current.forEach((status, itemId) => {
+      if (currentItemIds.has(itemId)) {
+        newPreviousStatuses.set(itemId, status);
+      }
+    });
+    previousStatusRef.current = newPreviousStatuses;
+  }, [items?.length]); // Trigger when items array length changes
 
   // Infinite scroll and virtual scrolling
   useEffect(() => {
@@ -575,13 +765,32 @@ export const Queue = () => {
     const getPriority = (status: string) => {
       const priorities = {
         "real-time": 1, downloading: 2, processing: 3, initializing: 4,
-        retrying: 5, queued: 6, done: 7, completed: 7, error: 8, cancelled: 9
+        retrying: 5, queued: 6, done: 7, completed: 7, error: 8, cancelled: 9, skipped: 10
       };
       return priorities[status as keyof typeof priorities] || 10;
     };
 
     return getPriority(statusA) - getPriority(statusB);
   });
+
+  // Helper function to determine if an item should be visible
+  const shouldShowItem = (item: QueueItem) => {
+    const status = getStatus(item);
+    
+    // Always show non-terminal items
+    if (!isTerminalStatus(status)) {
+      return true;
+    }
+    
+    // Show items that recently transitioned to terminal states (within 3 seconds)
+    // This includes done, error, cancelled, and skipped states
+    if (recentlyTerminated.has(item.id)) {
+      return true;
+    }
+    
+    // Show items with recent callbacks (items that were already terminal when first seen)
+    return (item.lastCallback && 'timestamp' in item.lastCallback);
+  };
 
   return (
     <>
@@ -640,17 +849,7 @@ export const Queue = () => {
             Download Queue ({totalTasks})
             {items.length > INITIAL_ITEM_COUNT && (
               <span className="text-sm font-normal text-content-muted dark:text-content-muted-dark ml-2">
-                Showing {Math.min(visibleItemCount, items.filter(item => {
-                  const status = getStatus(item);
-                  return !isTerminalStatus(status) || 
-                         (item.lastCallback && 'timestamp' in item.lastCallback) ||
-                         status === "cancelled";
-                }).length)} of {items.filter(item => {
-                  const status = getStatus(item);
-                  return !isTerminalStatus(status) || 
-                         (item.lastCallback && 'timestamp' in item.lastCallback) ||
-                         status === "cancelled";
-                }).length}
+                Showing {Math.min(visibleItemCount, items.filter(shouldShowItem).length)} of {items.filter(shouldShowItem).length}
               </span>
             )}
           </h2>
@@ -685,12 +884,7 @@ export const Queue = () => {
           style={{ touchAction: isDragging ? 'none' : 'pan-y' }}
         >
           {(() => {
-            const visibleItems = sortedItems.filter(item => {
-              const status = item._cachedStatus;
-              return !isTerminalStatus(status) || 
-                     (item.lastCallback && 'timestamp' in item.lastCallback) ||
-                     status === "cancelled";
-            });
+            const visibleItems = sortedItems.filter(shouldShowItem);
             
             // Apply virtual scrolling - only show limited number of items
             const itemsToRender = visibleItems.slice(0, visibleItemCount);
@@ -710,6 +904,9 @@ export const Queue = () => {
               {itemsToRender.map(item => {
                 if (item._cachedStatus === "cancelled") {
                   return <CancelledTaskCard key={item.id} item={item} />;
+                }
+                if (item._cachedStatus === "skipped") {
+                  return <SkippedTaskCard key={item.id} item={item} />;
                 }
                 return <QueueItemCard key={item.id} item={item} cachedStatus={item._cachedStatus} />;
               })}

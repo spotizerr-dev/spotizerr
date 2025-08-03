@@ -1,8 +1,8 @@
 import { useForm, type SubmitHandler } from "react-hook-form";
 import apiClient from "../../lib/api-client";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 // --- Type Definitions ---
 interface DownloadSettings {
@@ -21,6 +21,16 @@ interface DownloadSettings {
   hlsThreads: number;
   deezerQuality: "MP3_128" | "MP3_320" | "FLAC";
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
+}
+
+interface WatchConfig {
+  enabled: boolean;
+  interval: number;
+  playlists: string[];
+}
+
+interface Credential {
+  name: string;
 }
 
 interface DownloadsTabProps {
@@ -44,9 +54,40 @@ const saveDownloadConfig = async (data: Partial<DownloadSettings>) => {
   return response;
 };
 
+const fetchWatchConfig = async (): Promise<WatchConfig> => {
+  const { data } = await apiClient.get("/config/watch");
+  return data;
+};
+
+const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credential[]> => {
+  const { data } = await apiClient.get<string[]>(`/credentials/${service}`);
+  return data.map((name) => ({ name }));
+};
+
 // --- Component ---
 export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   const queryClient = useQueryClient();
+  const [validationError, setValidationError] = useState<string>("");
+
+  // Fetch watch config
+  const { data: watchConfig } = useQuery({
+    queryKey: ["watchConfig"],
+    queryFn: fetchWatchConfig,
+    staleTime: 30000, // 30 seconds
+  });
+
+  // Fetch credentials for fallback validation
+  const { data: spotifyCredentials } = useQuery({
+    queryKey: ["credentials", "spotify"],
+    queryFn: () => fetchCredentials("spotify"),
+    staleTime: 30000,
+  });
+
+  const { data: deezerCredentials } = useQuery({
+    queryKey: ["credentials", "deezer"], 
+    queryFn: () => fetchCredentials("deezer"),
+    staleTime: 30000,
+  });
 
   const mutation = useMutation({
     mutationFn: saveDownloadConfig,
@@ -70,8 +111,48 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   }, [config, reset]);
 
   const selectedFormat = watch("convertTo");
+  const realTime = watch("realTime");
+  const fallback = watch("fallback");
+
+  // Validation effect for watch + download method requirement
+  useEffect(() => {
+    let error = "";
+    
+    // Check watch requirements
+    if (watchConfig?.enabled && !realTime && !fallback) {
+      error = "When watch is enabled, either Real-time downloading or Download Fallback (or both) must be enabled.";
+    }
+    
+    // Check fallback account requirements
+    if (fallback && (!spotifyCredentials?.length || !deezerCredentials?.length)) {
+      const missingServices: string[] = [];
+      if (!spotifyCredentials?.length) missingServices.push("Spotify");
+      if (!deezerCredentials?.length) missingServices.push("Deezer");
+      error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
+    }
+    
+    setValidationError(error);
+  }, [watchConfig?.enabled, realTime, fallback, spotifyCredentials?.length, deezerCredentials?.length]);
 
   const onSubmit: SubmitHandler<DownloadSettings> = (data) => {
+    // Check watch requirements
+    if (watchConfig?.enabled && !data.realTime && !data.fallback) {
+      setValidationError("When watch is enabled, either Real-time downloading or Download Fallback (or both) must be enabled.");
+      toast.error("Validation failed: Watch requires at least one download method to be enabled.");
+      return;
+    }
+
+    // Check fallback account requirements
+    if (data.fallback && (!spotifyCredentials?.length || !deezerCredentials?.length)) {
+      const missingServices: string[] = [];
+      if (!spotifyCredentials?.length) missingServices.push("Spotify");
+      if (!deezerCredentials?.length) missingServices.push("Deezer");
+      const error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
+      setValidationError(error);
+      toast.error("Validation failed: " + error);
+      return;
+    }
+
     mutation.mutate({
       ...data,
       maxConcurrentDownloads: Number(data.maxConcurrentDownloads),
@@ -108,6 +189,37 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           <label htmlFor="fallbackToggle" className="text-content-primary dark:text-content-primary-dark">Download Fallback</label>
           <input id="fallbackToggle" type="checkbox" {...register("fallback")} className="h-6 w-6 rounded" />
         </div>
+        
+        {/* Watch validation info */}
+        {watchConfig?.enabled && (
+          <div className="p-3 bg-info/10 border border-info/20 rounded-lg">
+            <p className="text-sm text-info font-medium mb-1">
+              Watch is currently enabled
+            </p>
+            <p className="text-xs text-content-muted dark:text-content-muted-dark">
+              At least one download method (Real-time or Fallback) must be enabled when using watch functionality.
+            </p>
+          </div>
+        )}
+        
+        {/* Fallback account requirements info */}
+        {fallback && (!spotifyCredentials?.length || !deezerCredentials?.length) && (
+          <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
+            <p className="text-sm text-warning font-medium mb-1">
+              Fallback accounts required
+            </p>
+            <p className="text-xs text-content-muted dark:text-content-muted-dark">
+              Download Fallback requires accounts for both Spotify and Deezer. Configure missing accounts in the Accounts tab.
+            </p>
+          </div>
+        )}
+        
+        {/* Validation error display */}
+        {validationError && (
+          <div className="p-3 bg-error/10 border border-error/20 rounded-lg">
+            <p className="text-sm text-error font-medium">{validationError}</p>
+          </div>
+        )}
       </div>
 
       {/* Source Quality Settings */}
@@ -215,7 +327,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
 
       <button
         type="submit"
-        disabled={mutation.isPending}
+        disabled={mutation.isPending || !!validationError}
         className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
       >
         {mutation.isPending ? "Saving..." : "Save Download Settings"}

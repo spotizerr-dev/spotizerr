@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from typing import Any
+from pathlib import Path
 
 # Import the centralized config getters that handle file creation and defaults
 from routes.utils.celery_config import (
@@ -34,6 +35,101 @@ NOTIFY_PARAMETERS = [
     "spotifyQuality",
     "deezerQuality",
 ]
+
+
+# Helper function to check if credentials exist for a service
+def has_credentials(service: str) -> bool:
+    """Check if credentials exist for the specified service (spotify or deezer)."""
+    try:
+        credentials_path = Path(f"./data/credentials/{service}")
+        if not credentials_path.exists():
+            return False
+        
+        # Check if there are any credential files in the directory
+        credential_files = list(credentials_path.glob("*.json"))
+        return len(credential_files) > 0
+    except Exception as e:
+        logger.warning(f"Error checking credentials for {service}: {e}")
+        return False
+
+
+# Validation function for configuration consistency
+def validate_config(config_data: dict, watch_config: dict = None) -> tuple[bool, str]:
+    """
+    Validate configuration for consistency and requirements.
+    Returns (is_valid, error_message).
+    """
+    try:
+        # Get current watch config if not provided
+        if watch_config is None:
+            watch_config = get_watch_config_http()
+        
+        # Check if fallback is enabled but missing required accounts
+        if config_data.get("fallback", False):
+            has_spotify = has_credentials("spotify")
+            has_deezer = has_credentials("deezer")
+            
+            if not has_spotify or not has_deezer:
+                missing_services = []
+                if not has_spotify:
+                    missing_services.append("Spotify")
+                if not has_deezer:
+                    missing_services.append("Deezer")
+                
+                return False, f"Download Fallback requires accounts to be configured for both services. Missing: {', '.join(missing_services)}. Configure accounts before enabling fallback."
+        
+        # Check if watch is enabled but no download methods are available
+        if watch_config.get("enabled", False):
+            real_time = config_data.get("realTime", False)
+            fallback = config_data.get("fallback", False)
+            
+            if not real_time and not fallback:
+                return False, "Watch functionality requires either Real-time downloading or Download Fallback to be enabled."
+        
+        return True, ""
+        
+    except Exception as e:
+        logger.error(f"Error validating configuration: {e}", exc_info=True)
+        return False, f"Configuration validation error: {str(e)}"
+
+
+def validate_watch_config(watch_data: dict, main_config: dict = None) -> tuple[bool, str]:
+    """
+    Validate watch configuration for consistency and requirements.
+    Returns (is_valid, error_message).
+    """
+    try:
+        # Get current main config if not provided
+        if main_config is None:
+            main_config = get_config()
+        
+        # Check if trying to enable watch without download methods
+        if watch_data.get("enabled", False):
+            real_time = main_config.get("realTime", False)
+            fallback = main_config.get("fallback", False)
+            
+            if not real_time and not fallback:
+                return False, "Cannot enable watch: either Real-time downloading or Download Fallback must be enabled in download settings."
+            
+            # If fallback is enabled, check for required accounts
+            if fallback:
+                has_spotify = has_credentials("spotify")
+                has_deezer = has_credentials("deezer")
+                
+                if not has_spotify or not has_deezer:
+                    missing_services = []
+                    if not has_spotify:
+                        missing_services.append("Spotify")
+                    if not has_deezer:
+                        missing_services.append("Deezer")
+                    
+                    return False, f"Cannot enable watch with fallback: missing accounts for {', '.join(missing_services)}. Configure accounts before enabling watch."
+        
+        return True, ""
+        
+    except Exception as e:
+        logger.error(f"Error validating watch configuration: {e}", exc_info=True)
+        return False, f"Watch configuration validation error: {str(e)}"
 
 
 # Helper to get main config (uses the one from celery_config)
@@ -136,6 +232,14 @@ async def update_config(request: Request):
         explicit_filter_env = os.environ.get("EXPLICIT_FILTER", "false").lower()
         new_config["explicitFilter"] = explicit_filter_env in ("true", "1", "yes", "on")
 
+        # Validate configuration before saving
+        is_valid, error_message = validate_config(new_config)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Configuration validation failed", "details": error_message}
+            )
+
         success, error_msg = save_config(new_config)
         if success:
             # Return the updated config
@@ -182,6 +286,58 @@ async def check_config_changes():
         )
 
 
+@router.post("/config/validate")
+async def validate_config_endpoint(request: Request):
+    """Validate configuration without saving it."""
+    try:
+        config_data = await request.json()
+        if not isinstance(config_data, dict):
+            raise HTTPException(status_code=400, detail={"error": "Invalid config format"})
+
+        is_valid, error_message = validate_config(config_data)
+        
+        return {
+            "valid": is_valid,
+            "message": "Configuration is valid" if is_valid else error_message,
+            "details": error_message if not is_valid else None
+        }
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail={"error": "Invalid JSON data"})
+    except Exception as e:
+        logger.error(f"Error in POST /config/validate: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to validate configuration", "details": str(e)}
+        )
+
+
+@router.post("/config/watch/validate")
+async def validate_watch_config_endpoint(request: Request):
+    """Validate watch configuration without saving it."""
+    try:
+        watch_data = await request.json()
+        if not isinstance(watch_data, dict):
+            raise HTTPException(status_code=400, detail={"error": "Invalid watch config format"})
+
+        is_valid, error_message = validate_watch_config(watch_data)
+        
+        return {
+            "valid": is_valid,
+            "message": "Watch configuration is valid" if is_valid else error_message,
+            "details": error_message if not is_valid else None
+        }
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail={"error": "Invalid JSON data"})
+    except Exception as e:
+        logger.error(f"Error in POST /config/watch/validate: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to validate watch configuration", "details": str(e)}
+        )
+
+
 @router.get("/config/watch")
 async def handle_watch_config():
     """Handles GET requests for the watch configuration."""
@@ -204,6 +360,14 @@ async def update_watch_config(request: Request):
         new_watch_config = await request.json()
         if not isinstance(new_watch_config, dict):
             raise HTTPException(status_code=400, detail={"error": "Invalid watch config format"})
+
+        # Validate watch configuration before saving
+        is_valid, error_message = validate_watch_config(new_watch_config)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "Watch configuration validation failed", "details": error_message}
+            )
 
         success, error_msg = save_watch_config_http(new_watch_config)
         if success:
