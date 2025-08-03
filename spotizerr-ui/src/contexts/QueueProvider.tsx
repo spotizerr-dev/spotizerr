@@ -26,7 +26,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const reconnectAttempts = useRef<number>(0);
   const maxReconnectAttempts = 5;
   const pageSize = 20;
-  
+
   // Health check for SSE connection
   const lastHeartbeat = useRef<number>(Date.now());
   const healthCheckInterval = useRef<number | null>(null);
@@ -62,15 +62,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     // Handle different callback structures
     if (task.last_line) {
       try {
-        if ("track" in task.last_line) {
-          name = task.last_line.track.title || name;
-          artist = task.last_line.track.artists?.[0]?.name || artist;
-        } else if ("album" in task.last_line) {
-          name = task.last_line.album.title || name;
-          artist = task.last_line.album.artists?.map((a: any) => a.name).join(", ") || artist;
-        } else if ("playlist" in task.last_line) {
-          name = task.last_line.playlist.title || name;
-          artist = task.last_line.playlist.owner?.name || artist;
+      if ("track" in task.last_line) {
+        name = task.last_line.track.title || name;
+        artist = task.last_line.track.artists?.[0]?.name || artist;
+      } else if ("album" in task.last_line) {
+        name = task.last_line.album.title || name;
+        artist = task.last_line.album.artists?.map((a: any) => a.name).join(", ") || artist;
+      } else if ("playlist" in task.last_line) {
+        name = task.last_line.playlist.title || name;
+        artist = task.last_line.playlist.owner?.name || artist;
         }
       } catch (error) {
         console.warn(`createQueueItemFromTask: Error parsing callback for task ${task.task_id}:`, error);
@@ -157,6 +157,31 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           try {
             const data = JSON.parse(event.data);
             
+            // Debug logging for all SSE events
+            console.log("🔄 SSE Event Received:", {
+              timestamp: new Date().toISOString(),
+              changeType: data.change_type || "update",
+              totalTasks: data.total_tasks,
+              taskCounts: data.task_counts,
+              tasksCount: data.tasks?.length || 0,
+              taskIds: data.tasks?.map((t: any) => {
+                const tempItem = createQueueItemFromTask(t);
+                const status = getStatus(tempItem);
+                // Special logging for playlist/album track progress
+                if (t.last_line?.current_track && t.last_line?.total_tracks) {
+                  return {
+                    id: t.task_id,
+                    status,
+                    type: t.download_type,
+                    track: `${t.last_line.current_track}/${t.last_line.total_tracks}`,
+                    trackStatus: t.last_line.status_info?.status
+                  };
+                }
+                return { id: t.task_id, status, type: t.download_type };
+              }) || [],
+              rawData: data
+            });
+            
             if (data.error) {
             console.error("SSE error:", data.error);
             toast.error("Connection error");
@@ -165,6 +190,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
           // Handle different message types from optimized backend
           const changeType = data.change_type || "update";
+          const triggerReason = data.trigger_reason || "";
             
           if (changeType === "heartbeat") {
             // Heartbeat - just update counts, no task processing
@@ -197,7 +223,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           setTotalTasks(calculatedTotal);
 
           if (updatedTasks?.length > 0) {
-            console.log(`SSE: Processing ${updatedTasks.length} task updates`);
+            const updateType = triggerReason === "callback_update" ? "real-time callback" : "task summary";
+            console.log(`SSE: Processing ${updatedTasks.length} ${updateType} updates`);
             
             setItems(prev => {
               // Create improved deduplication maps

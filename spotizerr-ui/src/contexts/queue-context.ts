@@ -53,9 +53,26 @@ export const getStatus = (item: QueueItem): string => {
   }
   
   if (isTrackCallback(item.lastCallback)) {
-    // For parent downloads, if we're getting track callbacks, the parent is "downloading"
+    // For parent downloads, check if this is the final track
     if (item.downloadType === "album" || item.downloadType === "playlist") {
-      return item.lastCallback.status_info.status === "done" ? "downloading" : "downloading";
+      const currentTrack = item.lastCallback.current_track || 1;
+      const totalTracks = item.lastCallback.total_tracks || 1;
+      const trackStatus = item.lastCallback.status_info.status;
+      
+      // If this is the last track and it's in a terminal state, the parent is done
+      if (currentTrack >= totalTracks && ["done", "skipped", "error"].includes(trackStatus)) {
+        console.log(`🎵 Playlist/Album completed: ${item.name} (track ${currentTrack}/${totalTracks}, status: ${trackStatus})`);
+        return "completed";
+      }
+      
+      // If track is in terminal state but not the last track, parent is still downloading
+      if (["done", "skipped", "error"].includes(trackStatus)) {
+        console.log(`🎵 Playlist/Album progress: ${item.name} (track ${currentTrack}/${totalTracks}, status: ${trackStatus}) - continuing...`);
+        return "downloading";
+      }
+      
+      // Track is actively being processed
+      return "downloading";
     }
     return item.lastCallback.status_info.status;
   }

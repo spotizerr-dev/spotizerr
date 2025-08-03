@@ -121,6 +121,16 @@ task_default_queue = "downloads"
 task_default_exchange = "downloads"
 task_default_routing_key = "downloads"
 
+# Task routing - ensure SSE and utility tasks go to utility_tasks queue
+task_routes = {
+    'routes.utils.celery_tasks.trigger_sse_update_task': {'queue': 'utility_tasks'},
+    'routes.utils.celery_tasks.cleanup_stale_errors': {'queue': 'utility_tasks'},
+    'routes.utils.celery_tasks.delayed_delete_task_data': {'queue': 'utility_tasks'},
+    'routes.utils.celery_tasks.download_track': {'queue': 'downloads'},
+    'routes.utils.celery_tasks.download_album': {'queue': 'downloads'},
+    'routes.utils.celery_tasks.download_playlist': {'queue': 'downloads'},
+}
+
 # Celery task settings
 task_serializer = "json"
 accept_content = ["json"]
@@ -140,6 +150,19 @@ task_annotations = {
     },
     "routes.utils.celery_tasks.download_playlist": {
         "rate_limit": f"{MAX_CONCURRENT_DL}/m",
+    },
+    "routes.utils.celery_tasks.trigger_sse_update_task": {
+        "rate_limit": "500/m",  # Allow high rate for real-time SSE updates
+        "default_retry_delay": 1,  # Quick retry for SSE updates
+        "max_retries": 1,  # Limited retries for best-effort delivery
+        "ignore_result": True,  # Don't store results for SSE tasks
+        "track_started": False,  # Don't track when SSE tasks start
+    },
+    "routes.utils.celery_tasks.cleanup_stale_errors": {
+        "rate_limit": "10/m",  # Moderate rate for cleanup tasks
+    },
+    "routes.utils.celery_tasks.delayed_delete_task_data": {
+        "rate_limit": "100/m",  # Moderate rate for cleanup
     },
 }
 

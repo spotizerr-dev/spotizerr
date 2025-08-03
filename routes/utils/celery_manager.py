@@ -149,8 +149,9 @@ class CeleryManager:
         else:
             utility_cmd = self._get_worker_command(
                 queues="utility_tasks,default",  # Listen to utility and default
-                concurrency=3,
+                concurrency=5,  # Increased concurrency for SSE updates and utility tasks
                 worker_name_suffix="utw",  # Utility Worker
+                log_level="ERROR"  # Reduce log verbosity for utility worker (only errors)
             )
             logger.info(
                 f"Starting Celery Utility Worker with command: {' '.join(utility_cmd)}"
@@ -174,7 +175,7 @@ class CeleryManager:
             self.utility_log_thread_stdout.start()
             self.utility_log_thread_stderr.start()
             logger.info(
-                f"Celery Utility Worker (PID: {self.utility_worker_process.pid}) started with concurrency 3."
+                f"Celery Utility Worker (PID: {self.utility_worker_process.pid}) started with concurrency 5."
             )
 
         if (

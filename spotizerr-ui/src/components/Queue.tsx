@@ -206,10 +206,10 @@ const CancelledTaskCard = ({ item }: { item: QueueItem }) => {
   );
 };
 
-const QueueItemCard = ({ item }: { item: QueueItem }) => {
+const QueueItemCard = ({ item, cachedStatus }: { item: QueueItem, cachedStatus: string }) => {
   const { removeItem, cancelItem } = useContext(QueueContext) || {};
   
-  const status = getStatus(item);
+  const status = cachedStatus;
   const progress = getProgress(item);
   const trackInfo = getCurrentTrackInfo(item);
   const styleInfo = statusStyles[status as keyof typeof statusStyles] || statusStyles.queued;
@@ -497,13 +497,19 @@ export const Queue = () => {
 
   if (!context || !isVisible) return null;
 
-  const hasActive = items.some(item => isActiveStatus(getStatus(item)));
-  const hasFinished = items.some(item => isTerminalStatus(getStatus(item)));
+  // Optimize: Calculate status once per item and reuse throughout render
+  const itemsWithStatus = items.map(item => ({
+    ...item,
+    _cachedStatus: getStatus(item)
+  }));
 
-  // Sort items by priority
-  const sortedItems = [...items].sort((a, b) => {
-    const statusA = getStatus(a);
-    const statusB = getStatus(b);
+  const hasActive = itemsWithStatus.some(item => isActiveStatus(item._cachedStatus));
+  const hasFinished = itemsWithStatus.some(item => isTerminalStatus(item._cachedStatus));
+
+  // Sort items by priority using cached status
+  const sortedItems = [...itemsWithStatus].sort((a, b) => {
+    const statusA = a._cachedStatus;
+    const statusB = b._cachedStatus;
     
     const getPriority = (status: string) => {
       const priorities = {
@@ -581,50 +587,55 @@ export const Queue = () => {
           style={{ touchAction: isDragging ? 'none' : 'pan-y' }}
         >
           {(() => {
-            const visibleItems = sortedItems.filter(item => !isTerminalStatus(getStatus(item)) || (item.lastCallback && 'timestamp' in item.lastCallback));
+            const visibleItems = sortedItems.filter(item => {
+              const status = item._cachedStatus;
+              return !isTerminalStatus(status) || 
+                     (item.lastCallback && 'timestamp' in item.lastCallback) ||
+                     status === "cancelled";
+            });
             
             return visibleItems.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
-                  <FaMusic className="text-3xl md:text-2xl icon-muted" />
-                </div>
-                <p className="text-base md:text-sm text-content-muted dark:text-content-muted-dark">The queue is empty.</p>
-                <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
+            <div className="text-center py-8">
+              <div className="w-20 h-20 md:w-16 md:h-16 mx-auto mb-4 rounded-full bg-surface-muted dark:bg-surface-muted-dark flex items-center justify-center">
+                <FaMusic className="text-3xl md:text-2xl icon-muted" />
               </div>
-            ) : (
-              <>
+              <p className="text-base md:text-sm text-content-muted dark:text-content-muted-dark">The queue is empty.</p>
+              <p className="text-sm md:text-xs text-content-muted dark:text-content-muted-dark mt-1">Downloads will appear here</p>
+            </div>
+          ) : (
+            <>
                 {visibleItems.map(item => {
-                  if (getStatus(item) === "cancelled") {
+                  if (item._cachedStatus === "cancelled") {
                     return <CancelledTaskCard key={item.id} item={item} />;
                   }
-                  return <QueueItemCard key={item.id} item={item} />;
+                  return <QueueItemCard key={item.id} item={item} cachedStatus={item._cachedStatus} />;
                 })}
-                
-                {/* Loading indicator */}
-                {isLoadingMore && (
-                  <div className="flex justify-center mt-4 py-4">
-                    <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark">
-                      <div className="w-4 h-4 border-2 border-content-muted dark:border-content-muted-dark border-t-transparent rounded-full animate-spin" />
-                      Loading more tasks...
-                    </div>
+              
+              {/* Loading indicator */}
+              {isLoadingMore && (
+                <div className="flex justify-center mt-4 py-4">
+                  <div className="flex items-center gap-2 text-content-muted dark:text-content-muted-dark">
+                    <div className="w-4 h-4 border-2 border-content-muted dark:border-content-muted-dark border-t-transparent rounded-full animate-spin" />
+                    Loading more tasks...
                   </div>
-                )}
-                
-                {/* Load more button */}
-                {hasMore && !isLoadingMore && (
-                  <div className="flex justify-center mt-4">
-                    <button
-                      onClick={loadMoreTasks}
-                      className="px-3 py-1 text-xs bg-surface-muted dark:bg-surface-muted-dark text-content-secondary dark:text-content-secondary-dark rounded border border-border dark:border-border-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors flex items-center gap-1"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                      Load More
-                    </button>
-                  </div>
-                )}
-              </>
+                </div>
+              )}
+              
+              {/* Load more button */}
+              {hasMore && !isLoadingMore && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={loadMoreTasks}
+                    className="px-3 py-1 text-xs bg-surface-muted dark:bg-surface-muted-dark text-content-secondary dark:text-content-secondary-dark rounded border border-border dark:border-border-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    Load More
+                  </button>
+                </div>
+              )}
+            </>
             );
           })()}
         </div>
