@@ -570,6 +570,12 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list, snaps
             ]
         )
 
+        # Extract track number from the track object
+        track_number = track.get("track_number")
+        # Log the raw track_number value for debugging
+        if track_number is None or track_number == 0:
+            logger.debug(f"Track '{track.get('name', 'Unknown')}' has track_number: {track_number} (raw API value)")
+        
         # Prepare tuple for UPDATE statement.
         # Order: title, artist_names, album_name, album_artist_names, track_number,
         # album_spotify_id, duration_ms, added_at_playlist,
@@ -580,7 +586,7 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list, snaps
                 artist_names,
                 track.get("album", {}).get("name", "N/A"),
                 album_artist_names,
-                track.get("track_number"),
+                track_number,  # Use the extracted track_number
                 track.get("album", {}).get("id"),
                 track.get("duration_ms"),
                 track_item.get("added_at"),  # From playlist item, update if changed
@@ -784,42 +790,94 @@ def remove_specific_tracks_from_playlist_table(
         return 0
 
 
-def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db: dict, snapshot_id: str = None):
-    """Adds or updates a single track in the specified playlist's tracks table in playlists.db."""
+def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db: dict, snapshot_id: str = None, task_id: str = None):
+    """
+    Adds or updates a single track in the specified playlist's tracks table in playlists.db.
+    Uses deezspot callback data as the source of metadata.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+        track_item_for_db: Track item data (used only for spotify_track_id and added_at)
+        snapshot_id: The playlist snapshot ID
+        task_id: Task ID to extract metadata from callback data
+    """
+    if not task_id:
+        logger.error(f"No task_id provided for playlist {playlist_spotify_id}. Task ID is required to extract metadata from deezspot callback.")
+        return
+        
+    if not track_item_for_db or not track_item_for_db.get("track", {}).get("id"):
+        logger.error(f"No track_item_for_db or spotify track ID provided for playlist {playlist_spotify_id}")
+        return
+
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
-    track_detail = track_item_for_db.get("track")
-    if not track_detail or not track_detail.get("id"):
-        logger.warning(
-            f"Skipping single track due to missing data for playlist {playlist_spotify_id}: {track_item_for_db}"
-        )
+    
+    # Extract metadata ONLY from deezspot callback data
+    try:
+        # Import here to avoid circular imports
+        from routes.utils.celery_tasks import get_last_task_status
+        
+        last_status = get_last_task_status(task_id)
+        if not last_status or "raw_callback" not in last_status:
+            logger.error(f"No raw_callback found in task status for task {task_id}. Cannot extract metadata.")
+            return
+            
+        callback_data = last_status["raw_callback"]
+        
+        # Extract metadata from deezspot callback using correct structure from callbacks.ts
+        track_obj = callback_data.get("track", {})
+        if not track_obj:
+            logger.error(f"No track object found in callback data for task {task_id}")
+            return
+            
+        track_name = track_obj.get("title", "N/A")
+        track_number = track_obj.get("track_number", 1)  # Default to 1 if missing
+        duration_ms = track_obj.get("duration_ms", 0)
+        
+        # Extract artist names from artists array
+        artists = track_obj.get("artists", [])
+        artist_names = ", ".join([artist.get("name", "") for artist in artists if artist.get("name")])
+        if not artist_names:
+            artist_names = "N/A"
+            
+        # Extract album information
+        album_obj = track_obj.get("album", {})
+        album_name = album_obj.get("title", "N/A")
+        
+        # Extract album artist names from album artists array
+        album_artists = album_obj.get("artists", [])
+        album_artist_names = ", ".join([artist.get("name", "") for artist in album_artists if artist.get("name")])
+        if not album_artist_names:
+            album_artist_names = "N/A"
+        
+        logger.debug(f"Extracted metadata from deezspot callback for '{track_name}': track_number={track_number}")
+        
+    except Exception as e:
+        logger.error(f"Error extracting metadata from task {task_id} callback: {e}", exc_info=True)
         return
 
     current_time = int(time.time())
-    artist_names = ", ".join(
-        [a["name"] for a in track_detail.get("artists", []) if a.get("name")]
-    )
-    album_artist_names = ", ".join(
-        [
-            a["name"]
-            for a in track_detail.get("album", {}).get("artists", [])
-            if a.get("name")
-        ]
-    )
-
+    
+    # Get spotify_track_id and added_at from original track_item_for_db
+    track_id = track_item_for_db["track"]["id"]
+    added_at = track_item_for_db.get("added_at")
+    album_id = track_item_for_db.get("track", {}).get("album", {}).get("id")  # Only album ID from original data
+    
+    logger.info(f"Adding track '{track_name}' (ID: {track_id}) to playlist {playlist_spotify_id} with track_number: {track_number} (from deezspot callback)")
+    
     track_data_tuple = (
-        track_detail["id"],
-        track_detail.get("name", "N/A"),
+        track_id,
+        track_name,
         artist_names,
-        track_detail.get("album", {}).get("name", "N/A"),
+        album_name,
         album_artist_names,
-        track_detail.get("track_number"),
-        track_detail.get("album", {}).get("id"),
-        track_detail.get("duration_ms"),
-        track_item_for_db.get("added_at"),
+        track_number,
+        album_id,
+        duration_ms,
+        added_at,
         current_time,
         1,
         current_time,
-        snapshot_id,  # Add snapshot_id to the tuple
+        snapshot_id,
     )
     try:
         with _get_playlists_db_connection() as conn:  # Use playlists connection
@@ -835,7 +893,7 @@ def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db:
             )
             conn.commit()
             logger.info(
-                f"Track '{track_detail.get('name')}' added/updated in DB for playlist {playlist_spotify_id} in {PLAYLISTS_DB_PATH}."
+                f"Track '{track_name}' added/updated in DB for playlist {playlist_spotify_id} in {PLAYLISTS_DB_PATH}."
             )
     except sqlite3.Error as e:
         logger.error(

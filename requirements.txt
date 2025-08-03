@@ -1,5 +1,5 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 celery==5.5.3
-deezspot-spotizerr==2.2.0
-httpx
+deezspot-spotizerr==2.2.2
+httpx==0.28.1

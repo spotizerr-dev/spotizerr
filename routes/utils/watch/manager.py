@@ -2,6 +2,8 @@ import time
 import threading
 import logging
 import json
+import os
+import re
 from pathlib import Path
 from typing import Any, List, Dict
 
@@ -33,6 +35,16 @@ from routes.utils.celery_queue_manager import download_queue_manager
 logger = logging.getLogger(__name__)
 CONFIG_FILE_PATH = Path("./data/config/watch.json")
 STOP_EVENT = threading.Event()
+
+# Format mapping for audio file conversions
+AUDIO_FORMAT_EXTENSIONS = {
+    'mp3': '.mp3',
+    'flac': '.flac',
+    'm4a': '.m4a',
+    'aac': '.m4a',
+    'ogg': '.ogg',
+    'wav': '.wav',
+}
 
 DEFAULT_WATCH_CONFIG = {
     "enabled": False,
@@ -321,6 +333,18 @@ def check_watched_playlists(specific_playlist_id: str = None):
                                     f"Playlist Watch Manager: {len(not_found_tracks)} tracks not found in playlist '{playlist_name}'. Marking as removed."
                                 )
                                 mark_tracks_as_not_present_in_spotify(playlist_spotify_id, not_found_tracks)
+                                
+                                # Update the playlist's m3u file after tracks are removed
+                                try:
+                                    logger.info(
+                                        f"Updating m3u file for playlist '{playlist_name}' after removing {len(not_found_tracks)} tracks."
+                                    )
+                                    update_playlist_m3u_file(playlist_spotify_id)
+                                except Exception as m3u_update_err:
+                                    logger.error(
+                                        f"Failed to update m3u file for playlist '{playlist_name}' after marking tracks as removed: {m3u_update_err}",
+                                        exc_info=True,
+                                    )
 
                             # Update playlist snapshot and continue to next playlist
                             update_playlist_snapshot(playlist_spotify_id, api_snapshot_id, api_total_tracks)
@@ -467,6 +491,19 @@ def check_watched_playlists(specific_playlist_id: str = None):
                 )
                 mark_tracks_as_not_present_in_spotify(
                     playlist_spotify_id, list(removed_db_ids)
+                )
+
+            # Update the playlist's m3u file after any changes (new tracks queued or tracks removed)
+            if new_track_ids_for_download or removed_db_ids:
+                try:
+                    logger.info(
+                        f"Updating m3u file for playlist '{playlist_name}' after playlist changes."
+                    )
+                    update_playlist_m3u_file(playlist_spotify_id)
+                except Exception as m3u_update_err:
+                    logger.error(
+                        f"Failed to update m3u file for playlist '{playlist_name}' after playlist changes: {m3u_update_err}",
+                        exc_info=True,
                 )
 
             update_playlist_snapshot(
@@ -805,3 +842,241 @@ def stop_watch_manager():  # Renamed from stop_playlist_watch_manager
         _watch_scheduler_thread = None
     else:
         logger.info("Watch Manager: Background scheduler not running.")
+
+
+def get_playlist_tracks_for_m3u(playlist_spotify_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all tracks for a playlist from the database with complete metadata needed for m3u generation.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+        
+    Returns:
+        List of track dictionaries with metadata
+    """
+    table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
+    tracks = []
+    
+    try:
+        from routes.utils.watch.db import _get_playlists_db_connection, _ensure_table_schema, EXPECTED_PLAYLIST_TRACKS_COLUMNS
+        
+        with _get_playlists_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check if table exists
+            cursor.execute(
+                f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
+            )
+            if cursor.fetchone() is None:
+                logger.warning(
+                    f"Track table {table_name} does not exist. Cannot generate m3u file."
+                )
+                return tracks
+            
+            # Ensure the table has the latest schema before querying
+            _ensure_table_schema(
+                cursor,
+                table_name,
+                EXPECTED_PLAYLIST_TRACKS_COLUMNS,
+                f"playlist tracks ({playlist_spotify_id})",
+            )
+            
+            # Get all tracks that are present in Spotify
+            cursor.execute(f"""
+                SELECT spotify_track_id, title, artist_names, album_name, 
+                       album_artist_names, track_number, duration_ms
+                FROM {table_name} 
+                WHERE is_present_in_spotify = 1
+                ORDER BY track_number, title
+            """)
+            
+            rows = cursor.fetchall()
+            for row in rows:
+                tracks.append({
+                    "spotify_track_id": row["spotify_track_id"],
+                    "title": row["title"] or "Unknown Track",
+                    "artist_names": row["artist_names"] or "Unknown Artist",
+                    "album_name": row["album_name"] or "Unknown Album",
+                    "album_artist_names": row["album_artist_names"] or "Unknown Artist",
+                    "track_number": row["track_number"] or 0,
+                    "duration_ms": row["duration_ms"] or 0,
+                })
+                
+        return tracks
+        
+    except Exception as e:
+        logger.error(
+            f"Error retrieving tracks for m3u generation for playlist {playlist_spotify_id}: {e}",
+            exc_info=True,
+        )
+        return tracks
+
+
+def generate_track_file_path(track: Dict[str, Any], custom_dir_format: str, custom_track_format: str, convert_to: str = None) -> str:
+    """
+    Generate the file path for a track based on custom format strings.
+    This mimics the path generation logic used by the deezspot library.
+    
+    Args:
+        track: Track metadata dictionary
+        custom_dir_format: Directory format string (e.g., "%ar_album%/%album%")
+        custom_track_format: Track format string (e.g., "%tracknum%. %music% - %artist%")
+        convert_to: Target conversion format (e.g., "mp3", "flac", "m4a")
+        
+    Returns:
+        Generated file path relative to output directory
+    """
+    try:
+        # Extract metadata
+        artist_names = track.get("artist_names", "Unknown Artist")
+        album_name = track.get("album_name", "Unknown Album")
+        album_artist_names = track.get("album_artist_names", "Unknown Artist")
+        title = track.get("title", "Unknown Track")
+        track_number = track.get("track_number", 0)
+        duration_ms = track.get("duration_ms", 0)
+        
+        # Use album artist for directory structure, main artist for track name
+        main_artist = artist_names.split(", ")[0] if artist_names else "Unknown Artist"
+        album_artist = album_artist_names.split(", ")[0] if album_artist_names else main_artist
+        
+        # Clean names for filesystem
+        def clean_name(name):
+            # Remove or replace characters that are problematic in filenames
+            name = re.sub(r'[<>:"/\\|?*]', '_', str(name))
+            name = re.sub(r'[\x00-\x1f]', '', name)  # Remove control characters
+            return name.strip()
+        
+        clean_album_artist = clean_name(album_artist)
+        clean_album = clean_name(album_name)
+        clean_main_artist = clean_name(main_artist)
+        clean_title = clean_name(title)
+        
+        # Prepare placeholder replacements
+        replacements = {
+            # Common placeholders
+            "%music%": clean_title,
+            "%artist%": clean_main_artist,
+            "%album%": clean_album,
+            "%ar_album%": clean_album_artist,
+            "%tracknum%": f"{track_number:02d}" if track_number > 0 else "00",
+            "%year%": "",  # Not available in current DB schema
+            
+            # Additional placeholders (not available in current DB schema, using defaults)
+            "%discnum%": "01",  # Default to disc 1
+            "%date%": "",  # Not available
+            "%genre%": "",  # Not available
+            "%isrc%": "",  # Not available
+            "%explicit%": "",  # Not available
+            "%duration%": str(duration_ms // 1000) if duration_ms > 0 else "0",  # Convert ms to seconds
+        }
+        
+        # Apply replacements to directory format
+        dir_path = custom_dir_format
+        for placeholder, value in replacements.items():
+            dir_path = dir_path.replace(placeholder, value)
+        
+        # Apply replacements to track format
+        track_filename = custom_track_format
+        for placeholder, value in replacements.items():
+            track_filename = track_filename.replace(placeholder, value)
+        
+        # Combine and clean up path
+        full_path = os.path.join(dir_path, track_filename)
+        full_path = os.path.normpath(full_path)
+        
+        # Determine file extension based on convert_to setting or default to mp3
+        if not any(full_path.lower().endswith(ext) for ext in ['.mp3', '.flac', '.m4a', '.ogg', '.wav']):
+            if convert_to:
+                extension = AUDIO_FORMAT_EXTENSIONS.get(convert_to.lower(), '.mp3')
+                full_path += extension
+            else:
+                full_path += '.mp3'  # Default fallback
+        
+        return full_path
+        
+    except Exception as e:
+        logger.error(f"Error generating file path for track {track.get('title', 'Unknown')}: {e}")
+        # Return a fallback path with appropriate extension
+        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(track.get('title', 'Unknown Track')))
+        
+        # Determine extension for fallback
+        if convert_to:
+            extension = AUDIO_FORMAT_EXTENSIONS.get(convert_to.lower(), '.mp3')
+        else:
+            extension = '.mp3'
+            
+        return f"Unknown Artist/Unknown Album/{safe_title}{extension}"
+
+
+def update_playlist_m3u_file(playlist_spotify_id: str):
+    """
+    Generate/update the m3u file for a watched playlist based on tracks in the database.
+    
+    Args:
+        playlist_spotify_id: The Spotify playlist ID
+    """
+    try:
+        # Get playlist metadata
+        playlist_info = get_watched_playlist(playlist_spotify_id)
+        if not playlist_info:
+            logger.warning(f"Playlist {playlist_spotify_id} not found in watched playlists. Cannot update m3u file.")
+            return
+        
+        playlist_name = playlist_info.get("name", "Unknown Playlist")
+        
+        # Get configuration settings
+        from routes.utils.celery_config import get_config_params
+        config = get_config_params()
+        
+        custom_dir_format = config.get("customDirFormat", "%ar_album%/%album%")
+        custom_track_format = config.get("customTrackFormat", "%tracknum%. %music%")
+        convert_to = config.get("convertTo")  # Get conversion format setting
+        output_dir = "./downloads"  # This matches the output_dir used in download functions
+        
+        # Get all tracks for the playlist
+        tracks = get_playlist_tracks_for_m3u(playlist_spotify_id)
+        
+        if not tracks:
+            logger.info(f"No tracks found for playlist '{playlist_name}'. M3U file will be empty or removed.")
+        
+        # Clean playlist name for filename
+        safe_playlist_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', playlist_name).strip()
+        
+        # Create m3u file path
+        playlists_dir = Path(output_dir) / "playlists"
+        playlists_dir.mkdir(parents=True, exist_ok=True)
+        m3u_file_path = playlists_dir / f"{safe_playlist_name}.m3u"
+        
+        # Generate m3u content
+        m3u_lines = ["#EXTM3U"]
+        
+        for track in tracks:
+            # Generate file path for this track
+            track_file_path = generate_track_file_path(track, custom_dir_format, custom_track_format, convert_to)
+            
+            # Create relative path from m3u file location to track file
+            # M3U file is in ./downloads/playlists/
+            # Track files are in ./downloads/{custom_dir_format}/
+            relative_path = os.path.join("..", track_file_path)
+            relative_path = relative_path.replace("\\", "/")  # Use forward slashes for m3u compatibility
+            
+            # Add EXTINF line with track duration and title
+            duration_seconds = (track.get("duration_ms", 0) // 1000) if track.get("duration_ms") else -1
+            artist_and_title = f"{track.get('artist_names', 'Unknown Artist')} - {track.get('title', 'Unknown Track')}"
+            
+            m3u_lines.append(f"#EXTINF:{duration_seconds},{artist_and_title}")
+            m3u_lines.append(relative_path)
+        
+        # Write m3u file
+        with open(m3u_file_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(m3u_lines))
+        
+        logger.info(
+            f"Updated m3u file for playlist '{playlist_name}' at {m3u_file_path} with {len(tracks)} tracks{f' (format: {convert_to})' if convert_to else ''}."
+        )
+        
+    except Exception as e:
+        logger.error(
+            f"Error updating m3u file for playlist {playlist_spotify_id}: {e}",
+            exc_info=True,
+        )

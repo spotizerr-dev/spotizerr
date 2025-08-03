@@ -1097,7 +1097,26 @@ def task_postrun_handler(
                         f"Task {task_id} was from playlist watch for playlist {playlist_id}. Adding track to DB."
                     )
                     try:
-                        add_single_track_to_playlist_db(playlist_id, track_item_for_db)
+                        # Use task_id as primary source for metadata extraction
+                        add_single_track_to_playlist_db(
+                            playlist_spotify_id=playlist_id, 
+                            track_item_for_db=track_item_for_db,  # Keep as fallback
+                            task_id=task_id  # Primary source for metadata
+                        )
+                        
+                        # Update the playlist's m3u file after successful track addition
+                        try:
+                            from routes.utils.watch.manager import update_playlist_m3u_file
+                            logger.info(
+                                f"Updating m3u file for playlist {playlist_id} after successful track download."
+                            )
+                            update_playlist_m3u_file(playlist_id)
+                        except Exception as m3u_update_err:
+                            logger.error(
+                                f"Failed to update m3u file for playlist {playlist_id} after successful track download task {task_id}: {m3u_update_err}",
+                                exc_info=True,
+                            )
+                        
                     except Exception as db_add_err:
                         logger.error(
                             f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}",
