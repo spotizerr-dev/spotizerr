@@ -34,6 +34,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/api/auth/login", 
             "/api/auth/register",
             "/api/auth/logout",
+            "/api/auth/sso",  # All SSO endpoints
             "/static",
             "/favicon.ico"
         ]

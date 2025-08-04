@@ -22,12 +22,14 @@ USERS_FILE = USERS_DIR / "users.json"
 
 
 class User:
-    def __init__(self, username: str, email: str = None, role: str = "user", created_at: str = None, last_login: str = None):
+    def __init__(self, username: str, email: str = None, role: str = "user", created_at: str = None, last_login: str = None, sso_provider: str = None, sso_id: str = None):
         self.username = username
         self.email = email
         self.role = role
         self.created_at = created_at or datetime.utcnow().isoformat()
         self.last_login = last_login
+        self.sso_provider = sso_provider
+        self.sso_id = sso_id
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -35,7 +37,9 @@ class User:
             "email": self.email,
             "role": self.role,
             "created_at": self.created_at,
-            "last_login": self.last_login
+            "last_login": self.last_login,
+            "sso_provider": self.sso_provider,
+            "sso_id": self.sso_id
         }
 
     def to_public_dict(self) -> Dict[str, Any]:
@@ -45,7 +49,9 @@ class User:
             "email": self.email,
             "role": self.role,
             "created_at": self.created_at,
-            "last_login": self.last_login
+            "last_login": self.last_login,
+            "sso_provider": self.sso_provider,
+            "is_sso_user": self.sso_provider is not None
         }
 
 
@@ -87,15 +93,16 @@ class UserManager:
         """Verify password against hash"""
         return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
-    def create_user(self, username: str, password: str, email: str = None, role: str = "user") -> tuple[bool, str]:
-        """Create a new user"""
+    def create_user(self, username: str, password: str = None, email: str = None, role: str = "user", sso_provider: str = None, sso_id: str = None) -> tuple[bool, str]:
+        """Create a new user (traditional or SSO)"""
         users = self.load_users()
         
         if username in users:
             return False, "Username already exists"
         
-        hashed_password = self.hash_password(password)
-        user = User(username=username, email=email, role=role)
+        # For SSO users, password is None
+        hashed_password = self.hash_password(password) if password else None
+        user = User(username=username, email=email, role=role, sso_provider=sso_provider, sso_id=sso_id)
         
         users[username] = {
             **user.to_dict(),
@@ -103,7 +110,7 @@ class UserManager:
         }
         
         self.save_users(users)
-        logger.info(f"Created user: {username}")
+        logger.info(f"Created user: {username} (SSO: {sso_provider or 'No'})")
         return True, "User created successfully"
 
     def authenticate_user(self, username: str, password: str) -> Optional[User]:
@@ -220,3 +227,6 @@ def create_default_admin():
 
 # Initialize default admin on import
 create_default_admin()
+
+# SSO functionality will be imported separately to avoid circular imports
+SSO_AVAILABLE = True

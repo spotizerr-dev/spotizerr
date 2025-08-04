@@ -189,6 +189,14 @@ def create_app():
 
     # Register routers with URL prefixes
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+    
+    # Include SSO router if available
+    try:
+        from routes.auth.sso import router as sso_router
+        app.include_router(sso_router, prefix="/api/auth", tags=["sso"])
+        logging.info("SSO functionality enabled")
+    except ImportError as e:
+        logging.warning(f"SSO functionality not available: {e}")
     app.include_router(config_router, prefix="/api", tags=["config"])
     app.include_router(search_router, prefix="/api", tags=["search"])
     app.include_router(credentials_router, prefix="/api/credentials", tags=["credentials"])

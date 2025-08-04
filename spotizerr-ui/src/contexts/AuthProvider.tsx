@@ -6,7 +6,9 @@ import type {
   User, 
   LoginRequest, 
   RegisterRequest, 
-  AuthError 
+  AuthError,
+  SSOProvider,
+  SSOStatusResponse
 } from "@/types/auth";
 
 interface AuthProviderProps {
@@ -18,12 +20,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [authEnabled, setAuthEnabled] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [ssoEnabled, setSSOEnabled] = useState(false);
+  const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   
   // Guard to prevent multiple simultaneous initializations
   const initializingRef = useRef(false);
 
   const isAuthenticated = user !== null;
+
+  // Check for SSO token in URL (OAuth callback)
+  const checkForSSOToken = useCallback(async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    
+    if (token) {
+      console.log("SSO token found in URL, processing...");
+      try {
+        const user = await authApiClient.handleSSOToken(token, true); // Default to remember
+        setUser(user);
+        
+        // Remove token from URL
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+        
+        console.log("SSO login successful:", user.username);
+        return true;
+      } catch (error) {
+        console.error("SSO token processing failed:", error);
+        // Remove token from URL even if processing failed
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+      }
+    }
+    return false;
+  }, []);
 
   // Initialize authentication on app start
   const initializeAuth = useCallback(async () => {
@@ -38,6 +69,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsLoading(true);
       console.log("Initializing authentication...");
 
+      // First, check for SSO token in URL
+      const ssoTokenProcessed = await checkForSSOToken();
+      if (ssoTokenProcessed) {
+        // SSO token was processed, still need to get auth status for SSO info
+        const status = await authApiClient.checkAuthStatus();
+        setAuthEnabled(status.auth_enabled);
+        setRegistrationEnabled(status.registration_enabled);
+        setSSOEnabled(status.sso_enabled || false);
+        
+        // Get SSO providers if enabled
+        if (status.sso_enabled) {
+          try {
+            const ssoStatus = await authApiClient.getSSOStatus();
+            setSSOProviders(ssoStatus.providers);
+          } catch (error) {
+            console.warn("Failed to get SSO status:", error);
+            setSSOProviders([]);
+          }
+        }
+        
+        setIsInitialized(true);
+        return;
+      }
+
       // Check if we have a stored token first, before making any API calls
       const hasStoredToken = authApiClient.getToken() !== null;
       console.log("Has stored token:", hasStoredToken);
@@ -51,9 +106,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
           // Token is valid and we have user data
           setAuthEnabled(tokenValidation.userData.auth_enabled);
           setRegistrationEnabled(tokenValidation.userData.registration_enabled);
+          setSSOEnabled(tokenValidation.userData.sso_enabled || false);
+          
           if (tokenValidation.userData.authenticated && tokenValidation.userData.user) {
             setUser(tokenValidation.userData.user);
             console.log("Session restored for user:", tokenValidation.userData.user.username);
+            
+            // Get SSO providers if enabled
+            if (tokenValidation.userData.sso_enabled) {
+              try {
+                const ssoStatus = await authApiClient.getSSOStatus();
+                setSSOProviders(ssoStatus.providers);
+              } catch (error) {
+                console.warn("Failed to get SSO status:", error);
+                setSSOProviders([]);
+              }
+            }
+            
             setIsInitialized(true);
             return;
           } else {
@@ -71,6 +140,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const status = await authApiClient.checkAuthStatus();
       setAuthEnabled(status.auth_enabled);
       setRegistrationEnabled(status.registration_enabled);
+      setSSOEnabled(status.sso_enabled || false);
+
+      // Get SSO providers if enabled
+      if (status.sso_enabled) {
+        try {
+          const ssoStatus = await authApiClient.getSSOStatus();
+          setSSOProviders(ssoStatus.providers);
+        } catch (error) {
+          console.warn("Failed to get SSO status:", error);
+          setSSOProviders([]);
+        }
+      }
 
       if (!status.auth_enabled) {
         console.log("Authentication is disabled");
@@ -99,7 +180,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsInitialized(true);
       console.log("Authentication initialization complete");
     }
-  }, []);
+  }, [checkForSSOToken]);
 
   // Initialize on mount
   useEffect(() => {
@@ -118,6 +199,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       setAuthEnabled(status.auth_enabled);
       setRegistrationEnabled(status.registration_enabled);
+      setSSOEnabled(status.sso_enabled || false);
+      
+      // Get SSO providers if enabled
+      if (status.sso_enabled) {
+        try {
+          const ssoStatus = await authApiClient.getSSOStatus();
+          setSSOProviders(ssoStatus.providers);
+        } catch (error) {
+          console.warn("Failed to get SSO status:", error);
+          setSSOProviders([]);
+        }
+      }
       
       if (status.auth_enabled && status.authenticated && status.user) {
         setUser(status.user);
@@ -205,6 +298,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return authApiClient.isRemembered();
   }, []);
 
+  // SSO methods
+  const getSSOStatus = useCallback(async (): Promise<SSOStatusResponse> => {
+    return await authApiClient.getSSOStatus();
+  }, []);
+
+  const handleSSOCallback = useCallback(async (token: string): Promise<void> => {
+    try {
+      const user = await authApiClient.handleSSOToken(token, true);
+      setUser(user);
+    } catch (error) {
+      console.error("SSO callback failed:", error);
+      throw error;
+    }
+  }, []);
+
   // Listen for storage changes (logout in another tab)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
@@ -227,12 +335,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isLoading,
     authEnabled,
     registrationEnabled,
+    ssoEnabled,
+    ssoProviders,
     
     // Actions
     login,
     register,
     logout,
     checkAuthStatus,
+    
+    // SSO Actions
+    getSSOStatus,
+    handleSSOCallback,
     
     // Token management
     getToken,

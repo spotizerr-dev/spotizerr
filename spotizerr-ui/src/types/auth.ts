@@ -5,6 +5,8 @@ export interface User {
   role: "user" | "admin";
   created_at: string;
   last_login?: string;
+  sso_provider?: string;
+  is_sso_user?: boolean;
 }
 
 export interface LoginRequest {
@@ -29,6 +31,20 @@ export interface AuthStatusResponse {
   authenticated: boolean;
   user?: User;
   registration_enabled: boolean;
+  sso_enabled?: boolean;
+  sso_providers?: string[];
+}
+
+export interface SSOProvider {
+  name: string;
+  display_name: string;
+  enabled: boolean;
+  login_url?: string;
+}
+
+export interface SSOStatusResponse {
+  sso_enabled: boolean;
+  providers: SSOProvider[];
 }
 
 export interface CreateUserRequest {
@@ -45,12 +61,18 @@ export interface AuthContextType {
   isLoading: boolean;
   authEnabled: boolean;
   registrationEnabled: boolean;
+  ssoEnabled: boolean;
+  ssoProviders: SSOProvider[];
   
   // Actions
   login: (credentials: LoginRequest, rememberMe?: boolean) => Promise<void>;
   register: (userData: RegisterRequest) => Promise<void>;
   logout: () => void;
   checkAuthStatus: () => Promise<void>;
+  
+  // SSO Actions
+  getSSOStatus: () => Promise<SSOStatusResponse>;
+  handleSSOCallback: (token: string) => Promise<void>;
   
   // Token management
   getToken: () => string | null;

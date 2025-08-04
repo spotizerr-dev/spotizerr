@@ -43,6 +43,8 @@ class UserResponse(BaseModel):
     role: str
     created_at: str
     last_login: Optional[str]
+    sso_provider: Optional[str] = None
+    is_sso_user: bool = False
 
 
 class LoginResponse(BaseModel):
@@ -60,6 +62,8 @@ class AuthStatusResponse(BaseModel):
     authenticated: bool = False
     user: Optional[UserResponse] = None
     registration_enabled: bool = True
+    sso_enabled: bool = False
+    sso_providers: List[str] = []
 
 
 # Dependency to get current user
@@ -112,11 +116,27 @@ async def require_admin(current_user: User = Depends(require_auth)) -> User:
 @router.get("/status", response_model=AuthStatusResponse)
 async def auth_status(current_user: Optional[User] = Depends(get_current_user)):
     """Get authentication status"""
+    # Check if SSO is enabled and get available providers
+    sso_enabled = False
+    sso_providers = []
+    
+    try:
+        from . import sso
+        sso_enabled = sso.SSO_ENABLED and AUTH_ENABLED
+        if sso.google_sso:
+            sso_providers.append("google")
+        if sso.github_sso:
+            sso_providers.append("github")
+    except ImportError:
+        pass  # SSO module not available
+    
     return AuthStatusResponse(
         auth_enabled=AUTH_ENABLED,
         authenticated=current_user is not None,
         user=UserResponse(**current_user.to_public_dict()) if current_user else None,
-        registration_enabled=AUTH_ENABLED and not DISABLE_REGISTRATION
+        registration_enabled=AUTH_ENABLED and not DISABLE_REGISTRATION,
+        sso_enabled=sso_enabled,
+        sso_providers=sso_providers
     )
 
 
@@ -301,4 +321,7 @@ async def change_password(
     user_manager.save_users(users)
     
     logger.info(f"Password changed for user: {current_user.username}")
-    return MessageResponse(message="Password changed successfully") 
+    return MessageResponse(message="Password changed successfully")
+
+
+# Note: SSO routes are included in the main app, not here to avoid circular imports 

@@ -1,280 +1,168 @@
-# Spotizerr Authentication System
+# Authentication Setup
 
-## Overview
-Spotizerr now includes a modern, JWT-based authentication system that can be enabled or disabled via environment variables. The system supports username/password authentication with **session persistence across browser refreshes** and is designed to be easily extensible for future SSO implementations.
+This document outlines how to configure authentication for Spotizerr, including both traditional username/password authentication and SSO (Single Sign-On) with Google and GitHub.
 
-## Features
-- 🔐 **JWT-based authentication** with secure token management
-- 👤 **User registration and login** with password validation
-- 🛡️ **Role-based access control** (user/admin roles)
-- 🎛️ **Environment-controlled** - easily enable/disable
-- 📱 **Responsive UI** - beautiful login screen with dark mode support
-- 🔄 **Auto token refresh** and secure logout
-- 💾 **Session persistence** - remember me across browser restarts
-- 🔗 **Multi-tab sync** - logout/login reflected across all tabs
-- 🎨 **Seamless integration** - existing app works unchanged when auth is disabled
+## Environment Variables
 
-## Session Management
+### Basic Authentication
+- `ENABLE_AUTH`: Enable/disable authentication system (default: false)
+- `DISABLE_REGISTRATION`: Disable public registration (default: false)
+- `JWT_SECRET`: Secret key for JWT token signing (required in production)
+- `JWT_ALGORITHM`: JWT algorithm (default: HS256)
+- `JWT_EXPIRATION_HOURS`: JWT token expiration time in hours (default: 24)
+- `DEFAULT_ADMIN_USERNAME`: Default admin username (default: admin)
+- `DEFAULT_ADMIN_PASSWORD`: Default admin password (default: admin123)
 
-### Remember Me Functionality
-The authentication system supports two types of sessions:
+### SSO Configuration
+- `SSO_ENABLED`: Enable/disable SSO functionality (default: true)
+- `SSO_BASE_REDIRECT_URI`: Base redirect URI for SSO callbacks (default: http://localhost:8000/api/auth/sso/callback)
+- `FRONTEND_URL`: Frontend URL for post-authentication redirects (default: http://localhost:3000)
 
-1. **Persistent Sessions** (Remember Me = ON)
-   - Token stored in `localStorage`
-   - Session survives browser restarts
-   - Green indicator in user menu
-   - Default option for better UX
+#### Google SSO
+- `GOOGLE_CLIENT_ID`: Google OAuth2 client ID
+- `GOOGLE_CLIENT_SECRET`: Google OAuth2 client secret
 
-2. **Session-Only** (Remember Me = OFF)
-   - Token stored in `sessionStorage`
-   - Session cleared when browser closes
-   - Orange indicator in user menu
-   - More secure for shared computers
+#### GitHub SSO  
+- `GITHUB_CLIENT_ID`: GitHub OAuth2 client ID
+- `GITHUB_CLIENT_SECRET`: GitHub OAuth2 client secret
 
-### Session Restoration
-- **Automatic**: Sessions are automatically restored on page refresh
-- **Validation**: Stored tokens are validated against the server
-- **Graceful Degradation**: Invalid/expired tokens are cleared automatically
-- **Visual Feedback**: Loading screen shows "Restoring your session..."
+## Setup Instructions
 
-### Multi-Tab Synchronization
-- Login/logout actions are synced across all open tabs
-- Uses browser `storage` events for real-time synchronization
-- Prevents inconsistent authentication states
+### 1. Traditional Authentication Only
 
-## Environment Configuration
+1. Set environment variables:
+```bash
+ENABLE_AUTH=true
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=your-secure-password
+```
 
-### Enable Authentication
-Set the following environment variables:
+2. Start the application - a default admin user will be created automatically.
+
+### 2. Google SSO Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable Google+ API
+4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client IDs"
+5. Configure OAuth consent screen with your application details
+6. Set authorized redirect URIs:
+   - `http://localhost:8000/api/auth/sso/callback/google` (development)
+   - `https://yourdomain.com/api/auth/sso/callback/google` (production)
+7. Copy Client ID and Client Secret to environment variables:
 
 ```bash
-# Enable the authentication system
-ENABLE_AUTH=true
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
 
-# JWT Configuration
+### 3. GitHub SSO Setup
+
+1. Go to GitHub Settings → Developer settings → OAuth Apps
+2. Click "New OAuth App"
+3. Fill in application details:
+   - Application name: Your app name
+   - Homepage URL: Your app URL
+   - Authorization callback URL: 
+     - `http://localhost:8000/api/auth/sso/callback/github` (development)
+     - `https://yourdomain.com/api/auth/sso/callback/github` (production)
+4. Copy Client ID and Client Secret to environment variables:
+
+```bash
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+```
+
+### 4. Complete Environment Configuration
+
+Create a `.env` file with all required variables:
+
+```bash
+# Basic Authentication
+ENABLE_AUTH=true
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 JWT_EXPIRATION_HOURS=24
-
-# Default Admin User (created automatically if no users exist)
 DEFAULT_ADMIN_USERNAME=admin
-DEFAULT_ADMIN_PASSWORD=admin123
+DEFAULT_ADMIN_PASSWORD=your-secure-password
+
+# SSO Configuration
+SSO_ENABLED=true
+SSO_BASE_REDIRECT_URI=http://localhost:8000/api/auth/sso/callback
+FRONTEND_URL=http://localhost:3000
+
+# Google SSO (optional)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# GitHub SSO (optional)
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
 ```
-
-### Disable Authentication
-```bash
-# Disable authentication (default)
-ENABLE_AUTH=false
-```
-
-## Backend Dependencies
-The following Python packages are required:
-```
-bcrypt==4.2.1
-PyJWT==2.10.1
-python-multipart==0.0.17
-```
-
-## Usage
-
-### When Authentication is Enabled
-1. **First Time Setup**: When enabled with no existing users, a default admin account is created
-   - Username: `admin` (or `DEFAULT_ADMIN_USERNAME`)
-   - Password: `admin123` (or `DEFAULT_ADMIN_PASSWORD`)
-   - **⚠️ Change the default password immediately!**
-
-2. **User Registration**: First user to register becomes an admin, subsequent users are regular users
-
-3. **Login Screen**: Users see a beautiful login/registration form
-   - Username/password login
-   - **Remember Me checkbox** with session type indicator
-   - Optional email field for registration
-   - Form validation and error handling
-   - Responsive design with dark mode support
-
-4. **Session Indicators**: Users can see their session type
-   - **Green dot**: Persistent session (survives browser restart)
-   - **Orange dot**: Session-only (cleared when browser closes)
-   - Tooltip and dropdown show session details
-
-5. **User Management**: Admin users can:
-   - View all users
-   - Delete users (except themselves)
-   - Change user roles
-   - Access config and credential management
-
-### When Authentication is Disabled
-- **No Changes**: App works exactly as before
-- **Full Access**: All features available without login
-- **No UI Changes**: No login screens or user menus
-
-## Session Storage Details
-
-### Token Storage Locations
-```javascript
-// Persistent sessions (Remember Me = true)
-localStorage.setItem("auth_token", token);
-localStorage.setItem("auth_remember", "true");
-
-// Session-only (Remember Me = false)
-sessionStorage.setItem("auth_token", token);
-// No localStorage entries
-```
-
-### Session Validation Flow
-1. **App Start**: Check for stored token in localStorage → sessionStorage
-2. **Token Found**: Validate token with `/api/auth/status`
-3. **Valid Token**: Restore user session automatically
-4. **Invalid Token**: Clear storage, show login screen
-5. **No Token**: Show login screen (if auth enabled)
 
 ## API Endpoints
 
-### Authentication Endpoints
-```
-GET  /api/auth/status          # Check auth status & validate token
-POST /api/auth/login           # User login
-POST /api/auth/register        # User registration
-POST /api/auth/logout          # User logout
-GET  /api/auth/profile         # Get current user profile
-PUT  /api/auth/profile/password # Change password
-```
+### Authentication Status
+- `GET /api/auth/status` - Get authentication status and available SSO providers
 
-### Admin Endpoints
-```
-GET    /api/auth/users           # List all users
-DELETE /api/auth/users/{username} # Delete user
-PUT    /api/auth/users/{username}/role # Update user role
-```
+### Traditional Authentication
+- `POST /api/auth/login` - Login with username/password
+- `POST /api/auth/register` - Register new user (if enabled)
+- `POST /api/auth/logout` - Logout current user
 
-## Protected Routes
-When authentication is enabled, the following routes require authentication:
-- `/api/config/*` - Configuration management
-- `/api/credentials/*` - Credential management
-- `/api/auth/users/*` - User management (admin only)
-- `/api/auth/profile/*` - Profile management
+### SSO Authentication
+- `GET /api/auth/sso/status` - Get SSO status and providers
+- `GET /api/auth/sso/login/google` - Initiate Google SSO login
+- `GET /api/auth/sso/login/github` - Initiate GitHub SSO login
+- `GET /api/auth/sso/callback/google` - Google SSO callback (automatic)
+- `GET /api/auth/sso/callback/github` - GitHub SSO callback (automatic)
+- `POST /api/auth/sso/unlink/{provider}` - Unlink SSO provider from account
 
-## Frontend Components
+### User Management (Admin only)
+- `GET /api/auth/users` - List all users
+- `POST /api/auth/users/create` - Create new user
+- `DELETE /api/auth/users/{username}` - Delete user
+- `PUT /api/auth/users/{username}/role` - Update user role
 
-### LoginScreen
-- Modern, responsive login/registration form
-- **Remember Me checkbox** with visual indicators
-- Client-side validation
-- Smooth animations and transitions
-- Dark mode support
+## Security Considerations
 
-### UserMenu
-- Shows current user info
-- **Session type indicator** (persistent/session-only)
-- Dropdown with logout option
-- Role indicator (admin/user)
+1. **HTTPS in Production**: Always use HTTPS in production and set `allow_insecure_http=False`
+2. **Secure JWT Secret**: Use a strong, randomly generated JWT secret
+3. **Environment Variables**: Never commit sensitive credentials to version control
+4. **CORS Configuration**: Configure CORS appropriately for your frontend domain
+5. **Cookie Security**: Ensure secure cookie settings in production
 
-### ProtectedRoute
-- Wraps the entire app
-- **Enhanced loading screen** with session restoration feedback
-- Shows login screen when needed
-- Handles loading states
+## User Types
 
-## Security Features
-- **Password Hashing**: bcrypt with salt
-- **JWT Tokens**: Secure, expiring tokens
-- **Token Validation**: Server-side validation on every request
-- **Secure Storage**: Appropriate storage selection (localStorage vs sessionStorage)
-- **HTTPS Ready**: Designed for production use
-- **Input Validation**: Client and server-side validation
-- **CSRF Protection**: Token-based authentication
-- **Role-based Access**: Admin vs user permissions
-- **Session Isolation**: Clear separation between persistent and session-only
+The system supports two types of users:
 
-## Development
+1. **Traditional Users**: Created via username/password registration or admin creation
+2. **SSO Users**: Created automatically when users authenticate via Google or GitHub
 
-### Adding New Protected Routes
-```python
-# Backend - Add to AuthMiddleware protected_paths
-protected_paths = [
-    "/api/config",
-    "/api/auth/users",
-    "/api/your-new-route",  # Add here
-]
-```
-
-### Frontend Authentication Hooks
-```typescript
-import { useAuth } from "@/contexts/auth-context";
-
-function MyComponent() {
-  const { user, isAuthenticated, logout, isRemembered } = useAuth();
-  
-  if (!isAuthenticated) {
-    return <div>Please log in</div>;
-  }
-  
-  const sessionType = isRemembered() ? "persistent" : "session-only";
-  
-  return (
-    <div>
-      Hello, {user.username}! ({sessionType} session)
-    </div>
-  );
-}
-```
-
-### Session Management
-```typescript
-// Login with remember preference
-await login({ username, password }, rememberMe);
-
-// Check session type
-const isPersistent = isRemembered();
-
-// Manual session restoration
-await checkAuthStatus();
-```
-
-## Future Extensibility
-The authentication system is designed to easily support:
-- **OAuth/SSO Integration** (Google, GitHub, etc.)
-- **LDAP/Active Directory**
-- **Multi-factor Authentication**
-- **API Key Authentication**
-- **Refresh Token Rotation**
-- **Session Management Dashboard**
-
-## Production Deployment
-1. **Change Default Credentials**: Update `DEFAULT_ADMIN_PASSWORD`
-2. **Secure JWT Secret**: Use a strong, unique `JWT_SECRET`
-3. **HTTPS**: Enable HTTPS in production
-4. **Environment Variables**: Use secure environment variable management
-5. **Database**: Consider migrating to a proper database for user storage
-6. **Session Security**: Consider shorter token expiration for high-security environments
+SSO users:
+- Have `sso_provider` and `sso_id` fields populated
+- Cannot use password-based authentication
+- Can be unlinked from SSO providers by admins
+- Get `user` role by default (first user gets `admin` role)
 
 ## Troubleshooting
 
 ### Common Issues
-1. **"Authentication Required" errors**: Check `ENABLE_AUTH` setting
-2. **Token expired**: Tokens expire after `JWT_EXPIRATION_HOURS`
-3. **Session not persisting**: Check if "Remember Me" was enabled during login
-4. **Can't access admin features**: Ensure user has admin role
-5. **Login screen not showing**: Check if auth is enabled and user is logged out
-6. **Session lost on refresh**: Check browser storage and token validation
 
-### Debug Authentication
-```bash
-# Check auth status
-curl -X GET http://localhost:7171/api/auth/status
+1. **SSO Login Fails**
+   - Check OAuth app configuration in Google/GitHub
+   - Verify redirect URIs match exactly
+   - Ensure client ID and secret are correct
 
-# Test login
-curl -X POST http://localhost:7171/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+2. **CORS Errors**
+   - Configure CORS middleware to allow your frontend domain
+   - Check if frontend and backend URLs match configuration
 
-# Check browser storage
-localStorage.getItem("auth_token")
-localStorage.getItem("auth_remember")
-sessionStorage.getItem("auth_token")
-```
+3. **JWT Token Issues**
+   - Verify JWT_SECRET is set and consistent
+   - Check token expiration time
+   - Ensure clock synchronization between services
 
-### Session Debugging
-- **Browser Console**: Authentication system logs session restoration details
-- **Network Tab**: Check `/api/auth/status` calls during app initialization
-- **Application Tab**: Inspect localStorage/sessionStorage for token presence
-- **Session Indicators**: Green/orange dots show current session type 
+4. **SSO Module Not Available**
+   - Install fastapi-sso: `pip install fastapi-sso==0.18.0`
+   - Restart the application after installation 

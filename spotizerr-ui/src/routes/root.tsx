@@ -6,7 +6,7 @@ import { Queue } from "@/components/Queue";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { useContext, useState, useEffect } from "react";
-import { getTheme, toggleTheme } from "@/main";
+import { getTheme, toggleTheme } from "@/lib/theme";
 
 function ThemeToggle() {
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'system'>('system');

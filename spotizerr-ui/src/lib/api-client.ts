@@ -7,7 +7,8 @@ import type {
   LoginResponse, 
   AuthStatusResponse, 
   User,
-  CreateUserRequest
+  CreateUserRequest,
+  SSOStatusResponse
 } from "@/types/auth";
 
 class AuthApiClient {
@@ -298,6 +299,35 @@ class AuthApiClient {
     });
     
     return response.data;
+  }
+
+  // SSO methods
+  async getSSOStatus(): Promise<SSOStatusResponse> {
+    const response = await this.apiClient.get<SSOStatusResponse>("/auth/sso/status");
+    return response.data;
+  }
+
+  // Handle SSO callback token (when user returns from OAuth provider)
+  async handleSSOToken(token: string, rememberMe: boolean = true): Promise<User> {
+    // Set the token and get user info
+    this.setToken(token, rememberMe);
+    
+    // Validate the token and get user data
+    const tokenValidation = await this.validateStoredToken();
+    if (tokenValidation.isValid && tokenValidation.userData?.user) {
+      toast.success("SSO Login Successful", {
+        description: `Welcome, ${tokenValidation.userData.user.username}!`,
+      });
+      return tokenValidation.userData.user;
+    } else {
+      this.clearToken();
+      throw new Error("Invalid SSO token");
+    }
+  }
+
+  // Get SSO login URLs (these redirect to OAuth provider)
+  getSSOLoginUrl(provider: string): string {
+    return `/api/auth/sso/login/${provider}`;
   }
 
   // Expose the underlying axios instance for other API calls
