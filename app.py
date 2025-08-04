@@ -15,15 +15,16 @@ import socket
 from urllib.parse import urlparse
 
 # Import route routers (to be created)
-from routes.search import router as search_router
-from routes.credentials import router as credentials_router
-from routes.album import router as album_router
-from routes.track import router as track_router
-from routes.playlist import router as playlist_router
-from routes.prgs import router as prgs_router
-from routes.config import router as config_router
-from routes.artist import router as artist_router
-from routes.history import router as history_router
+from routes.auth.credentials import router as credentials_router
+from routes.content.artist import router as artist_router
+from routes.content.album import router as album_router
+from routes.content.track import router as track_router
+from routes.content.playlist import router as playlist_router
+from routes.core.search import router as search_router
+from routes.core.history import router as history_router
+from routes.system.progress import router as prgs_router
+from routes.system.config import router as config_router
+
 
 # Import Celery configuration and manager
 from routes.utils.celery_manager import celery_manager
