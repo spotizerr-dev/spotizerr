@@ -148,12 +148,8 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
       <div className="w-full max-w-md">
         {/* Logo/Brand */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
-              <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M18 3a1 1 0 00-1.196-.98l-10 2A1 1 0 006 5v9.114A4.369 4.369 0 005 14c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V7.82l8-1.6v5.894A4.369 4.369 0 0015 12c-1.657 0-3 .895-3 2s1.343 2 3 2 3-.895 3-2V3z" />
-              </svg>
-            </div>
+          <div className="flex items-center justify-center mb-6">
+            <img src="/spotizerr.svg" alt="Spotizerr" className="h-16 w-auto logo" />
           </div>
           <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">
             Spotizerr
@@ -310,7 +306,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 </div>
                 <div className="relative flex justify-center text-sm">
                   <span className="bg-surface dark:bg-surface-dark px-2 text-content-secondary dark:text-content-secondary-dark">
-                    Or continue with
+                    Or
                   </span>
                 </div>
               </div>
@@ -373,7 +369,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
         {/* Footer */}
         <div className="mt-8 text-center">
           <p className="text-sm text-content-muted dark:text-content-muted-dark">
-            Secure music download platform
+            The music downloader
           </p>
         </div>
       </div>

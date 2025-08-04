@@ -13,7 +13,7 @@ from fastapi_sso.sso.github import GithubSSO
 from fastapi_sso.sso.base import OpenID
 from pydantic import BaseModel
 
-from . import user_manager, token_manager, User, AUTH_ENABLED
+from . import user_manager, token_manager, User, AUTH_ENABLED, DISABLE_REGISTRATION
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ class SSOProvider(BaseModel):
 class SSOStatusResponse(BaseModel):
     sso_enabled: bool
     providers: list[SSOProvider]
+    registration_enabled: bool = True
 
 
 def create_or_update_sso_user(openid: OpenID, provider: str) -> User:
@@ -85,13 +86,20 @@ def create_or_update_sso_user(openid: OpenID, provider: str) -> User:
             break
     
     if existing_user:
-        # Update last login
+        # Update last login for existing user (always allowed)
         users[existing_user.username]["last_login"] = datetime.utcnow().isoformat()
         users[existing_user.username]["sso_provider"] = provider
         users[existing_user.username]["sso_id"] = openid.id
         user_manager.save_users(users)
         return existing_user
     else:
+        # Check if registration is disabled before creating new user
+        if DISABLE_REGISTRATION:
+            raise HTTPException(
+                status_code=403, 
+                detail="Registration is disabled. Contact an administrator to create an account."
+            )
+        
         # Create new user
         # Ensure username is unique
         counter = 1
@@ -141,7 +149,8 @@ async def sso_status():
     
     return SSOStatusResponse(
         sso_enabled=SSO_ENABLED and AUTH_ENABLED,
-        providers=providers
+        providers=providers,
+        registration_enabled=not DISABLE_REGISTRATION
     )
 
 
@@ -206,9 +215,17 @@ async def google_callback(request: Request):
         
         return response
         
+    except HTTPException as e:
+        # Handle specific HTTP exceptions (like registration disabled)
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        error_msg = e.detail if hasattr(e, 'detail') else "Authentication failed"
+        logger.warning(f"Google SSO callback error: {error_msg}")
+        return RedirectResponse(url=f"{frontend_url}?error={error_msg}")
+        
     except Exception as e:
         logger.error(f"Google SSO callback error: {e}")
-        raise HTTPException(status_code=400, detail="Authentication failed")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        return RedirectResponse(url=f"{frontend_url}?error=Authentication failed")
 
 
 @router.get("/sso/callback/github")
@@ -246,9 +263,17 @@ async def github_callback(request: Request):
         
         return response
         
+    except HTTPException as e:
+        # Handle specific HTTP exceptions (like registration disabled)
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        error_msg = e.detail if hasattr(e, 'detail') else "Authentication failed"
+        logger.warning(f"GitHub SSO callback error: {error_msg}")
+        return RedirectResponse(url=f"{frontend_url}?error={error_msg}")
+        
     except Exception as e:
         logger.error(f"GitHub SSO callback error: {e}")
-        raise HTTPException(status_code=400, detail="Authentication failed")
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        return RedirectResponse(url=f"{frontend_url}?error=Authentication failed")
 
 
 @router.post("/sso/unlink/{provider}", response_model=MessageResponse)

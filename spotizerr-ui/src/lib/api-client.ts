@@ -216,7 +216,7 @@ class AuthApiClient {
     this.setToken(loginData.access_token, rememberMe);
     
     toast.success("Login Successful", {
-      description: `Welcome back, ${loginData.user.username}!`,
+      description: `Test  , ${loginData.user.username}!`,
     });
     
     return loginData;
