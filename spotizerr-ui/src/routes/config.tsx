@@ -6,12 +6,56 @@ import { AccountsTab } from "../components/config/AccountsTab";
 import { WatchTab } from "../components/config/WatchTab";
 import { ServerTab } from "../components/config/ServerTab";
 import { useSettings } from "../contexts/settings-context";
+import { useAuth } from "../contexts/auth-context";
+import { LoginScreen } from "../components/auth/LoginScreen";
 
 const ConfigComponent = () => {
   const [activeTab, setActiveTab] = useState("general");
+  const { user, isAuthenticated, authEnabled, isLoading: authLoading } = useAuth();
 
   // Get settings from the context instead of fetching here
   const { settings: config, isLoading } = useSettings();
+
+  // Show loading while authentication is being checked
+  if (authLoading) {
+    return (
+      <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+        <div className="text-center py-12">
+          <p className="text-content-muted dark:text-content-muted-dark">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login screen if authentication is enabled but user is not authenticated
+  if (authEnabled && !isAuthenticated) {
+    return (
+      <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+        <div className="space-y-4 text-center mb-6">
+          <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">Configuration</h1>
+          <p className="text-content-muted dark:text-content-muted-dark">Please log in to access configuration settings.</p>
+        </div>
+        <LoginScreen />
+      </div>
+    );
+  }
+
+  // Check for admin role if authentication is enabled
+  if (authEnabled && isAuthenticated && user?.role !== "admin") {
+    return (
+      <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+        <div className="text-center py-12">
+          <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark mb-4">Access Denied</h1>
+          <p className="text-content-muted dark:text-content-muted-dark">
+            You need administrator privileges to access configuration settings.
+          </p>
+          <p className="text-sm text-content-muted dark:text-content-muted-dark mt-2">
+            Current role: <span className="font-medium">{user?.role || 'user'}</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const renderTabContent = () => {
     if (isLoading) return <div className="text-center py-12"><p className="text-content-muted dark:text-content-muted-dark">Loading configuration...</p></div>;
@@ -40,6 +84,11 @@ const ConfigComponent = () => {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">Configuration</h1>
         <p className="text-content-muted dark:text-content-muted-dark">Manage application settings and services.</p>
+        {authEnabled && user && (
+          <p className="text-sm text-content-muted dark:text-content-muted-dark">
+            Logged in as: <span className="font-medium">{user.username}</span> ({user.role})
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-10">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -21,7 +21,7 @@ interface AccountFormData {
 
 // --- API Functions ---
 const fetchCredentials = async (service: Service): Promise<Credential[]> => {
-  const { data } = await apiClient.get<string[]>(`/credentials/${service}`);
+  const { data } = await authApiClient.client.get<string[]>(`/credentials/${service}`);
   return data.map((name) => ({ name }));
 };
 
@@ -31,12 +31,12 @@ const addCredential = async ({ service, data }: { service: Service; data: Accoun
       ? { blob_content: data.authBlob, region: data.accountRegion }
       : { arl: data.arl, region: data.accountRegion };
 
-  const { data: response } = await apiClient.post(`/credentials/${service}/${data.accountName}`, payload);
+  const { data: response } = await authApiClient.client.post(`/credentials/${service}/${data.accountName}`, payload);
   return response;
 };
 
 const deleteCredential = async ({ service, name }: { service: Service; name: string }) => {
-  const { data: response } = await apiClient.delete(`/credentials/${service}/${name}`);
+  const { data: response } = await authApiClient.client.delete(`/credentials/${service}/${name}`);
   return response;
 };
 

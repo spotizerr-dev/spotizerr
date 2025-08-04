@@ -157,6 +157,7 @@ export interface QueueContextType {
   clearCompleted: () => void;
   cancelAll: () => void;
   loadMoreTasks: () => void;
+  restartSSE: () => void; // For auth state changes
 }
 
 export const QueueContext = createContext<QueueContextType | undefined>(undefined);

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 import logging
 import time
@@ -14,6 +14,9 @@ from routes.utils.celery_tasks import (
     cancel_task,
     ProgressState,
 )
+
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, get_current_user_from_state, User
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -575,7 +578,7 @@ async def get_paginated_tasks(page=1, limit=20, active_only=False, request: Requ
 # Otherwise "updates" gets matched as a {task_id} parameter!
 
 @router.get("/list")
-async def list_tasks(request: Request):
+async def list_tasks(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve a paginated list of all tasks in the system.
     Returns a detailed list of task objects including status and metadata.
@@ -704,7 +707,7 @@ async def list_tasks(request: Request):
 
 
 @router.get("/updates")
-async def get_task_updates(request: Request):
+async def get_task_updates(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve only tasks that have been updated since the specified timestamp.
     This endpoint is optimized for polling to reduce unnecessary data transfer.
@@ -791,7 +794,7 @@ async def get_task_updates(request: Request):
         # Sort by priority (active first, then by creation time)
         all_returned_tasks.sort(key=lambda x: (
             0 if x.get("task_id") in [t["task_id"] for t in active_tasks] else 1,
-            -x.get("created_at", 0)
+            -(x.get("created_at") or 0)
         ))
 
         response = {
@@ -823,7 +826,7 @@ async def get_task_updates(request: Request):
 
 
 @router.post("/cancel/all")
-async def cancel_all_tasks():
+async def cancel_all_tasks(current_user: User = Depends(require_auth_from_state)):
     """
     Cancel all active (running or queued) tasks.
     """
@@ -856,7 +859,7 @@ async def cancel_all_tasks():
 
 
 @router.post("/cancel/{task_id}")
-async def cancel_task_endpoint(task_id: str):
+async def cancel_task_endpoint(task_id: str, current_user: User = Depends(require_auth_from_state)):
     """
     Cancel a running or queued task.
 
@@ -888,7 +891,7 @@ async def cancel_task_endpoint(task_id: str):
 
 
 @router.delete("/delete/{task_id}")
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, current_user: User = Depends(require_auth_from_state)):
     """
     Delete a task's information and history.
 
@@ -907,10 +910,11 @@ async def delete_task(task_id: str):
 
 
 @router.get("/stream")
-async def stream_task_updates(request: Request):
+async def stream_task_updates(request: Request, current_user: User = Depends(get_current_user_from_state)):
     """
     Stream real-time task updates via Server-Sent Events (SSE).
     Now uses event-driven architecture for true real-time updates.
+    Uses optional authentication to avoid breaking SSE connections.
     
     Query parameters:
         active_only (bool): If true, only stream active tasks (downloading, processing, etc.)
@@ -1101,7 +1105,7 @@ async def generate_task_update_event(since_timestamp: float, active_only: bool, 
         # Sort by priority (active first, then by creation time)
         all_returned_tasks.sort(key=lambda x: (
             0 if x.get("task_id") in [t["task_id"] for t in active_tasks] else 1,
-            -x.get("created_at", 0)
+            -(x.get("created_at") or 0)
         ))
 
         initial_data = {
@@ -1127,7 +1131,7 @@ async def generate_task_update_event(since_timestamp: float, active_only: bool, 
 # IMPORTANT: This parameterized route MUST come AFTER all specific routes
 # Otherwise FastAPI will match specific routes like "/updates" as task_id parameters
 @router.get("/{task_id}")
-async def get_task_details(task_id: str, request: Request):
+async def get_task_details(task_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Return a JSON object with the resource type, its name (title),
     the last progress update, and, if available, the original request parameters.

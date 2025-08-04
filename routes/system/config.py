@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 import json
 import logging
@@ -17,6 +17,9 @@ from routes.utils.watch.manager import (
     DEFAULT_WATCH_CONFIG,
     CONFIG_FILE_PATH as WATCH_CONFIG_FILE_PATH,
 )
+
+# Import authentication dependencies
+from routes.auth.middleware import require_admin_from_state, User
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +209,7 @@ def save_watch_config_http(watch_config_data):  # Renamed
 
 
 @router.get("/config")
-async def handle_config():
+async def handle_config(current_user: User = Depends(require_admin_from_state)):
     """Handles GET requests for the main configuration."""
     try:
         config = get_config()
@@ -221,7 +224,7 @@ async def handle_config():
 
 @router.post("/config")
 @router.put("/config")
-async def update_config(request: Request):
+async def update_config(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Handles POST/PUT requests to update the main configuration."""
     try:
         new_config = await request.json()
@@ -271,7 +274,7 @@ async def update_config(request: Request):
 
 
 @router.get("/config/check")
-async def check_config_changes():
+async def check_config_changes(current_user: User = Depends(require_admin_from_state)):
     # This endpoint seems more related to dynamically checking if config changed
     # on disk, which might not be necessary if settings are applied on restart
     # or by a dedicated manager. For now, just return current config.
@@ -287,7 +290,7 @@ async def check_config_changes():
 
 
 @router.post("/config/validate")
-async def validate_config_endpoint(request: Request):
+async def validate_config_endpoint(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Validate configuration without saving it."""
     try:
         config_data = await request.json()
@@ -313,7 +316,7 @@ async def validate_config_endpoint(request: Request):
 
 
 @router.post("/config/watch/validate")
-async def validate_watch_config_endpoint(request: Request):
+async def validate_watch_config_endpoint(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Validate watch configuration without saving it."""
     try:
         watch_data = await request.json()
@@ -339,7 +342,7 @@ async def validate_watch_config_endpoint(request: Request):
 
 
 @router.get("/config/watch")
-async def handle_watch_config():
+async def handle_watch_config(current_user: User = Depends(require_admin_from_state)):
     """Handles GET requests for the watch configuration."""
     try:
         watch_config = get_watch_config_http()
@@ -354,7 +357,7 @@ async def handle_watch_config():
 
 @router.post("/config/watch")
 @router.put("/config/watch")
-async def update_watch_config(request: Request):
+async def update_watch_config(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Handles POST/PUT requests to update the watch configuration."""
     try:
         new_watch_config = await request.json()

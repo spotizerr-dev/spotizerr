@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 # Import route routers (to be created)
 from routes.auth.credentials import router as credentials_router
+from routes.auth.auth import router as auth_router
 from routes.content.artist import router as artist_router
 from routes.content.album import router as album_router
 from routes.content.track import router as track_router
@@ -29,6 +30,10 @@ from routes.system.config import router as config_router
 # Import Celery configuration and manager
 from routes.utils.celery_manager import celery_manager
 from routes.utils.celery_config import REDIS_URL
+
+# Import authentication system
+from routes.auth import AUTH_ENABLED
+from routes.auth.middleware import AuthMiddleware
 
 # Import and initialize routes (this will start the watch manager)
 import routes
@@ -175,7 +180,15 @@ def create_app():
         allow_headers=["*"],
     )
 
+    # Add authentication middleware (only if auth is enabled)
+    if AUTH_ENABLED:
+        app.add_middleware(AuthMiddleware)
+        logging.info("Authentication system enabled")
+    else:
+        logging.info("Authentication system disabled")
+
     # Register routers with URL prefixes
+    app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
     app.include_router(config_router, prefix="/api", tags=["config"])
     app.include_router(search_router, prefix="/api", tags=["search"])
     app.include_router(credentials_router, prefix="/api/credentials", tags=["credentials"])

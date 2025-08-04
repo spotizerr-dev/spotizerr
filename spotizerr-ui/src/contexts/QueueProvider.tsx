@@ -1,5 +1,5 @@
 import { useState, useCallback, type ReactNode, useEffect, useRef, useMemo } from "react";
-import apiClient from "../lib/api-client";
+import { authApiClient } from "../lib/api-client";
 import {
     QueueContext,
     type QueueItem,
@@ -138,7 +138,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (sseConnection.current) return;
 
     try {
-      const eventSource = new EventSource("/api/prgs/stream");
+      // Check if we have a valid token before connecting
+      const token = authApiClient.getToken();
+      if (!token) {
+        console.warn("SSE: No auth token available, skipping connection");
+        return;
+      }
+
+      // Include token as query parameter for SSE authentication
+      const sseUrl = `/api/prgs/stream?token=${encodeURIComponent(token)}`;
+      const eventSource = new EventSource(sseUrl);
         sseConnection.current = eventSource;
 
         eventSource.onopen = () => {
@@ -347,6 +356,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
 
       eventSource.onerror = (error) => {
           console.error("SSE connection error:", error);
+          
+          // Check if this might be an auth error by testing if we still have a valid token
+          const token = authApiClient.getToken();
+          if (!token) {
+            console.warn("SSE: Connection error and no auth token - stopping reconnection attempts");
+            eventSource.close();
+            sseConnection.current = null;
+            stopHealthCheck();
+            return;
+          }
+          
           eventSource.close();
           sseConnection.current = null;
           
@@ -392,7 +412,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setIsLoadingMore(true);
     try {
       const nextPage = currentPage + 1;
-      const response = await apiClient.get(`/prgs/list?page=${nextPage}&limit=${pageSize}`);
+      const response = await authApiClient.client.get(`/prgs/list?page=${nextPage}&limit=${pageSize}`);
       const { tasks: newTasks, pagination } = response.data;
       
       if (newTasks.length > 0) {
@@ -421,11 +441,14 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
   }, [hasMore, isLoadingMore, currentPage, createQueueItemFromTask, itemExists]);
 
+  // Note: SSE connection state is managed through the initialize effect and restartSSE method
+  // The auth context should call restartSSE() when login/logout occurs
+
   // Initialize queue on mount
   useEffect(() => {
     const initializeQueue = async () => {
       try {
-        const response = await apiClient.get(`/prgs/list?page=1&limit=${pageSize}`);
+        const response = await authApiClient.client.get(`/prgs/list?page=1&limit=${pageSize}`);
         const { tasks, pagination, total_tasks, task_counts } = response.data;
         
         const queueItems = tasks
@@ -491,7 +514,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       setItems(prev => [newItem, ...prev]);
 
       try {
-      const response = await apiClient.get(`/${item.type}/download/${item.spotifyId}`);
+      const response = await authApiClient.client.get(`/${item.type}/download/${item.spotifyId}`);
         const { task_id: taskId } = response.data;
 
         setItems(prev =>
@@ -517,7 +540,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   const removeItem = useCallback((id: string) => {
     const item = items.find(i => i.id === id);
     if (item?.taskId) {
-      apiClient.delete(`/prgs/delete/${item.taskId}`).catch(console.error);
+      authApiClient.client.delete(`/prgs/delete/${item.taskId}`).catch(console.error);
     }
     setItems(prev => prev.filter(i => i.id !== id));
     
@@ -537,7 +560,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (!item?.taskId) return;
 
       try {
-        await apiClient.post(`/prgs/cancel/${item.taskId}`);
+        await authApiClient.client.post(`/prgs/cancel/${item.taskId}`);
         
         setItems(prev =>
           prev.map(i =>
@@ -584,7 +607,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      await apiClient.post("/prgs/cancel/all");
+      await authApiClient.client.post("/prgs/cancel/all");
       
       activeItems.forEach(item => {
         setItems(prev =>
@@ -638,6 +661,13 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     setIsVisible(prev => !prev);
   }, []);
 
+  // Method to restart SSE (useful when auth state changes)
+  const restartSSE = useCallback(() => {
+    console.log("SSE: Restarting connection due to auth state change");
+    disconnectSSE();
+    setTimeout(() => connectSSE(), 1000); // Small delay to ensure clean disconnect
+  }, [connectSSE, disconnectSSE]);
+
   const value = {
     items,
     isVisible,
@@ -652,6 +682,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     clearCompleted,
     cancelAll,
     loadMoreTasks,
+    restartSSE, // Expose for auth state changes
   };
 
   return <QueueContext.Provider value={value}>{children}</QueueContext.Provider>;

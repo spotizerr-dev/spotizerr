@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useForm, type SubmitHandler, Controller } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -34,22 +34,22 @@ interface Credential {
 
 // --- API Functions ---
 const fetchWatchConfig = async (): Promise<WatchSettings> => {
-  const { data } = await apiClient.get("/config/watch");
+  const { data } = await authApiClient.client.get("/config/watch");
   return data;
 };
 
 const fetchDownloadConfig = async (): Promise<DownloadSettings> => {
-  const { data } = await apiClient.get("/config");
+  const { data } = await authApiClient.client.get("/config");
   return data;
 };
 
 const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credential[]> => {
-  const { data } = await apiClient.get<string[]>(`/credentials/${service}`);
+  const { data } = await authApiClient.client.get<string[]>(`/credentials/${service}`);
   return data.map((name) => ({ name }));
 };
 
 const saveWatchConfig = async (data: Partial<WatchSettings>) => {
-  const { data: response } = await apiClient.post("/config/watch", data);
+  const { data: response } = await authApiClient.client.post("/config/watch", data);
   return response;
 };
 

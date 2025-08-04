@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -18,10 +18,10 @@ interface WebhookSettings {
 
 // --- API Functions ---
 const fetchSpotifyApiConfig = async (): Promise<SpotifyApiSettings> => {
-  const { data } = await apiClient.get("/credentials/spotify_api_config");
+  const { data } = await authApiClient.client.get("/credentials/spotify_api_config");
   return data;
 };
-const saveSpotifyApiConfig = (data: SpotifyApiSettings) => apiClient.put("/credentials/spotify_api_config", data);
+const saveSpotifyApiConfig = (data: SpotifyApiSettings) => authApiClient.client.put("/credentials/spotify_api_config", data);
 
 const fetchWebhookConfig = async (): Promise<WebhookSettings> => {
   // Mock a response since backend endpoint doesn't exist

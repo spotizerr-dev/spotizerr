@@ -3,6 +3,8 @@ import { QueueProvider } from "@/contexts/QueueProvider";
 import { SettingsProvider } from "@/contexts/SettingsProvider";
 import { QueueContext } from "@/contexts/queue-context";
 import { Queue } from "@/components/Queue";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { UserMenu } from "@/components/auth/UserMenu";
 import { useContext, useState, useEffect } from "react";
 import { getTheme, toggleTheme } from "@/main";
 
@@ -77,7 +79,7 @@ function ThemeToggle() {
 }
 
 function AppLayout() {
-  const { toggleVisibility, activeCount, totalTasks } = useContext(QueueContext) || {};
+  const { toggleVisibility, totalTasks } = useContext(QueueContext) || {};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-surface-secondary via-surface-muted to-surface-accent dark:from-surface-dark dark:via-surface-muted-dark dark:to-surface-secondary-dark text-content-primary dark:text-content-primary-dark flex flex-col">
@@ -89,6 +91,7 @@ function AppLayout() {
           </Link>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <UserMenu />
             <Link to="/watchlist" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/binoculars.svg" alt="Watchlist" className="w-6 h-6 logo" />
             </Link>
@@ -124,6 +127,7 @@ function AppLayout() {
               <img src="/spotizerr.svg" alt="Spotizerr" className="h-8 w-auto logo" />
             </Link>
             <ThemeToggle />
+            <UserMenu />
           </div>
         </header>
 
@@ -170,7 +174,9 @@ export default function Root() {
   return (
     <SettingsProvider>
       <QueueProvider>
-        <AppLayout />
+        <ProtectedRoute>
+          <AppLayout />
+        </ProtectedRoute>
       </QueueProvider>
     </SettingsProvider>
   );

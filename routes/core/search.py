@@ -1,15 +1,18 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 import json
 import traceback
 import logging
 from routes.utils.search import search
+
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/search")
-async def handle_search(request: Request):
+async def handle_search(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Handle search requests for tracks, albums, playlists, or artists.
     Frontend compatible endpoint that returns results in { items: [] } format.

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 import json
 import logging
 from routes.utils.credentials import (
@@ -13,6 +13,9 @@ from routes.utils.credentials import (
     save_global_spotify_api_creds,
 )
 
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, require_admin_from_state, User
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -22,7 +25,7 @@ init_credentials_db()
 
 @router.get("/spotify_api_config")
 @router.put("/spotify_api_config")
-async def handle_spotify_api_config(request: Request):
+async def handle_spotify_api_config(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Handles GET and PUT requests for the global Spotify API client_id and client_secret."""
     try:
         if request.method == "GET":
@@ -70,7 +73,7 @@ async def handle_spotify_api_config(request: Request):
 
 
 @router.get("/{service}")
-async def handle_list_credentials(service: str):
+async def handle_list_credentials(service: str, current_user: User = Depends(require_admin_from_state)):
     try:
         if service not in ["spotify", "deezer"]:
             raise HTTPException(
@@ -86,7 +89,7 @@ async def handle_list_credentials(service: str):
 
 
 @router.get("/{service}/{name}")
-async def handle_get_credential(service: str, name: str):
+async def handle_get_credential(service: str, name: str, current_user: User = Depends(require_admin_from_state)):
     try:
         if service not in ["spotify", "deezer"]:
             raise HTTPException(
@@ -110,7 +113,7 @@ async def handle_get_credential(service: str, name: str):
 
 
 @router.post("/{service}/{name}")
-async def handle_create_credential(service: str, name: str, request: Request):
+async def handle_create_credential(service: str, name: str, request: Request, current_user: User = Depends(require_admin_from_state)):
     try:
         if service not in ["spotify", "deezer"]:
             raise HTTPException(
@@ -144,7 +147,7 @@ async def handle_create_credential(service: str, name: str, request: Request):
 
 
 @router.put("/{service}/{name}")
-async def handle_update_credential(service: str, name: str, request: Request):
+async def handle_update_credential(service: str, name: str, request: Request, current_user: User = Depends(require_admin_from_state)):
     try:
         if service not in ["spotify", "deezer"]:
             raise HTTPException(
@@ -177,7 +180,7 @@ async def handle_update_credential(service: str, name: str, request: Request):
 
 
 @router.delete("/{service}/{name}")
-async def handle_delete_credential(service: str, name: str):
+async def handle_delete_credential(service: str, name: str, current_user: User = Depends(require_admin_from_state)):
     try:
         if service not in ["spotify", "deezer"]:
             raise HTTPException(
@@ -208,7 +211,7 @@ async def handle_delete_credential(service: str, name: str):
 
 
 @router.get("/all/{service}")
-async def handle_all_credentials(service: str):
+async def handle_all_credentials(service: str, current_user: User = Depends(require_admin_from_state)):
     """Lists all credentials for a given service. For Spotify, API keys are global and not listed per account."""
     try:
         if service not in ["spotify", "deezer"]:
@@ -250,7 +253,7 @@ async def handle_all_credentials(service: str):
 
 
 @router.get("/markets")
-async def handle_markets():
+async def handle_markets(current_user: User = Depends(require_admin_from_state)):
     """
     Returns a list of unique market regions for Deezer and Spotify accounts.
     """

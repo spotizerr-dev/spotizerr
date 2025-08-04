@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 import json
 import traceback
 import logging
 from routes.utils.history_manager import history_manager
+
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, User
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +14,7 @@ router = APIRouter()
 
 
 @router.get("/")
-async def get_history(request: Request):
+async def get_history(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve download history with optional filtering and pagination.
     
@@ -88,7 +91,7 @@ async def get_history(request: Request):
 
 
 @router.get("/{task_id}")
-async def get_download_by_task_id(task_id: str):
+async def get_download_by_task_id(task_id: str, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve specific download history by task ID.
     
@@ -118,7 +121,7 @@ async def get_download_by_task_id(task_id: str):
 
 
 @router.get("/{task_id}/children")
-async def get_download_children(task_id: str):
+async def get_download_children(task_id: str, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve children tracks for an album or playlist download.
     
@@ -168,7 +171,7 @@ async def get_download_children(task_id: str):
 
 
 @router.get("/stats")
-async def get_download_stats():
+async def get_download_stats(current_user: User = Depends(require_auth_from_state)):
     """
     Get download statistics and summary information.
     """
@@ -189,7 +192,7 @@ async def get_download_stats():
 
 
 @router.get("/search")
-async def search_history(request: Request):
+async def search_history(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Search download history by title or artist.
     
@@ -236,7 +239,7 @@ async def search_history(request: Request):
 
 
 @router.get("/recent")
-async def get_recent_downloads(request: Request):
+async def get_recent_downloads(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Get most recent downloads.
     
@@ -273,7 +276,7 @@ async def get_recent_downloads(request: Request):
 
 
 @router.get("/failed")
-async def get_failed_downloads(request: Request):
+async def get_failed_downloads(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Get failed downloads.
     
@@ -310,7 +313,7 @@ async def get_failed_downloads(request: Request):
 
 
 @router.post("/cleanup")
-async def cleanup_old_history(request: Request):
+async def cleanup_old_history(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Clean up old download history.
     

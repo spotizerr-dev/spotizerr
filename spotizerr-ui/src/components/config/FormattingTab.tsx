@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -23,7 +23,7 @@ interface FormattingTabProps {
 
 // --- API Functions ---
 const saveFormattingConfig = async (data: Partial<FormattingSettings>) => {
-  const { data: response } = await apiClient.post("/config", data);
+  const { data: response } = await authApiClient.client.post("/config", data);
   return response;
 };
 

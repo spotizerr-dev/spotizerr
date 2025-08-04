@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 import json
 import traceback
@@ -9,6 +9,9 @@ from routes.utils.celery_tasks import store_task_info, store_task_status, Progre
 from routes.utils.get_info import get_spotify_info
 from routes.utils.errors import DuplicateDownloadError
 
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, User
+
 router = APIRouter()
 
 
@@ -18,7 +21,7 @@ def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
 
 
 @router.get("/download/{track_id}")
-async def handle_download(track_id: str, request: Request):
+async def handle_download(track_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     # Retrieve essential parameters from the request.
     # name = request.args.get('name') # Removed
     # artist = request.args.get('artist') # Removed
@@ -122,7 +125,7 @@ async def handle_download(track_id: str, request: Request):
 
 
 @router.get("/download/cancel")
-async def cancel_download(request: Request):
+async def cancel_download(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Cancel a running download process by its task id.
     """
@@ -141,7 +144,7 @@ async def cancel_download(request: Request):
 
 
 @router.get("/info")
-async def get_track_info(request: Request):
+async def get_track_info(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve Spotify track metadata given a Spotify track ID.
     Expects a query parameter 'id' that contains the Spotify track ID.

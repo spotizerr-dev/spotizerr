@@ -81,14 +81,34 @@ export const Artist = () => {
     addItem({ spotifyId: album.id, type: "album", name: album.name });
   };
 
-  const handleDownloadArtist = () => {
+  const handleDownloadArtist = async () => {
     if (!artistId || !artist) return;
-    toast.info(`Adding ${artist.name} to queue...`);
-    addItem({
-      spotifyId: artistId,
-      type: "artist",
-      name: artist.name,
-    });
+    
+    try {
+      toast.info(`Downloading ${artist.name} discography...`);
+      
+      // Call the artist download endpoint which returns album task IDs
+      const response = await apiClient.get(`/artist/download/${artistId}`);
+      
+      if (response.data.queued_albums?.length > 0) {
+        toast.success(
+          `${artist.name} discography queued successfully!`,
+          {
+            description: `${response.data.queued_albums.length} albums added to queue.`,
+          }
+        );
+      } else {
+        toast.info("No new albums to download for this artist.");
+      }
+    } catch (error: any) {
+      console.error("Artist download failed:", error);
+      toast.error(
+        "Failed to download artist",
+        {
+          description: error.response?.data?.error || "An unexpected error occurred.",
+        }
+      );
+    }
   };
 
   const handleToggleWatch = async () => {

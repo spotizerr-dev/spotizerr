@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 import json
 import traceback
@@ -30,6 +30,9 @@ from routes.utils.watch.manager import (
 )  # For manual trigger & config
 from routes.utils.errors import DuplicateDownloadError
 
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, require_admin_from_state, User
+
 logger = logging.getLogger(__name__)  # Added logger initialization
 router = APIRouter()
 
@@ -40,7 +43,7 @@ def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
 
 
 @router.get("/download/{playlist_id}")
-async def handle_download(playlist_id: str, request: Request):
+async def handle_download(playlist_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     # Retrieve essential parameters from the request.
     # name = request.args.get('name') # Removed
     # artist = request.args.get('artist') # Removed
@@ -142,7 +145,7 @@ async def handle_download(playlist_id: str, request: Request):
 
 
 @router.get("/download/cancel")
-async def cancel_download(request: Request):
+async def cancel_download(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Cancel a running playlist download process by its task id.
     """
@@ -161,7 +164,7 @@ async def cancel_download(request: Request):
 
 
 @router.get("/info")
-async def get_playlist_info(request: Request):
+async def get_playlist_info(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve Spotify playlist metadata given a Spotify playlist ID.
     Expects a query parameter 'id' that contains the Spotify playlist ID.
@@ -208,7 +211,7 @@ async def get_playlist_info(request: Request):
 
 
 @router.get("/metadata")
-async def get_playlist_metadata(request: Request):
+async def get_playlist_metadata(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve only Spotify playlist metadata (no tracks) to avoid rate limiting.
     Expects a query parameter 'id' that contains the Spotify playlist ID.
@@ -235,7 +238,7 @@ async def get_playlist_metadata(request: Request):
 
 
 @router.get("/tracks")
-async def get_playlist_tracks(request: Request):
+async def get_playlist_tracks(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve playlist tracks with pagination support for progressive loading.
     Expects query parameters: 'id' (playlist ID), 'limit' (optional), 'offset' (optional).
@@ -264,7 +267,7 @@ async def get_playlist_tracks(request: Request):
 
 
 @router.put("/watch/{playlist_spotify_id}")
-async def add_to_watchlist(playlist_spotify_id: str):
+async def add_to_watchlist(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Adds a playlist to the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -317,7 +320,7 @@ async def add_to_watchlist(playlist_spotify_id: str):
 
 
 @router.get("/watch/{playlist_spotify_id}/status")
-async def get_playlist_watch_status(playlist_spotify_id: str):
+async def get_playlist_watch_status(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Checks if a specific playlist is being watched."""
     logger.info(f"Checking watch status for playlist {playlist_spotify_id}.")
     try:
@@ -337,7 +340,7 @@ async def get_playlist_watch_status(playlist_spotify_id: str):
 
 
 @router.delete("/watch/{playlist_spotify_id}")
-async def remove_from_watchlist(playlist_spotify_id: str):
+async def remove_from_watchlist(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Removes a playlist from the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -370,7 +373,7 @@ async def remove_from_watchlist(playlist_spotify_id: str):
 
 
 @router.post("/watch/{playlist_spotify_id}/tracks")
-async def mark_tracks_as_known(playlist_spotify_id: str, request: Request):
+async def mark_tracks_as_known(playlist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """Fetches details for given track IDs and adds/updates them in the playlist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -443,7 +446,7 @@ async def mark_tracks_as_known(playlist_spotify_id: str, request: Request):
 
 
 @router.delete("/watch/{playlist_spotify_id}/tracks")
-async def mark_tracks_as_missing_locally(playlist_spotify_id: str, request: Request):
+async def mark_tracks_as_missing_locally(playlist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """Removes specified tracks from the playlist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -495,7 +498,7 @@ async def mark_tracks_as_missing_locally(playlist_spotify_id: str, request: Requ
 
 
 @router.get("/watch/list")
-async def list_watched_playlists_endpoint():
+async def list_watched_playlists_endpoint(current_user: User = Depends(require_auth_from_state)):
     """Lists all playlists currently in the watchlist."""
     try:
         playlists = get_watched_playlists()
@@ -506,7 +509,7 @@ async def list_watched_playlists_endpoint():
 
 
 @router.post("/watch/trigger_check")
-async def trigger_playlist_check_endpoint():
+async def trigger_playlist_check_endpoint(current_user: User = Depends(require_auth_from_state)):
     """Manually triggers the playlist checking mechanism for all watched playlists."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -536,7 +539,7 @@ async def trigger_playlist_check_endpoint():
 
 
 @router.post("/watch/trigger_check/{playlist_spotify_id}")
-async def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str):
+async def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Manually triggers the playlist checking mechanism for a specific playlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):

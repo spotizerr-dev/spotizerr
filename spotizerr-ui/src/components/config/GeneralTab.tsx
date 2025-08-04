@@ -1,5 +1,5 @@
 import { useForm, type SubmitHandler } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "../../contexts/settings-context";
@@ -23,12 +23,12 @@ interface GeneralTabProps {
 
 // --- API Functions ---
 const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credential[]> => {
-  const { data } = await apiClient.get<string[]>(`/credentials/${service}`);
+  const { data } = await authApiClient.client.get<string[]>(`/credentials/${service}`);
   return data.map((name) => ({ name }));
 };
 
 const saveGeneralConfig = async (data: Partial<GeneralSettings>) => {
-  const { data: response } = await apiClient.post("/config", data);
+  const { data: response } = await authApiClient.client.post("/config", data);
   return response;
 };
 

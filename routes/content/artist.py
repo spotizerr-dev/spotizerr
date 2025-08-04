@@ -2,7 +2,7 @@
 Artist endpoint router.
 """
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 import json
 import traceback
@@ -23,6 +23,9 @@ from routes.utils.watch.db import (
 from routes.utils.watch.manager import check_watched_artists, get_watch_config
 from routes.utils.get_info import get_spotify_info
 
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, require_admin_from_state, User
+
 router = APIRouter()
 
 # Existing log_json can be used, or a logger instance.
@@ -40,7 +43,7 @@ def log_json(message_dict):
 
 
 @router.get("/download/{artist_id}")
-async def handle_artist_download(artist_id: str, request: Request):
+async def handle_artist_download(artist_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Enqueues album download tasks for the given artist.
     Expected query parameters:
@@ -108,7 +111,7 @@ async def cancel_artist_download():
 
 
 @router.get("/info")
-async def get_artist_info(request: Request):
+async def get_artist_info(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieves Spotify artist metadata given a Spotify artist ID.
     Expects a query parameter 'id' with the Spotify artist ID.
@@ -166,7 +169,7 @@ async def get_artist_info(request: Request):
 
 
 @router.put("/watch/{artist_spotify_id}")
-async def add_artist_to_watchlist(artist_spotify_id: str):
+async def add_artist_to_watchlist(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Adds an artist to the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -233,7 +236,7 @@ async def add_artist_to_watchlist(artist_spotify_id: str):
 
 
 @router.get("/watch/{artist_spotify_id}/status")
-async def get_artist_watch_status(artist_spotify_id: str):
+async def get_artist_watch_status(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Checks if a specific artist is being watched."""
     logger.info(f"Checking watch status for artist {artist_spotify_id}.")
     try:
@@ -251,7 +254,7 @@ async def get_artist_watch_status(artist_spotify_id: str):
 
 
 @router.delete("/watch/{artist_spotify_id}")
-async def remove_artist_from_watchlist(artist_spotify_id: str):
+async def remove_artist_from_watchlist(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Removes an artist from the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -282,7 +285,7 @@ async def remove_artist_from_watchlist(artist_spotify_id: str):
 
 
 @router.get("/watch/list")
-async def list_watched_artists_endpoint():
+async def list_watched_artists_endpoint(current_user: User = Depends(require_auth_from_state)):
     """Lists all artists currently in the watchlist."""
     try:
         artists = get_watched_artists()
@@ -293,7 +296,7 @@ async def list_watched_artists_endpoint():
 
 
 @router.post("/watch/trigger_check")
-async def trigger_artist_check_endpoint():
+async def trigger_artist_check_endpoint(current_user: User = Depends(require_auth_from_state)):
     """Manually triggers the artist checking mechanism for all watched artists."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -322,7 +325,7 @@ async def trigger_artist_check_endpoint():
 
 
 @router.post("/watch/trigger_check/{artist_spotify_id}")
-async def trigger_specific_artist_check_endpoint(artist_spotify_id: str):
+async def trigger_specific_artist_check_endpoint(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Manually triggers the artist checking mechanism for a specific artist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -375,7 +378,7 @@ async def trigger_specific_artist_check_endpoint(artist_spotify_id: str):
 
 
 @router.post("/watch/{artist_spotify_id}/albums")
-async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Request):
+async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """Fetches details for given album IDs and adds/updates them in the artist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -447,7 +450,7 @@ async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Reque
 
 
 @router.delete("/watch/{artist_spotify_id}/albums")
-async def mark_albums_as_missing_locally_for_artist(artist_spotify_id: str, request: Request):
+async def mark_albums_as_missing_locally_for_artist(artist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """Removes specified albums from the artist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):

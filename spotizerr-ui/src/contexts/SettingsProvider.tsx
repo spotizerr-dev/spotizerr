@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import apiClient from "../lib/api-client";
+import { authApiClient } from "../lib/api-client";
 import { SettingsContext, type AppSettings } from "./settings-context";
 import { useQuery } from "@tanstack/react-query";
 
@@ -100,20 +100,30 @@ interface FetchedCamelCaseSettings {
 }
 
 const fetchSettings = async (): Promise<FlatAppSettings> => {
-  const [{ data: generalConfig }, { data: watchConfig }] = await Promise.all([
-    apiClient.get("/config"),
-    apiClient.get("/config/watch"),
-  ]);
+  try {
+    const [{ data: generalConfig }, { data: watchConfig }] = await Promise.all([
+      authApiClient.client.get("/config"),
+      authApiClient.client.get("/config/watch"),
+    ]);
 
-  const combinedConfig = {
-    ...generalConfig,
-    watch: watchConfig,
-  };
+    const combinedConfig = {
+      ...generalConfig,
+      watch: watchConfig,
+    };
 
-  // Transform the keys before returning the data
-  const camelData = convertKeysToCamelCase(combinedConfig) as FetchedCamelCaseSettings;
+    // Transform the keys before returning the data
+    const camelData = convertKeysToCamelCase(combinedConfig) as FetchedCamelCaseSettings;
 
-  return camelData as unknown as FlatAppSettings;
+    return camelData as unknown as FlatAppSettings;
+  } catch (error: any) {
+    // If we get authentication errors, return default settings
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.log("Authentication required for config access, using default settings");
+      return defaultSettings;
+    }
+    // Re-throw other errors for React Query to handle
+    throw error;
+  }
 };
 
 export function SettingsProvider({ children }: { children: ReactNode }) {

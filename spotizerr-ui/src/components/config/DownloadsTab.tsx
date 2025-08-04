@@ -1,5 +1,5 @@
 import { useForm, type SubmitHandler } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -50,17 +50,17 @@ const CONVERSION_FORMATS: Record<string, string[]> = {
 
 // --- API Functions ---
 const saveDownloadConfig = async (data: Partial<DownloadSettings>) => {
-  const { data: response } = await apiClient.post("/config", data);
+  const { data: response } = await authApiClient.client.post("/config", data);
   return response;
 };
 
 const fetchWatchConfig = async (): Promise<WatchConfig> => {
-  const { data } = await apiClient.get("/config/watch");
+  const { data } = await authApiClient.client.get("/config/watch");
   return data;
 };
 
 const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credential[]> => {
-  const { data } = await apiClient.get<string[]>(`/credentials/${service}`);
+  const { data } = await authApiClient.client.get<string[]>(`/credentials/${service}`);
   return data.map((name) => ({ name }));
 };
 
