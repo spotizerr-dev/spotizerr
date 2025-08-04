@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { authApiClient } from "@/lib/api-client";
-import { toast } from "sonner";
 
 export function ProfileTab() {
   const { user } = useAuth();

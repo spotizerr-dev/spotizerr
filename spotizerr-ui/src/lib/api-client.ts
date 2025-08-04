@@ -8,8 +8,7 @@ import type {
   AuthStatusResponse, 
   User,
   CreateUserRequest,
-  SSOStatusResponse,
-  AdminPasswordResetRequest
+  SSOStatusResponse
 } from "@/types/auth";
 
 class AuthApiClient {

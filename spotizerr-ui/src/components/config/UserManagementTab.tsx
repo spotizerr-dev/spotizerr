@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { authApiClient } from "@/lib/api-client";
 import { toast } from "sonner";
-import type { User, CreateUserRequest, AdminPasswordResetRequest } from "@/types/auth";
+import type { User, CreateUserRequest } from "@/types/auth";
 
 export function UserManagementTab() {
   const { user: currentUser } = useAuth();
