@@ -17,6 +17,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authEnabled, setAuthEnabled] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   
   // Guard to prevent multiple simultaneous initializations
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (tokenValidation.isValid && tokenValidation.userData) {
           // Token is valid and we have user data
           setAuthEnabled(tokenValidation.userData.auth_enabled);
+          setRegistrationEnabled(tokenValidation.userData.registration_enabled);
           if (tokenValidation.userData.authenticated && tokenValidation.userData.user) {
             setUser(tokenValidation.userData.user);
             console.log("Session restored for user:", tokenValidation.userData.user.username);
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       console.log("Checking auth status...");
       const status = await authApiClient.checkAuthStatus();
       setAuthEnabled(status.auth_enabled);
+      setRegistrationEnabled(status.registration_enabled);
 
       if (!status.auth_enabled) {
         console.log("Authentication is disabled");
@@ -114,6 +117,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const status = await authApiClient.checkAuthStatus();
       
       setAuthEnabled(status.auth_enabled);
+      setRegistrationEnabled(status.registration_enabled);
       
       if (status.auth_enabled && status.authenticated && status.user) {
         setUser(status.user);
@@ -222,6 +226,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated,
     isLoading,
     authEnabled,
+    registrationEnabled,
     
     // Actions
     login,

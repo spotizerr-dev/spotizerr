@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 AUTH_ENABLED = os.getenv("ENABLE_AUTH", "false").lower() in ("true", "1", "yes", "on")
+DISABLE_REGISTRATION = os.getenv("DISABLE_REGISTRATION", "false").lower() in ("true", "1", "yes", "on")
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))

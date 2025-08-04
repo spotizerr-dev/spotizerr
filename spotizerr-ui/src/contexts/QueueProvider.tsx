@@ -11,8 +11,10 @@ import {
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 import type { CallbackObject } from "@/types/callbacks";
+import { useAuth } from "@/contexts/auth-context";
 
 export function QueueProvider({ children }: { children: ReactNode }) {
+  const { isLoading, authEnabled, isAuthenticated } = useAuth();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [totalTasks, setTotalTasks] = useState(0);
@@ -355,7 +357,12 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         };
 
       eventSource.onerror = (error) => {
-          console.error("SSE connection error:", error);
+          // Use appropriate logging level - first attempt failures are common and expected
+          if (reconnectAttempts.current === 0) {
+            console.log("SSE initial connection failed, will retry shortly...");
+          } else {
+            console.warn("SSE connection error:", error);
+          }
           
           // Check if this might be an auth error by testing if we still have a valid token
           const token = authApiClient.getToken();
@@ -372,12 +379,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           
           if (reconnectAttempts.current < maxReconnectAttempts) {
             reconnectAttempts.current++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current - 1), 30000);
+            // Use shorter delays for faster recovery, especially on first attempts
+            const baseDelay = reconnectAttempts.current === 1 ? 100 : 1000;
+            const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.current - 1), 15000);
             
-            console.log(`SSE: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+            if (reconnectAttempts.current === 1) {
+              console.log("SSE: Retrying connection shortly...");
+            } else {
+              console.log(`SSE: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+            }
             
             reconnectTimeoutRef.current = window.setTimeout(() => {
-              console.log("SSE: Attempting to reconnect...");
+              if (reconnectAttempts.current === 1) {
+                console.log("SSE: Attempting reconnection...");
+              } else {
+                console.log("SSE: Attempting to reconnect...");
+              }
               connectSSE();
             }, delay);
           } else {
@@ -387,8 +404,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         };
 
       } catch (error) {
-        console.error("Failed to create SSE connection:", error);
-      toast.error("Failed to establish connection");
+        console.log("Initial SSE connection setup failed, will retry:", error);
+        // Don't show toast for initial connection failures since they often recover quickly
+        if (reconnectAttempts.current > 0) {
+          toast.error("Failed to establish connection");
+        }
       }
   }, [createQueueItemFromTask, scheduleRemoval, startHealthCheck]);
 
@@ -444,8 +464,20 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   // Note: SSE connection state is managed through the initialize effect and restartSSE method
   // The auth context should call restartSSE() when login/logout occurs
 
-  // Initialize queue on mount
+  // Initialize queue on mount - but only after authentication is ready
   useEffect(() => {
+    // Don't initialize if still loading auth state
+    if (isLoading) {
+      console.log("QueueProvider: Waiting for auth initialization...");
+      return;
+    }
+
+    // Don't initialize if auth is enabled but user is not authenticated
+    if (authEnabled && !isAuthenticated) {
+      console.log("QueueProvider: Auth required but user not authenticated, skipping initialization");
+      return;
+    }
+
     const initializeQueue = async () => {
       try {
         const response = await authApiClient.client.get(`/prgs/list?page=1&limit=${pageSize}`);
@@ -469,13 +501,17 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           (total_tasks || 0);
         setTotalTasks(calculatedTotal);
         
-        connectSSE();
+        // Add a small delay before connecting SSE to give server time to be ready
+        setTimeout(() => {
+          connectSSE();
+        }, 1000);
       } catch (error) {
         console.error("Failed to initialize queue:", error);
         toast.error("Could not load queue");
       }
     };
 
+    console.log("QueueProvider: Auth ready, initializing queue...");
     initializeQueue();
     
     return () => {
@@ -484,7 +520,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       Object.values(removalTimers.current).forEach(clearTimeout);
       removalTimers.current = {};
     };
-  }, [connectSSE, disconnectSSE, createQueueItemFromTask, stopHealthCheck]);
+  }, [isLoading, authEnabled, isAuthenticated, connectSSE, disconnectSSE, createQueueItemFromTask, stopHealthCheck]);
 
   // Queue actions
   const addItem = useCallback(async (item: { name: string; type: DownloadType; spotifyId: string; artist?: string }) => {

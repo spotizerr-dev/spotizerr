@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GeneralTab } from "../components/config/GeneralTab";
 import { DownloadsTab } from "../components/config/DownloadsTab";
 import { FormattingTab } from "../components/config/FormattingTab";
 import { AccountsTab } from "../components/config/AccountsTab";
 import { WatchTab } from "../components/config/WatchTab";
 import { ServerTab } from "../components/config/ServerTab";
+import { UserManagementTab } from "../components/config/UserManagementTab";
 import { useSettings } from "../contexts/settings-context";
 import { useAuth } from "../contexts/auth-context";
 import { LoginScreen } from "../components/auth/LoginScreen";
@@ -15,6 +16,13 @@ const ConfigComponent = () => {
 
   // Get settings from the context instead of fetching here
   const { settings: config, isLoading } = useSettings();
+
+  // Reset to general tab if user is on user-management but auth is disabled
+  useEffect(() => {
+    if (!authEnabled && activeTab === "user-management") {
+      setActiveTab("general");
+    }
+  }, [authEnabled, activeTab]);
 
   // Show loading while authentication is being checked
   if (authLoading) {
@@ -58,6 +66,11 @@ const ConfigComponent = () => {
   }
 
   const renderTabContent = () => {
+    // User management doesn't need config data
+    if (activeTab === "user-management") {
+      return <UserManagementTab />;
+    }
+    
     if (isLoading) return <div className="text-center py-12"><p className="text-content-muted dark:text-content-muted-dark">Loading configuration...</p></div>;
     if (!config) return <div className="text-center py-12"><p className="text-error-text bg-error-muted p-4 rounded-lg">Error loading configuration.</p></div>;
 
@@ -130,6 +143,14 @@ const ConfigComponent = () => {
             >
               Server
             </button>
+            {authEnabled && (
+              <button
+                onClick={() => setActiveTab("user-management")}
+                className={`px-4 py-3 rounded-lg text-left transition-all whitespace-nowrap ${activeTab === "user-management" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark shadow-sm" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark hover:text-content-primary dark:hover:text-content-primary-dark"}`}
+              >
+                User Management
+              </button>
+            )}
           </nav>
         </aside>
 

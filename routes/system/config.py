@@ -3,8 +3,9 @@ from fastapi.responses import JSONResponse
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Optional, List
 from pathlib import Path
+from pydantic import BaseModel
 
 # Import the centralized config getters that handle file creation and defaults
 from routes.utils.celery_config import (
@@ -20,10 +21,34 @@ from routes.utils.watch.manager import (
 
 # Import authentication dependencies
 from routes.auth.middleware import require_admin_from_state, User
+from routes.auth import user_manager, AUTH_ENABLED, DISABLE_REGISTRATION
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# User management models for config interface
+class CreateUserConfigRequest(BaseModel):
+    """User creation request for config interface"""
+    username: str
+    password: str
+    email: Optional[str] = None
+    role: str = "user"
+
+
+class UserConfigResponse(BaseModel):
+    """User response for config interface"""
+    username: str
+    email: Optional[str]
+    role: str
+    created_at: str
+    last_login: Optional[str]
+
+
+class MessageConfigResponse(BaseModel):
+    """Message response for config interface"""
+    message: str
 
 
 # Flag for config change notifications
@@ -390,3 +415,131 @@ async def update_watch_config(request: Request, current_user: User = Depends(req
             status_code=500,
             detail={"error": "Failed to update watch configuration", "details": str(e)}
         )
+
+
+# User management endpoints for config interface
+@router.get("/auth/status")
+async def get_auth_status_config(current_user: User = Depends(require_admin_from_state)):
+    """Get authentication system status for config interface"""
+    return {
+        "auth_enabled": AUTH_ENABLED,
+        "registration_disabled": DISABLE_REGISTRATION,
+        "current_user": {
+            "username": current_user.username,
+            "role": current_user.role
+        } if current_user else None
+    }
+
+
+@router.get("/users", response_model=List[UserConfigResponse])
+async def list_users_config(current_user: User = Depends(require_admin_from_state)):
+    """List all users for config interface"""
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Authentication is disabled"}
+        )
+    
+    users = user_manager.list_users()
+    return [UserConfigResponse(**user.to_public_dict()) for user in users]
+
+
+@router.post("/users", response_model=MessageConfigResponse)
+async def create_user_config(request: CreateUserConfigRequest, current_user: User = Depends(require_admin_from_state)):
+    """Create a new user through config interface"""
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Authentication is disabled"}
+        )
+    
+    # Validate role
+    if request.role not in ["user", "admin"]:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Role must be 'user' or 'admin'"}
+        )
+    
+    success, message = user_manager.create_user(
+        username=request.username,
+        password=request.password,
+        email=request.email,
+        role=request.role
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": message}
+        )
+    
+    return MessageConfigResponse(message=message)
+
+
+@router.delete("/users/{username}", response_model=MessageConfigResponse)
+async def delete_user_config(username: str, current_user: User = Depends(require_admin_from_state)):
+    """Delete a user through config interface"""
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Authentication is disabled"}
+        )
+    
+    if username == current_user.username:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Cannot delete your own account"}
+        )
+    
+    success, message = user_manager.delete_user(username)
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": message}
+        )
+    
+    return MessageConfigResponse(message=message)
+
+
+@router.put("/users/{username}/role", response_model=MessageConfigResponse)
+async def update_user_role_config(
+    username: str, 
+    request: Request,
+    current_user: User = Depends(require_admin_from_state)
+):
+    """Update user role through config interface"""
+    if not AUTH_ENABLED:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Authentication is disabled"}
+        )
+    
+    try:
+        data = await request.json()
+        role = data.get("role")
+    except:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid request body"}
+        )
+    
+    if role not in ["user", "admin"]:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Role must be 'user' or 'admin'"}
+        )
+    
+    if username == current_user.username:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Cannot change your own role"}
+        )
+    
+    success, message = user_manager.update_user_role(username, role)
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": message}
+        )
+    
+    return MessageConfigResponse(message=message)

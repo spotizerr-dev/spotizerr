@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { authApiClient } from "../lib/api-client";
 import { SettingsContext, type AppSettings } from "./settings-context";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "./auth-context";
 
 // --- Case Conversion Utility ---
 // This is added here to simplify the fix and avoid module resolution issues.
@@ -127,19 +128,25 @@ const fetchSettings = async (): Promise<FlatAppSettings> => {
 };
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const { isLoading, authEnabled, isAuthenticated, user } = useAuth();
+  
+  // Only fetch settings when auth is ready and user is admin (or auth is disabled)
+  const shouldFetchSettings = !isLoading && (!authEnabled || (isAuthenticated && user?.role === "admin"));
+  
   const {
     data: settings,
-    isLoading,
+    isLoading: isSettingsLoading,
     isError,
   } = useQuery({
     queryKey: ["config"],
     queryFn: fetchSettings,
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: false,
+    enabled: shouldFetchSettings, // Only run query when auth is ready and user is admin
   });
 
   // Use default settings on error to prevent app crash
-  const value = { settings: isError ? defaultSettings : settings || null, isLoading };
+  const value = { settings: isError ? defaultSettings : settings || null, isLoading: isSettingsLoading };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

@@ -8,7 +8,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onSuccess }: LoginScreenProps) {
-  const { login, register, isLoading, authEnabled, isRemembered } = useAuth();
+  const { login, register, isLoading, authEnabled, registrationEnabled, isRemembered } = useAuth();
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [formData, setFormData] = useState({
     username: "",
@@ -27,6 +27,14 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
       rememberMe: isRemembered(),
     }));
   }, [isRemembered]);
+
+  // Force login mode if registration is disabled
+  useEffect(() => {
+    if (!registrationEnabled && !isLoginMode) {
+      setIsLoginMode(true);
+      setErrors({});
+    }
+  }, [registrationEnabled, isLoginMode]);
 
   // If auth is not enabled, don't show the login screen
   if (!authEnabled) {
@@ -114,6 +122,11 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
   };
 
   const toggleMode = () => {
+    // Don't allow toggling to registration if it's disabled
+    if (!registrationEnabled && isLoginMode) {
+      return;
+    }
+    
     setIsLoginMode(!isLoginMode);
     setErrors({});
     setFormData({
@@ -287,14 +300,20 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           <div className="mt-6 text-center">
             <p className="text-content-secondary dark:text-content-secondary-dark">
               {isLoginMode ? "Don't have an account? " : "Already have an account? "}
-              <button
-                type="button"
-                onClick={toggleMode}
-                disabled={isSubmitting || isLoading}
-                className="text-primary hover:text-primary-hover font-medium transition-colors disabled:opacity-50"
-              >
-                {isLoginMode ? "Create one" : "Sign in"}
-              </button>
+              {registrationEnabled ? (
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  disabled={isSubmitting || isLoading}
+                  className="text-primary hover:text-primary-hover font-medium transition-colors disabled:opacity-50"
+                >
+                  {isLoginMode ? "Create one" : "Sign in"}
+                </button>
+              ) : (
+                <span className="text-content-muted dark:text-content-muted-dark">
+                  Registration is currently disabled. Please contact the administrator.
+                </span>
+              )}
             </p>
           </div>
         </div>

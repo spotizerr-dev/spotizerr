@@ -6,7 +6,8 @@ import type {
   RegisterRequest, 
   LoginResponse, 
   AuthStatusResponse, 
-  User 
+  User,
+  CreateUserRequest
 } from "@/types/auth";
 
 class AuthApiClient {
@@ -284,6 +285,16 @@ class AuthApiClient {
     
     toast.success("Role Updated", {
       description: `User ${username} role updated to ${role}.`,
+    });
+    
+    return response.data;
+  }
+
+  async createUser(userData: CreateUserRequest): Promise<{ message: string }> {
+    const response = await this.apiClient.post("/auth/users/create", userData);
+    
+    toast.success("User Created", {
+      description: `User ${userData.username} created successfully.`,
     });
     
     return response.data;

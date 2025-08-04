@@ -28,6 +28,14 @@ export interface AuthStatusResponse {
   auth_enabled: boolean;
   authenticated: boolean;
   user?: User;
+  registration_enabled: boolean;
+}
+
+export interface CreateUserRequest {
+  username: string;
+  password: string;
+  email?: string;
+  role: "user" | "admin";
 }
 
 export interface AuthContextType {
@@ -36,6 +44,7 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   authEnabled: boolean;
+  registrationEnabled: boolean;
   
   // Actions
   login: (credentials: LoginRequest, rememberMe?: boolean) => Promise<void>;
