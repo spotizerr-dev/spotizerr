@@ -45,6 +45,7 @@ export interface SSOProvider {
 export interface SSOStatusResponse {
   sso_enabled: boolean;
   providers: SSOProvider[];
+  registration_enabled: boolean;
 }
 
 export interface CreateUserRequest {
@@ -52,6 +53,15 @@ export interface CreateUserRequest {
   password: string;
   email?: string;
   role: "user" | "admin";
+}
+
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface AdminPasswordResetRequest {
+  new_password: string;
 }
 
 export interface AuthContextType {

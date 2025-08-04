@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { authApiClient } from "@/lib/api-client";
 import { toast } from "sonner";
-import type { User, CreateUserRequest } from "@/types/auth";
+import type { User, CreateUserRequest, AdminPasswordResetRequest } from "@/types/auth";
 
 export function UserManagementTab() {
   const { user: currentUser } = useAuth();
@@ -17,6 +17,14 @@ export function UserManagementTab() {
     role: "user"
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Password reset state
+  const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
+  const [passwordResetUser, setPasswordResetUser] = useState<string>("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadUsers();
@@ -120,6 +128,59 @@ export function UserManagementTab() {
     setCreateForm(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  const openPasswordResetModal = (username: string) => {
+    setPasswordResetUser(username);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordErrors({});
+    setShowPasswordResetModal(true);
+  };
+
+  const closePasswordResetModal = () => {
+    setShowPasswordResetModal(false);
+    setPasswordResetUser("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordErrors({});
+  };
+
+  const validatePasswordReset = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!newPassword) {
+      errors.newPassword = "New password is required";
+    } else if (newPassword.length < 6) {
+      errors.newPassword = "Password must be at least 6 characters long";
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPassword = "Please confirm the password";
+    } else if (newPassword !== confirmPassword) {
+      errors.confirmPassword = "Passwords do not match";
+    }
+
+    setPasswordErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validatePasswordReset()) {
+      return;
+    }
+
+    try {
+      setIsResettingPassword(true);
+      await authApiClient.adminResetPassword(passwordResetUser, newPassword);
+      closePasswordResetModal();
+    } catch (error) {
+      console.error("Failed to reset password:", error);
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -281,6 +342,11 @@ export function UserManagementTab() {
                         {user.username === currentUser?.username && (
                           <span className="ml-2 text-xs text-primary">(You)</span>
                         )}
+                        {user.is_sso_user && (
+                          <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                            SSO ({user.sso_provider})
+                          </span>
+                        )}
                       </p>
                       {user.email && (
                         <p className="text-sm text-content-secondary dark:text-content-secondary-dark">
@@ -302,6 +368,17 @@ export function UserManagementTab() {
                     <option value="admin">Admin</option>
                   </select>
                   
+                  {/* Only show reset password for non-SSO users */}
+                  {!user.is_sso_user && (
+                    <button
+                      onClick={() => openPasswordResetModal(user.username)}
+                      disabled={user.username === currentUser?.username}
+                      className="px-3 py-1 text-sm text-content-primary dark:text-content-primary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Reset Password
+                    </button>
+                  )}
+                  
                   <button
                     onClick={() => handleDeleteUser(user.username)}
                     disabled={user.username === currentUser?.username}
@@ -315,6 +392,104 @@ export function UserManagementTab() {
           </div>
         )}
       </div>
+
+      {/* Password Reset Modal */}
+      {showPasswordResetModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-content-primary dark:text-content-primary-dark mb-4">
+                Reset Password for {passwordResetUser}
+              </h3>
+              <p className="text-sm text-content-secondary dark:text-content-secondary-dark mb-6">
+                Enter a new password for this user. The user will need to use this password to log in.
+              </p>
+              
+              <form onSubmit={handlePasswordReset} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-content-primary dark:text-content-primary-dark mb-2">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => {
+                      setNewPassword(e.target.value);
+                      if (passwordErrors.newPassword) {
+                        setPasswordErrors(prev => ({ ...prev, newPassword: "" }));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      passwordErrors.newPassword
+                        ? "border-error focus:border-error"
+                        : "border-input-border dark:border-input-border-dark focus:border-primary"
+                    } bg-input-background dark:bg-input-background-dark text-content-primary dark:text-content-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                    placeholder="Enter new password"
+                    disabled={isResettingPassword}
+                  />
+                  {passwordErrors.newPassword && (
+                    <p className="mt-1 text-sm text-error">{passwordErrors.newPassword}</p>
+                  )}
+                  <p className="text-xs text-content-muted dark:text-content-muted-dark mt-1">
+                    Must be at least 6 characters long
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-content-primary dark:text-content-primary-dark mb-2">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (passwordErrors.confirmPassword) {
+                        setPasswordErrors(prev => ({ ...prev, confirmPassword: "" }));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      passwordErrors.confirmPassword
+                        ? "border-error focus:border-error"
+                        : "border-input-border dark:border-input-border-dark focus:border-primary"
+                    } bg-input-background dark:bg-input-background-dark text-content-primary dark:text-content-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                    placeholder="Confirm new password"
+                    disabled={isResettingPassword}
+                  />
+                  {passwordErrors.confirmPassword && (
+                    <p className="mt-1 text-sm text-error">{passwordErrors.confirmPassword}</p>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={closePasswordResetModal}
+                    disabled={isResettingPassword}
+                    className="px-4 py-2 text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isResettingPassword}
+                    className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isResettingPassword ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Resetting...
+                      </>
+                    ) : (
+                      "Reset Password"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

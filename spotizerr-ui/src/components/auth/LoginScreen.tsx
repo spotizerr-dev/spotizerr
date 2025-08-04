@@ -19,6 +19,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [ssoRegistrationError, setSSORegistrationError] = useState(false);
 
   // Initialize remember me checkbox with stored preference
   useEffect(() => {
@@ -35,6 +36,32 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
       setErrors({});
     }
   }, [registrationEnabled, isLoginMode]);
+
+  // Handle URL parameters (e.g., SSO errors)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const errorParam = urlParams.get('error');
+
+    if (errorParam) {
+      const decodedError = decodeURIComponent(errorParam);
+      
+      // Check if this is specifically a registration disabled error from SSO
+      if (decodedError.includes("Registration is disabled")) {
+        setSSORegistrationError(true);
+      }
+      
+      // Show the error message
+      toast.error("Authentication Error", {
+        description: decodedError,
+        duration: 5000, // Show for 5 seconds
+      });
+      
+      // Clean up the URL parameter
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('error');
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, []); // Run only once on component mount
 
   // If auth is not enabled, don't show the login screen
   if (!authEnabled) {
@@ -81,6 +108,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     }
 
     setIsSubmitting(true);
+    setSSORegistrationError(false); // Clear SSO registration error when submitting
     
     try {
       if (isLoginMode) {
@@ -119,6 +147,10 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     if (typeof value === 'string' && errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
     }
+    // Clear SSO registration error when user starts interacting with the form
+    if (typeof value === 'string' && ssoRegistrationError) {
+      setSSORegistrationError(false);
+    }
   };
 
   const toggleMode = () => {
@@ -129,6 +161,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     
     setIsLoginMode(!isLoginMode);
     setErrors({});
+    setSSORegistrationError(false); // Clear SSO registration error when switching modes
     setFormData({
       username: "",
       password: "",
@@ -310,6 +343,15 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                   </span>
                 </div>
               </div>
+              
+              {/* Registration disabled notice for SSO */}
+              {ssoRegistrationError && (
+                <div className="mt-4 p-3 bg-surface-secondary dark:bg-surface-secondary-dark rounded-lg border border-border dark:border-border-dark">
+                  <p className="text-sm text-content-secondary dark:text-content-secondary-dark text-center">
+                    Only existing users can sign in with SSO
+                  </p>
+                </div>
+              )}
               
               <div className="mt-6 grid grid-cols-1 gap-3">
                 {ssoProviders.map((provider) => (

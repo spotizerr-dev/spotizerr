@@ -171,6 +171,69 @@ class UserManager:
         logger.info(f"Updated role for user {username} to {role}")
         return True, "User role updated successfully"
 
+    def change_password(self, username: str, current_password: str, new_password: str) -> tuple[bool, str]:
+        """Change user password after validating current password"""
+        users = self.load_users()
+        
+        if username not in users:
+            return False, "User not found"
+        
+        user_data = users[username]
+        
+        # Check if user is SSO user
+        if user_data.get("sso_provider"):
+            return False, f"Cannot change password for SSO user. Please change your password through {user_data['sso_provider']}."
+        
+        # Check if user has a password hash
+        if not user_data.get("password_hash"):
+            return False, "Cannot change password for SSO user"
+        
+        # Verify current password
+        if not self.verify_password(current_password, user_data["password_hash"]):
+            return False, "Current password is incorrect"
+        
+        # Validate new password
+        if len(new_password) < 6:
+            return False, "New password must be at least 6 characters long"
+        
+        if current_password == new_password:
+            return False, "New password must be different from current password"
+        
+        # Update password
+        users[username]["password_hash"] = self.hash_password(new_password)
+        self.save_users(users)
+        
+        logger.info(f"Password changed for user: {username}")
+        return True, "Password changed successfully"
+
+    def admin_reset_password(self, username: str, new_password: str) -> tuple[bool, str]:
+        """Admin reset user password (no current password verification required)"""
+        users = self.load_users()
+        
+        if username not in users:
+            return False, "User not found"
+        
+        user_data = users[username]
+        
+        # Check if user is SSO user
+        if user_data.get("sso_provider"):
+            return False, f"Cannot reset password for SSO user. User manages password through {user_data['sso_provider']}."
+        
+        # Check if user has a password hash (should exist for non-SSO users)
+        if not user_data.get("password_hash"):
+            return False, "Cannot reset password for SSO user"
+        
+        # Validate new password
+        if len(new_password) < 6:
+            return False, "New password must be at least 6 characters long"
+        
+        # Update password
+        users[username]["password_hash"] = self.hash_password(new_password)
+        self.save_users(users)
+        
+        logger.info(f"Password reset by admin for user: {username}")
+        return True, "Password reset successfully"
+
 
 class TokenManager:
     @staticmethod

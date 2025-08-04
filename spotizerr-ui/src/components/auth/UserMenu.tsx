@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { useNavigate } from "@tanstack/react-router";
 
 export function UserMenu() {
   const { user, logout, authEnabled, isRemembered } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   // Don't render if auth is disabled or user is not logged in
   if (!authEnabled || !user) {
@@ -32,6 +34,11 @@ export function UserMenu() {
     } catch (error) {
       console.error("Logout failed:", error);
     }
+  };
+
+  const handleProfileSettings = () => {
+    navigate({ to: "/config", search: { tab: "profile" } });
+    setIsOpen(false);
   };
 
   const sessionType = isRemembered();
@@ -88,6 +95,12 @@ export function UserMenu() {
           </div>
           
           <div className="p-2">
+            <button
+              onClick={handleProfileSettings}
+              className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark text-content-primary dark:text-content-primary-dark transition-colors"
+            >
+              Profile Settings
+            </button>
             <button
               onClick={handleLogout}
               className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark text-content-primary dark:text-content-primary-dark transition-colors"

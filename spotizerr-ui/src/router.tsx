@@ -73,6 +73,11 @@ const configRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/config",
   component: Config,
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => {
+    return {
+      tab: typeof search.tab === "string" ? search.tab : undefined,
+    };
+  },
 });
 
 const playlistRoute = createRoute({

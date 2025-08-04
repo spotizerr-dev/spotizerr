@@ -37,6 +37,17 @@ class RoleUpdateRequest(BaseModel):
     role: str
 
 
+class PasswordChangeRequest(BaseModel):
+    """Request to change user password"""
+    current_password: str
+    new_password: str
+
+
+class AdminPasswordResetRequest(BaseModel):
+    """Request for admin to reset user password"""
+    new_password: str
+
+
 class UserResponse(BaseModel):
     username: str
     email: Optional[str]
@@ -290,8 +301,7 @@ async def get_profile(current_user: User = Depends(require_auth)):
 
 @router.put("/profile/password", response_model=MessageResponse)
 async def change_password(
-    current_password: str,
-    new_password: str,
+    request: PasswordChangeRequest,
     current_user: User = Depends(require_auth)
 ):
     """Change current user's password"""
@@ -301,27 +311,54 @@ async def change_password(
             detail="Authentication is disabled"
         )
     
-    # Verify current password
-    authenticated_user = user_manager.authenticate_user(
-        current_user.username, 
-        current_password
+    success, message = user_manager.change_password(
+        username=current_user.username,
+        current_password=request.current_password,
+        new_password=request.new_password
     )
-    if not authenticated_user:
+    
+    if not success:
+        # Determine appropriate HTTP status code based on error message
+        if "Current password is incorrect" in message:
+            status_code = 401
+        elif "User not found" in message:
+            status_code = 404
+        else:
+            status_code = 400
+        
+        raise HTTPException(status_code=status_code, detail=message)
+    
+    return MessageResponse(message=message)
+
+
+@router.put("/users/{username}/password", response_model=MessageResponse)
+async def admin_reset_password(
+    username: str,
+    request: AdminPasswordResetRequest,
+    current_user: User = Depends(require_admin)
+):
+    """Admin reset user password (admin only)"""
+    if not AUTH_ENABLED:
         raise HTTPException(
-            status_code=401,
-            detail="Current password is incorrect"
+            status_code=400,
+            detail="Authentication is disabled"
         )
     
-    # Update password (we need to load users, update, and save)
-    users = user_manager.load_users()
-    if current_user.username not in users:
-        raise HTTPException(status_code=404, detail="User not found")
+    success, message = user_manager.admin_reset_password(
+        username=username,
+        new_password=request.new_password
+    )
     
-    users[current_user.username]["password_hash"] = user_manager.hash_password(new_password)
-    user_manager.save_users(users)
+    if not success:
+        # Determine appropriate HTTP status code based on error message
+        if "User not found" in message:
+            status_code = 404
+        else:
+            status_code = 400
+        
+        raise HTTPException(status_code=status_code, detail=message)
     
-    logger.info(f"Password changed for user: {current_user.username}")
-    return MessageResponse(message="Password changed successfully")
+    return MessageResponse(message=message)
 
 
 # Note: SSO routes are included in the main app, not here to avoid circular imports 

@@ -83,6 +83,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           try {
             const ssoStatus = await authApiClient.getSSOStatus();
             setSSOProviders(ssoStatus.providers);
+            // Update registration status based on SSO status (SSO registration control takes precedence)
+            setRegistrationEnabled(ssoStatus.registration_enabled);
           } catch (error) {
             console.warn("Failed to get SSO status:", error);
             setSSOProviders([]);
@@ -117,6 +119,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
               try {
                 const ssoStatus = await authApiClient.getSSOStatus();
                 setSSOProviders(ssoStatus.providers);
+                // Update registration status based on SSO status (SSO registration control takes precedence)
+                setRegistrationEnabled(ssoStatus.registration_enabled);
               } catch (error) {
                 console.warn("Failed to get SSO status:", error);
                 setSSOProviders([]);
@@ -147,6 +151,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         try {
           const ssoStatus = await authApiClient.getSSOStatus();
           setSSOProviders(ssoStatus.providers);
+          // Update registration status based on SSO status (SSO registration control takes precedence)
+          setRegistrationEnabled(ssoStatus.registration_enabled);
         } catch (error) {
           console.warn("Failed to get SSO status:", error);
           setSSOProviders([]);
@@ -206,6 +212,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         try {
           const ssoStatus = await authApiClient.getSSOStatus();
           setSSOProviders(ssoStatus.providers);
+          // Update registration status based on SSO status (SSO registration control takes precedence)
+          setRegistrationEnabled(ssoStatus.registration_enabled);
         } catch (error) {
           console.warn("Failed to get SSO status:", error);
           setSSOProviders([]);

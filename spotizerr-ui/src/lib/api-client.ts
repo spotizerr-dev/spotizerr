@@ -8,7 +8,8 @@ import type {
   AuthStatusResponse, 
   User,
   CreateUserRequest,
-  SSOStatusResponse
+  SSOStatusResponse,
+  AdminPasswordResetRequest
 } from "@/types/auth";
 
 class AuthApiClient {
@@ -296,6 +297,18 @@ class AuthApiClient {
     
     toast.success("User Created", {
       description: `User ${userData.username} created successfully.`,
+    });
+    
+    return response.data;
+  }
+
+  async adminResetPassword(username: string, newPassword: string): Promise<{ message: string }> {
+    const response = await this.apiClient.put(`/auth/users/${username}/password`, {
+      new_password: newPassword,
+    });
+    
+    toast.success("Password Reset", {
+      description: `Password for ${username} has been reset successfully.`,
     });
     
     return response.data;
