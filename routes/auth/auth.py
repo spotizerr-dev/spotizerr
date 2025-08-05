@@ -11,6 +11,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
 
+# Include SSO sub-router
+try:
+    from .sso import router as sso_router
+    router.include_router(sso_router, tags=["sso"])
+    logging.info("SSO sub-router included in auth router")
+except ImportError as e:
+    logging.warning(f"SSO functionality not available: {e}")
+
 
 # Pydantic models for request/response
 class LoginRequest(BaseModel):

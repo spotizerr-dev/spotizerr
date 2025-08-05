@@ -21,35 +21,11 @@ from routes.utils.watch.manager import (
 
 # Import authentication dependencies
 from routes.auth.middleware import require_admin_from_state, User
-from routes.auth import user_manager, AUTH_ENABLED, DISABLE_REGISTRATION
+from routes.auth import AUTH_ENABLED, DISABLE_REGISTRATION
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# User management models for config interface
-class CreateUserConfigRequest(BaseModel):
-    """User creation request for config interface"""
-    username: str
-    password: str
-    email: Optional[str] = None
-    role: str = "user"
-
-
-class UserConfigResponse(BaseModel):
-    """User response for config interface"""
-    username: str
-    email: Optional[str]
-    role: str
-    created_at: str
-    last_login: Optional[str]
-
-
-class MessageConfigResponse(BaseModel):
-    """Message response for config interface"""
-    message: str
-
 
 # Flag for config change notifications
 config_changed = False
@@ -233,7 +209,7 @@ def save_watch_config_http(watch_config_data):  # Renamed
         return False, str(e)
 
 
-@router.get("/config")
+@router.get("/")
 async def handle_config(current_user: User = Depends(require_admin_from_state)):
     """Handles GET requests for the main configuration."""
     try:
@@ -247,8 +223,8 @@ async def handle_config(current_user: User = Depends(require_admin_from_state)):
         )
 
 
-@router.post("/config")
-@router.put("/config")
+@router.post("/")
+@router.put("/")
 async def update_config(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Handles POST/PUT requests to update the main configuration."""
     try:
@@ -298,7 +274,7 @@ async def update_config(request: Request, current_user: User = Depends(require_a
         )
 
 
-@router.get("/config/check")
+@router.get("/check")
 async def check_config_changes(current_user: User = Depends(require_admin_from_state)):
     # This endpoint seems more related to dynamically checking if config changed
     # on disk, which might not be necessary if settings are applied on restart
@@ -314,7 +290,7 @@ async def check_config_changes(current_user: User = Depends(require_admin_from_s
         )
 
 
-@router.post("/config/validate")
+@router.post("/validate")
 async def validate_config_endpoint(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Validate configuration without saving it."""
     try:
@@ -340,7 +316,7 @@ async def validate_config_endpoint(request: Request, current_user: User = Depend
         )
 
 
-@router.post("/config/watch/validate")
+@router.post("/watch/validate")
 async def validate_watch_config_endpoint(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Validate watch configuration without saving it."""
     try:
@@ -366,7 +342,7 @@ async def validate_watch_config_endpoint(request: Request, current_user: User = 
         )
 
 
-@router.get("/config/watch")
+@router.get("/watch")
 async def handle_watch_config(current_user: User = Depends(require_admin_from_state)):
     """Handles GET requests for the watch configuration."""
     try:
@@ -380,8 +356,8 @@ async def handle_watch_config(current_user: User = Depends(require_admin_from_st
         )
 
 
-@router.post("/config/watch")
-@router.put("/config/watch")
+@router.post("/watch")
+@router.put("/watch")
 async def update_watch_config(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Handles POST/PUT requests to update the watch configuration."""
     try:
@@ -415,131 +391,3 @@ async def update_watch_config(request: Request, current_user: User = Depends(req
             status_code=500,
             detail={"error": "Failed to update watch configuration", "details": str(e)}
         )
-
-
-# User management endpoints for config interface
-@router.get("/auth/status")
-async def get_auth_status_config(current_user: User = Depends(require_admin_from_state)):
-    """Get authentication system status for config interface"""
-    return {
-        "auth_enabled": AUTH_ENABLED,
-        "registration_disabled": DISABLE_REGISTRATION,
-        "current_user": {
-            "username": current_user.username,
-            "role": current_user.role
-        } if current_user else None
-    }
-
-
-@router.get("/users", response_model=List[UserConfigResponse])
-async def list_users_config(current_user: User = Depends(require_admin_from_state)):
-    """List all users for config interface"""
-    if not AUTH_ENABLED:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Authentication is disabled"}
-        )
-    
-    users = user_manager.list_users()
-    return [UserConfigResponse(**user.to_public_dict()) for user in users]
-
-
-@router.post("/users", response_model=MessageConfigResponse)
-async def create_user_config(request: CreateUserConfigRequest, current_user: User = Depends(require_admin_from_state)):
-    """Create a new user through config interface"""
-    if not AUTH_ENABLED:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Authentication is disabled"}
-        )
-    
-    # Validate role
-    if request.role not in ["user", "admin"]:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Role must be 'user' or 'admin'"}
-        )
-    
-    success, message = user_manager.create_user(
-        username=request.username,
-        password=request.password,
-        email=request.email,
-        role=request.role
-    )
-    
-    if not success:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": message}
-        )
-    
-    return MessageConfigResponse(message=message)
-
-
-@router.delete("/users/{username}", response_model=MessageConfigResponse)
-async def delete_user_config(username: str, current_user: User = Depends(require_admin_from_state)):
-    """Delete a user through config interface"""
-    if not AUTH_ENABLED:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Authentication is disabled"}
-        )
-    
-    if username == current_user.username:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Cannot delete your own account"}
-        )
-    
-    success, message = user_manager.delete_user(username)
-    if not success:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": message}
-        )
-    
-    return MessageConfigResponse(message=message)
-
-
-@router.put("/users/{username}/role", response_model=MessageConfigResponse)
-async def update_user_role_config(
-    username: str, 
-    request: Request,
-    current_user: User = Depends(require_admin_from_state)
-):
-    """Update user role through config interface"""
-    if not AUTH_ENABLED:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Authentication is disabled"}
-        )
-    
-    try:
-        data = await request.json()
-        role = data.get("role")
-    except:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Invalid request body"}
-        )
-    
-    if role not in ["user", "admin"]:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Role must be 'user' or 'admin'"}
-        )
-    
-    if username == current_user.username:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "Cannot change your own role"}
-        )
-    
-    success, message = user_manager.update_user_role(username, role)
-    if not success:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": message}
-        )
-    
-    return MessageConfigResponse(message=message)
