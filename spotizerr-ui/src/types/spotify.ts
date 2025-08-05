@@ -111,3 +111,13 @@ export interface PlaylistType {
 export type SearchResult = (TrackType | AlbumType | ArtistType | PlaylistType) & {
   model: "track" | "album" | "artist" | "playlist";
 };
+
+// API response type that can contain null values
+export interface SearchApiResponse {
+  items: (SearchResult | null)[];
+}
+
+// Type guard to check if a search result is valid (not null)
+export function isValidSearchResult(item: SearchResult | null): item is SearchResult {
+  return item !== null && typeof item === 'object' && 'id' in item;
+}

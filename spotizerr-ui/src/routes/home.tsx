@@ -2,10 +2,26 @@ import { useState, useEffect, useMemo, useContext, useCallback, useRef } from "r
 import { useNavigate, useSearch, useRouterState } from "@tanstack/react-router";
 import { useDebounce } from "use-debounce";
 import { toast } from "sonner";
-import type { TrackType, AlbumType, ArtistType, PlaylistType, SearchResult } from "@/types/spotify";
+import type { TrackType, AlbumType, SearchResult } from "@/types/spotify";
 import { QueueContext } from "@/contexts/queue-context";
 import { SearchResultCard } from "@/components/SearchResultCard";
 import { indexRoute } from "@/router";
+
+// Utility function to safely get properties from search results
+const safelyGetProperty = <T,>(obj: any, path: string[], fallback: T): T => {
+  try {
+    let current = obj;
+    for (const key of path) {
+      if (current == null || typeof current !== 'object') {
+        return fallback;
+      }
+      current = current[key];
+    }
+    return current ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 const PAGE_SIZE = 12;
 
@@ -127,24 +143,32 @@ export const Home = () => {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {displayedResults.map((item) => {
+          // Add safety checks for essential properties
+          if (!item || !item.id || !item.name || !item.model) {
+            return null;
+          }
+
           let imageUrl;
           let onDownload;
           let subtitle;
 
           if (item.model === "track") {
-            imageUrl = (item as TrackType).album?.images?.[0]?.url;
+            imageUrl = safelyGetProperty(item, ['album', 'images', '0', 'url'], undefined);
             onDownload = () => handleDownloadTrack(item as TrackType);
-            subtitle = (item as TrackType).artists?.map((a) => a.name).join(", ");
+            const artists = safelyGetProperty(item, ['artists'], []);
+            subtitle = Array.isArray(artists) ? artists.map((a: any) => safelyGetProperty(a, ['name'], 'Unknown')).join(", ") : "Unknown Artist";
           } else if (item.model === "album") {
-            imageUrl = (item as AlbumType).images?.[0]?.url;
+            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
             onDownload = () => handleDownloadAlbum(item as AlbumType);
-            subtitle = (item as AlbumType).artists?.map((a) => a.name).join(", ");
+            const artists = safelyGetProperty(item, ['artists'], []);
+            subtitle = Array.isArray(artists) ? artists.map((a: any) => safelyGetProperty(a, ['name'], 'Unknown')).join(", ") : "Unknown Artist";
           } else if (item.model === "artist") {
-            imageUrl = (item as ArtistType).images?.[0]?.url;
+            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
             subtitle = "Artist";
           } else if (item.model === "playlist") {
-            imageUrl = (item as PlaylistType).images?.[0]?.url;
-            subtitle = `By ${(item as PlaylistType).owner?.display_name || "Unknown"}`;
+            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
+            const ownerName = safelyGetProperty(item, ['owner', 'display_name'], 'Unknown');
+            subtitle = `By ${ownerName}`;
           }
 
           return (
@@ -158,7 +182,7 @@ export const Home = () => {
               onDownload={onDownload}
             />
           );
-        })}
+        }).filter(Boolean)} {/* Filter out null components */}
       </div>
     );
   }, [displayedResults, handleDownloadTrack, handleDownloadAlbum]);
