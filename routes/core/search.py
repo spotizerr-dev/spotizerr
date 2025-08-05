@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/search")
+@router.get("/")
+@router.get("")
 async def handle_search(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Handle search requests for tracks, albums, playlists, or artists.

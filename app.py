@@ -168,7 +168,8 @@ def create_app():
         title="Spotizerr API",
         description="Music download service API",
         version="1.0.0",
-        lifespan=lifespan
+        lifespan=lifespan,
+        redirect_slashes=True  # Enable automatic trailing slash redirects
     )
 
     # Set up CORS
@@ -197,8 +198,8 @@ def create_app():
         logging.info("SSO functionality enabled")
     except ImportError as e:
         logging.warning(f"SSO functionality not available: {e}")
-    app.include_router(config_router, prefix="/api", tags=["config"])
-    app.include_router(search_router, prefix="/api", tags=["search"])
+    app.include_router(config_router, prefix="/api/config", tags=["config"])
+    app.include_router(search_router, prefix="/api/search", tags=["search"])
     app.include_router(credentials_router, prefix="/api/credentials", tags=["credentials"])
     app.include_router(album_router, prefix="/api/album", tags=["album"])
     app.include_router(track_router, prefix="/api/track", tags=["track"])
@@ -233,11 +234,15 @@ def create_app():
     if os.path.exists("spotizerr-ui/dist"):
         app.mount("/static", StaticFiles(directory="spotizerr-ui/dist"), name="static")
         
-        # Serve React App - catch-all route for SPA
+        # Serve React App - catch-all route for SPA (but not for API routes)
         @app.get("/{full_path:path}")
         async def serve_react_app(full_path: str):
             """Serve React app with fallback to index.html for SPA routing"""
             static_dir = "spotizerr-ui/dist"
+            
+            # Don't serve React app for API routes (more specific check)
+            if full_path.startswith("api") or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="API endpoint not found")
             
             # If it's a file that exists, serve it
             if full_path and os.path.exists(os.path.join(static_dir, full_path)):

@@ -15,6 +15,7 @@ class AuthApiClient {
   private apiClient: AxiosInstance;
   private token: string | null = null;
   private isCheckingToken: boolean = false;
+  private authEnabled: boolean = false; // Track if auth is enabled
 
   constructor() {
     this.apiClient = axios.create({
@@ -31,7 +32,8 @@ class AuthApiClient {
     // Request interceptor to add auth token
     this.apiClient.interceptors.request.use(
       (config) => {
-        if (this.token) {
+        // Only add auth header if auth is enabled and we have a token
+        if (this.authEnabled && this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
         return config;
@@ -55,29 +57,40 @@ class AuthApiClient {
       (error) => {
         // Handle authentication errors
         if (error.response?.status === 401) {
-          // Only clear token for auth-related endpoints
-          const requestUrl = error.config?.url || "";
-          const isAuthEndpoint = requestUrl.includes("/auth/") || requestUrl.endsWith("/auth");
-          
-          if (isAuthEndpoint) {
-            // Clear invalid token only for auth endpoints
-            this.clearToken();
+          // Only process auth errors if auth is enabled
+          if (this.authEnabled) {
+            // Only clear token for auth-related endpoints
+            const requestUrl = error.config?.url || "";
+            const isAuthEndpoint = requestUrl.includes("/auth/") || requestUrl.endsWith("/auth");
             
-            // Only show auth error if auth is enabled and not during initial token check
-            if (error.response?.data?.auth_enabled && !this.isCheckingToken) {
-              toast.error("Session Expired", {
-                description: "Please log in again to continue.",
-              });
+            if (isAuthEndpoint) {
+              // Clear invalid token only for auth endpoints
+              this.clearToken();
+              
+              // Only show auth error if not during initial token check
+              if (!this.isCheckingToken) {
+                toast.error("Session Expired", {
+                  description: "Please log in again to continue.",
+                });
+              }
+            } else {
+              // For non-auth endpoints, just log the 401 but don't clear token
+              // The token might still be valid for auth endpoints
+              console.log(`401 error on non-auth endpoint: ${requestUrl}`);
             }
           } else {
-            // For non-auth endpoints, just log the 401 but don't clear token
-            // The token might still be valid for auth endpoints
-            console.log(`401 error on non-auth endpoint: ${requestUrl}`);
+            // Auth is disabled, 401 errors are expected for auth endpoints
+            console.log("401 error received but auth is disabled - this is expected");
           }
         } else if (error.response?.status === 403) {
-          toast.error("Access Denied", {
-            description: "You don't have permission to perform this action.",
-          });
+          // Only show access denied errors if auth is enabled
+          if (this.authEnabled) {
+            toast.error("Access Denied", {
+              description: "You don't have permission to perform this action.",
+            });
+          } else {
+            console.log("403 error received but auth is disabled - this may be expected");
+          }
         } else if (error.code === "ECONNABORTED") {
           toast.error("Request Timed Out", {
             description: "The server did not respond in time. Please try again later.",
@@ -340,6 +353,15 @@ class AuthApiClient {
   // Get SSO login URLs (these redirect to OAuth provider)
   getSSOLoginUrl(provider: string): string {
     return `/api/auth/sso/login/${provider}`;
+  }
+
+  // Method to set auth enabled state (to be called by AuthProvider)
+  setAuthEnabled(enabled: boolean) {
+    this.authEnabled = enabled;
+  }
+
+  getAuthEnabled(): boolean {
+    return this.authEnabled;
   }
 
   // Expose the underlying axios instance for other API calls

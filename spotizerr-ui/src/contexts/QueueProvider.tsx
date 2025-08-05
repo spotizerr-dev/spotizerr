@@ -140,17 +140,27 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     if (sseConnection.current) return;
 
     try {
-      // Check if we have a valid token before connecting
-      const token = authApiClient.getToken();
-      if (!token) {
-        console.warn("SSE: No auth token available, skipping connection");
-        return;
+      let eventSource: EventSource;
+      
+      // Only check for auth token if auth is enabled
+      if (authEnabled) {
+        const token = authApiClient.getToken();
+        if (!token) {
+          console.warn("SSE: Auth is enabled but no auth token available, skipping connection");
+          return;
+        }
+        
+        // Include token as query parameter for SSE authentication
+        const sseUrl = `/api/prgs/stream?token=${encodeURIComponent(token)}`;
+        eventSource = new EventSource(sseUrl);
+      } else {
+        // Auth is disabled, connect without token
+        console.log("SSE: Auth disabled, connecting without token");
+        const sseUrl = `/api/prgs/stream`;
+        eventSource = new EventSource(sseUrl);
       }
-
-      // Include token as query parameter for SSE authentication
-      const sseUrl = `/api/prgs/stream?token=${encodeURIComponent(token)}`;
-      const eventSource = new EventSource(sseUrl);
-        sseConnection.current = eventSource;
+      
+      sseConnection.current = eventSource;
 
         eventSource.onopen = () => {
         console.log("SSE connected successfully");
@@ -364,14 +374,16 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             console.warn("SSE connection error:", error);
           }
           
-          // Check if this might be an auth error by testing if we still have a valid token
-          const token = authApiClient.getToken();
-          if (!token) {
-            console.warn("SSE: Connection error and no auth token - stopping reconnection attempts");
-            eventSource.close();
-            sseConnection.current = null;
-            stopHealthCheck();
-            return;
+          // Only check for auth errors if auth is enabled
+          if (authEnabled) {
+            const token = authApiClient.getToken();
+            if (!token) {
+              console.warn("SSE: Connection error and no auth token - stopping reconnection attempts");
+              eventSource.close();
+              sseConnection.current = null;
+              stopHealthCheck();
+              return;
+            }
           }
           
           eventSource.close();
@@ -410,7 +422,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           toast.error("Failed to establish connection");
         }
       }
-  }, [createQueueItemFromTask, scheduleRemoval, startHealthCheck]);
+  }, [createQueueItemFromTask, scheduleRemoval, startHealthCheck, authEnabled]);
 
   const disconnectSSE = useCallback(() => {
     if (sseConnection.current) {

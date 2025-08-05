@@ -1,7 +1,7 @@
 import { useContext, useState, useRef, useEffect } from "react";
 import { FaTimes, FaSync, FaCheckCircle, FaExclamationCircle, FaHourglassHalf, FaMusic, FaCompactDisc, FaStepForward } from "react-icons/fa";
 import { QueueContext, type QueueItem, getStatus, getProgress, getCurrentTrackInfo, isActiveStatus, isTerminalStatus } from "@/contexts/queue-context";
-import { authApiClient } from "@/lib/api-client";
+import { useAuth } from "@/contexts/auth-context";
 
 // Circular Progress Component
 const CircularProgress = ({ 
@@ -452,9 +452,10 @@ const QueueItemCard = ({ item, cachedStatus }: { item: QueueItem, cachedStatus: 
 
 export const Queue = () => {
   const context = useContext(QueueContext);
+  const { authEnabled, isAuthenticated } = useAuth();
   
-  // Check if user is authenticated
-  const hasValidToken = authApiClient.getToken() !== null;
+  // Check if user is authenticated (only relevant when auth is enabled)
+  const isUserAuthenticated = !authEnabled || isAuthenticated;
   
   const [startY, setStartY] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -751,7 +752,7 @@ export const Queue = () => {
     };
   }, [isVisible]);
 
-  if (!context || !isVisible || !hasValidToken) return null;
+  if (!context || !isVisible || !isUserAuthenticated) return null;
 
   // Optimize: Calculate status once per item and reuse throughout render
   const itemsWithStatus = items.map(item => ({

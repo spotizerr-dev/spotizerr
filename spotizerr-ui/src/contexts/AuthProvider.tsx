@@ -335,6 +335,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [initializeAuth]);
 
+  // Update API client when auth enabled state changes
+  useEffect(() => {
+    authApiClient.setAuthEnabled(authEnabled);
+    console.log(`API client auth enabled state updated: ${authEnabled}`);
+  }, [authEnabled]);
+
   // Enhanced context value with new methods
   const contextValue = {
     // State

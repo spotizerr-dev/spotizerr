@@ -167,6 +167,9 @@ async def require_auth_from_state(request: Request) -> User:
 # Dependency function to require admin role
 async def require_admin_from_state(request: Request) -> User:
     """Require admin role using request state"""
+    if not AUTH_ENABLED:
+        return User(username="system", role="admin")
+        
     user = await require_auth_from_state(request)
     
     if user.role != "admin":

@@ -210,6 +210,7 @@ def save_watch_config_http(watch_config_data):  # Renamed
 
 
 @router.get("/")
+@router.get("")
 async def handle_config(current_user: User = Depends(require_admin_from_state)):
     """Handles GET requests for the main configuration."""
     try:
