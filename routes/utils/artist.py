@@ -1,6 +1,5 @@
 import json
 import logging
-from flask import url_for
 from routes.utils.celery_queue_manager import download_queue_manager
 from routes.utils.get_info import get_spotify_info
 from routes.utils.credentials import get_credential, _get_global_spotify_api_creds

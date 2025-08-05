@@ -40,3 +40,4 @@ logs/
 .env
 Test.py
 spotizerr-ui/dev-dist
+celerybeat-schedule

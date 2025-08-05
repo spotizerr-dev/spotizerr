@@ -25,6 +25,20 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}
       - REDIS_BACKEND=redis://:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}
       - EXPLICIT_FILTER=${EXPLICIT_FILTER} # Set to true to filter out explicit content
+      - ENABLE_AUTH=${ENABLE_AUTH} # Set to true to enable authentication
+      - JWT_SECRET=${JWT_SECRET} # Set to a random string for production
+      - JWT_EXPIRATION_HOURS=${JWT_EXPIRATION_HOURS} # Set to 24 for 24 hours
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME} # Set to admin
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD} # Set to admin123
+      - SSO_ENABLED=${SSO_ENABLED} # Set to true to enable SSO
+      - SSO_BASE_REDIRECT_URI=${SSO_BASE_REDIRECT_URI} # Set to http://127.0.0.1:7171/api/auth/sso/callback
+      - FRONTEND_URL=${FRONTEND_URL} # Frontend URL for SSO redirects
+      - DISABLE_REGISTRATION=${DISABLE_REGISTRATION} # Set to true to disable registration
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID} # Google SSO client ID
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET} # Google SSO client secret
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID} # GitHub SSO client ID
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET} # GitHub SSO client secret
+
     depends_on:
       - redis
 
