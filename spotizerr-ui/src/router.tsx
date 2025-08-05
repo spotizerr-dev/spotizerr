@@ -1,15 +1,17 @@
-import { createRouter, createRootRoute, createRoute } from "@tanstack/react-router";
+import { createRouter, createRootRoute, createRoute, lazyRouteComponent } from "@tanstack/react-router";
 import Root from "./routes/root";
-import { Album } from "./routes/album";
-import { Artist } from "./routes/artist";
-import { Track } from "./routes/track";
-import { Home } from "./routes/home";
-import { Config } from "./routes/config";
-import { Playlist } from "./routes/playlist";
-import { History } from "./routes/history";
-import { Watchlist } from "./routes/watchlist";
 import apiClient from "./lib/api-client";
 import type { SearchResult } from "./types/spotify";
+
+// Lazy load route components for code splitting
+const Album = lazyRouteComponent(() => import("./routes/album").then(m => ({ default: m.Album })));
+const Artist = lazyRouteComponent(() => import("./routes/artist").then(m => ({ default: m.Artist })));
+const Track = lazyRouteComponent(() => import("./routes/track").then(m => ({ default: m.Track })));
+const Home = lazyRouteComponent(() => import("./routes/home").then(m => ({ default: m.Home })));
+const Config = lazyRouteComponent(() => import("./routes/config").then(m => ({ default: m.Config })));
+const Playlist = lazyRouteComponent(() => import("./routes/playlist").then(m => ({ default: m.Playlist })));
+const History = lazyRouteComponent(() => import("./routes/history").then(m => ({ default: m.History })));
+const Watchlist = lazyRouteComponent(() => import("./routes/watchlist").then(m => ({ default: m.Watchlist })));
 
 const rootRoute = createRootRoute({
   component: Root,

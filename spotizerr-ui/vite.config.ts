@@ -99,6 +99,52 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1000, // Increase warning limit to 1MB
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React and routing
+          'react-vendor': ['react', 'react-dom'],
+          'router-vendor': ['@tanstack/react-router'],
+          
+          // Query and state management
+          'query-vendor': ['@tanstack/react-query'],
+          
+          // UI and icon libraries
+          'ui-vendor': ['lucide-react', 'react-icons', 'sonner'],
+          
+          // Table components (only used in specific routes)
+          'table-vendor': ['@tanstack/react-table'],
+          
+          // Form handling
+          'form-vendor': ['react-hook-form', 'use-debounce'],
+          
+          // HTTP client
+          'http-vendor': ['axios'],
+          
+          // Config components (heavy route with many tabs)
+          'config-components': [
+            './src/components/config/GeneralTab',
+            './src/components/config/DownloadsTab',
+            './src/components/config/FormattingTab',
+            './src/components/config/AccountsTab',
+            './src/components/config/WatchTab',
+            './src/components/config/ServerTab',
+            './src/components/config/UserManagementTab',
+            './src/components/config/ProfileTab'
+          ],
+          
+          // Utilities and helpers
+          'utils-vendor': ['uuid'],
+        },
+        // Additional chunk optimization
+        chunkFileNames: () => {
+          return `assets/[name]-[hash].js`;
+        },
+      },
+    },
+  },
   server: {
     host: true,
     port: 5173,

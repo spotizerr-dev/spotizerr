@@ -1,16 +1,25 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense, lazy } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { GeneralTab } from "../components/config/GeneralTab";
-import { DownloadsTab } from "../components/config/DownloadsTab";
-import { FormattingTab } from "../components/config/FormattingTab";
-import { AccountsTab } from "../components/config/AccountsTab";
-import { WatchTab } from "../components/config/WatchTab";
-import { ServerTab } from "../components/config/ServerTab";
-import { UserManagementTab } from "../components/config/UserManagementTab";
-import { ProfileTab } from "../components/config/ProfileTab";
 import { useSettings } from "../contexts/settings-context";
 import { useAuth } from "../contexts/auth-context";
 import { LoginScreen } from "../components/auth/LoginScreen";
+
+// Lazy load config tab components for better code splitting
+const GeneralTab = lazy(() => import("../components/config/GeneralTab").then(m => ({ default: m.GeneralTab })));
+const DownloadsTab = lazy(() => import("../components/config/DownloadsTab").then(m => ({ default: m.DownloadsTab })));
+const FormattingTab = lazy(() => import("../components/config/FormattingTab").then(m => ({ default: m.FormattingTab })));
+const AccountsTab = lazy(() => import("../components/config/AccountsTab").then(m => ({ default: m.AccountsTab })));
+const WatchTab = lazy(() => import("../components/config/WatchTab").then(m => ({ default: m.WatchTab })));
+const ServerTab = lazy(() => import("../components/config/ServerTab").then(m => ({ default: m.ServerTab })));
+const UserManagementTab = lazy(() => import("../components/config/UserManagementTab").then(m => ({ default: m.UserManagementTab })));
+const ProfileTab = lazy(() => import("../components/config/ProfileTab").then(m => ({ default: m.ProfileTab })));
+
+// Loading component for tab transitions
+const TabLoading = () => (
+  <div className="flex items-center justify-center h-64">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+  </div>
+);
 
 const ConfigComponent = () => {
   const { tab } = useSearch({ from: "/config" });
@@ -102,11 +111,19 @@ const ConfigComponent = () => {
   const renderTabContent = () => {
     // User management and profile don't need config data
     if (activeTab === "user-management") {
-      return <UserManagementTab />;
+      return (
+        <Suspense fallback={<TabLoading />}>
+          <UserManagementTab />
+        </Suspense>
+      );
     }
     
     if (activeTab === "profile") {
-      return <ProfileTab />;
+      return (
+        <Suspense fallback={<TabLoading />}>
+          <ProfileTab />
+        </Suspense>
+      );
     }
     
     if (isLoading) return <div className="text-center py-12"><p className="text-content-muted dark:text-content-muted-dark">Loading configuration...</p></div>;
@@ -114,17 +131,41 @@ const ConfigComponent = () => {
 
     switch (activeTab) {
       case "general":
-        return <GeneralTab config={config} isLoading={isLoading} />;
+        return (
+          <Suspense fallback={<TabLoading />}>
+            <GeneralTab config={config} isLoading={isLoading} />
+          </Suspense>
+        );
       case "downloads":
-        return <DownloadsTab config={config} isLoading={isLoading} />;
+        return (
+          <Suspense fallback={<TabLoading />}>
+            <DownloadsTab config={config} isLoading={isLoading} />
+          </Suspense>
+        );
       case "formatting":
-        return <FormattingTab config={config} isLoading={isLoading} />;
+        return (
+          <Suspense fallback={<TabLoading />}>
+            <FormattingTab config={config} isLoading={isLoading} />
+          </Suspense>
+        );
       case "accounts":
-        return <AccountsTab />;
+        return (
+          <Suspense fallback={<TabLoading />}>
+            <AccountsTab />
+          </Suspense>
+        );
       case "watch":
-        return <WatchTab />;
+        return (
+          <Suspense fallback={<TabLoading />}>
+            <WatchTab />
+          </Suspense>
+        );
       case "server":
-        return <ServerTab />;
+        return (
+          <Suspense fallback={<TabLoading />}>
+            <ServerTab />
+          </Suspense>
+        );
       default:
         return null;
     }

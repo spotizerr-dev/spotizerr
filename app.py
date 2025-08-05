@@ -167,7 +167,7 @@ def create_app():
     app = FastAPI(
         title="Spotizerr API",
         description="Music download service API",
-        version="1.0.0",
+        version="3.0.0",
         lifespan=lifespan,
         redirect_slashes=True  # Enable automatic trailing slash redirects
     )
