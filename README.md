@@ -1,164 +1,292 @@
 # SUPPORT YOUR ARTISTS
 
-As of 2025, Spotify pays an average of $0.005 per stream to the artist. That means that if you give the equivalent of $5 directly to them (like merch, buying cds, or just donating), you can """ethically""" listen to them a total of 1000 times. Of course, nobody thinks spotify payment is fair, so preferably you should give more, but $5 is the bare minimum. Big names prolly don't need those $5 dollars, but it might be _the_ difference between going out of business or not for that indie rock band you like.
+As of 2025, Spotify pays an average of $0.005 per stream to the artist. That means that if you give the equivalent of $5 directly to them (like merch, buying CDs, or just donating), you can """ethically""" listen to them a total of 1000 times. Of course, nobody thinks Spotify payment is fair, so preferably you should give more, but $5 is the bare minimum. Big names probably don't need those $5 dollars, but it might be _the_ difference between going out of business or not for that indie rock band you like.
 
 # Spotizerr
 
-Music downloader which combines the best of two worlds: Spotify's catalog and Deezer's quality. Search for a track using Spotify search api, click download and, depending on your preferences, it will download directly from Spotify or firstly try to download from Deezer, if it fails, it'll fallback to Spotify.
+A self-hosted music download manager with automatic monitoring and real-time progress tracking. Download individual tracks, complete albums, playlists, or entire artist discographies from Spotify and Deezer.
 
-## Desktop interface
-![image](https://github.com/user-attachments/assets/8093085d-cad3-4cba-9a0d-1ad6cae63e4f)
+## ✨ Key Features
 
-![image](https://github.com/user-attachments/assets/ac5daa0f-769f-43b0-b78a-8db343219861)
+### 🎵 **Comprehensive Download Support**
+- **Individual Tracks** - Download any single track
+- **Complete Albums** - Download entire albums with proper metadata
+- **Full Playlists** - Download complete playlists (even massive ones with 1000+ tracks)
+- **Artist Discographies** - Download an artist's complete catalog with filtering options
+- **Spotify URL Support** - Paste any Spotify URL directly to queue downloads
 
-![image](https://github.com/user-attachments/assets/fb8b2295-f6b6-412f-87da-69f63b56247c)
+### 📱 **Modern Web Interface**
+- **Progressive Web App (PWA)** - Install as a native app on mobile/desktop
+- **Real-time Progress Tracking** - Live download progress with bandwidth and ETA
+- **Responsive Design** - Optimized for both mobile and desktop use
+- **Multiple Themes** - Light, dark, and system themes
+- **Touch-friendly** - Swipe gestures and mobile-optimized controls
 
-## Mobile interface
+### 🤖 **Intelligent Monitoring**
+- **Playlist Watching** - Automatically download new tracks added to playlists
+- **Artist Watching** - Monitor artists for new releases and download them automatically
+- **Smart Change Detection** - Only processes new content using Spotify's snapshot system
+- **Configurable Intervals** - Set how often to check for updates
+- **Manual Triggers** - Force immediate checks when needed
 
-![Screen Shot 2025-03-15 at 21 02 27](https://github.com/user-attachments/assets/cee9318e-9451-4a43-9e24-20e05f4abc5b) ![Screen Shot 2025-03-15 at 21 02 45](https://github.com/user-attachments/assets/d5801795-ba31-4589-a82d-d208f1ea6d62)
+### ⚡ **Advanced Queue Management**
+- **Concurrent Downloads** - Configure multiple simultaneous downloads
+- **Real-time Updates** - Live progress updates via Server-Sent Events
+- **Duplicate Prevention** - Automatically prevents duplicate downloads
+- **Queue Persistence** - Downloads continue even after browser restart
+- **Cancellation Support** - Cancel individual downloads or clear entire queue
 
-## Features
+### 🔧 **Extensive Configuration**
+- **Multiple Services** - Support for both Spotify and Deezer premium accounts
+- **Quality Control** - Configure audio quality per service
+- **Format Options** - Convert to MP3, FLAC, AAC, OGG, OPUS, WAV, ALAC
+- **Custom Naming** - Flexible file and folder naming patterns
+- **Fallback System** - Use alternative service if primary fails
+- **Content Filtering** - Hide explicit content if desired
 
-- Browse through artist, albums, playlists and tracks and jump between them
-- Dual-service integration (Spotify & Deezer)
-- Direct URL downloads for Spotify tracks/albums/playlists/artists
-- Search using spotify's catalog
-- Credential management system
-- Download queue with real-time progress
-- Service fallback system when downloading*
-- Real time downloading**
-- Quality selector***
-- Customizable track number padding (01. Track or 1. Track)
-- Customizable retry parameters (max attempts, delay, increase per retry)
+### 📊 **Comprehensive History**
+- **Download Tracking** - Complete history of all downloads with metadata
+- **Success Analytics** - Track success rates, failures, and skipped items
+- **Search & Filter** - Find past downloads by title, artist, or status
+- **Detailed Logs** - View individual track status for album/playlist downloads
+- **Export Data** - Access complete metadata and external service IDs
 
-*It will first try to download each track from Deezer and only if it fails, will grab it from Spotify
-**Only for spotify. For each track, it matches its length with the time it takes to download it
-***Restrictions per account tier apply (see
+### 👥 **Multi-User Support**
+- **User Authentication** - Secure login system with JWT tokens
+- **Role-Based Access** - Admin and regular user roles
+- **SSO Integration** - Single Sign-On with Google and GitHub
+- **Admin Panel** - User management and system configuration
+- **Individual Profiles** - Personal settings and download history per user
 
-## Prerequisites
+### 🔒 **Security & Privacy**
+- **Self-Hosted** - Your data stays on your server
+- **Encrypted Credentials** - Secure storage of service accounts
+- **Access Control** - Granular permissions and admin-only features
+- **Session Management** - Secure token handling with configurable expiration
+- **HTTPS Ready** - Full HTTPS support for production deployment
 
-- Docker, duh
-- Spotify credentials (see [Spotify Credentials Setup](#spotify-credentials-setup))
-- Spotify client ID and client secret (see [Spotify Developer Setup](#spotify-developer-setup))
-- Deezer ARL token (see [Deezer ARL Setup](#deezer-arl-setup))
+## 🚀 Quick Start
 
-## Installation
+### Prerequisites
+- Docker and Docker Compose
+- Spotify Premium account(s)
+- Deezer Premium account(s) (optional)
+- Spotify API credentials (Client ID & Secret from Spotify Developer Dashboard)
 
-1. Create project directory:
+### Installation
+
+1. **Create project directory**
+   ```bash
+   mkdir spotizerr && cd spotizerr
+   ```
+
+2. **Setup environment file**
+   ```bash
+   # Download .env.example from the repository and create .env
+   # Update all variables (e.g. Redis credentials, PUID/PGID, UMASK)
+   ```
+
+3. **Copy docker-compose.yml**
+   ```bash
+   # Download docker-compose.yml from the repository
+   ```
+
+4. **Start the application**
+   ```bash
+   docker compose up -d
+   ```
+
+5. **Access the interface**
+   - Open `http://localhost:7171` in your browser
+   - Complete initial setup and add your service accounts
+
+_Note: An UnRAID template is available in the file spotizerr.xml_
+
+### Environment Variables
+
 ```bash
-mkdir spotizerr && cd spotizerr
+# Authentication (optional but recommended)
+ENABLE_AUTH=true
+DISABLE_REGISTRATION=false
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+
+# SSO (optional)
+SSO_ENABLED=true
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+
+# Default admin (when auth is enabled)
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=admin123
+
+# Content filtering
+EXPLICIT_FILTER=false
+
+# Frontend URL (for SSO redirects)
+FRONTEND_URL=http://localhost:7171
 ```
 
-2. Setup a `.env` file following the `.env.example` file from this repo and update all variables (e.g. Redis credentials, PUID/PGID, UMASK).
-3. Copy `docker-compose.yml` from this repo.
-4. Launch containers:
-```bash
-docker compose up -d
-```
-_Note: an UnRaid template is available in the file spotizerr.xml_
+## 🔧 Configuration
 
-Access at: `http://localhost:7171`
+### Service Accounts Setup
 
-## Configuration
+1. **Add Spotify API Credentials**
+   - Go to Settings → Server → Spotify API Configuration
+   - Add your Spotify Client ID and Secret
 
-### Spotify Setup
+2. **Add Spotify Premium Accounts**
+   - Navigate to Settings → Accounts
+   - Add your Spotify Premium credentials
+   - **Important**: Spotify is very restrictive, so use the [spotizerr-auth](https://github.com/Xoconoch/spotizerr-auth) tool to simplify this setup
 
-Spotify is VERY petty, so, in order to simplify the process, another tool was created to perform this part of the setup; see [spotizerr-auth](https://github.com/Xoconoch/spotizerr-auth)
+3. **Add Deezer Premium Accounts (Optional)**
+   - Get your Deezer ARL token:
+     - **Chrome/Edge**: Open [Deezer](https://www.deezer.com/), press F12 → Application → Cookies → "https://www.deezer.com" → Copy "arl" value
+     - **Firefox**: Open [Deezer](https://www.deezer.com/), press F12 → Storage → Cookies → "https://www.deezer.com" → Copy "arl" value
+   - Add the ARL token in Settings → Accounts
 
-### Deezer ARL Setup
+4. **Configure Download Settings**
+   - Set audio quality preferences
+   - Configure output format and naming
+   - Adjust concurrent download limits
 
-#### Chrome-based browsers
+### Watch System Setup
 
-Open the [web player](https://www.deezer.com/)
+1. **Enable Monitoring**
+   - Go to Settings → Watch
+   - Enable the watch system
+   - Set check intervals
 
-There, press F12 and select "Application"
+2. **Add Items to Watch**
+   - Search for playlists or artists
+   - Click the "Watch" button
+   - New content will be automatically downloaded
 
-![image](https://github.com/user-attachments/assets/22e61d91-50b4-48f2-bba7-28ef45b45ee5)
+## 📋 Usage Examples
 
-Expand Cookies section and select the "https://www.deezer.com". Find the "arl" cookie and double-click the "Cookie Value" tab's text.
+### Download a Playlist
+1. Search for the playlist or paste its Spotify URL
+2. Click the download button
+3. Monitor progress in the real-time queue
 
-![image](https://github.com/user-attachments/assets/75a67906-596e-42a0-beb0-540f2748b16e)
+### Monitor an Artist
+1. Search for the artist
+2. Click "Add to Watchlist" 
+3. Configure which release types to monitor (albums, singles, etc.)
+4. New releases will be automatically downloaded
 
-Copy that value and paste it into the correspondant setting in Spotizerr
+### Bulk Download an Artist's Discography
+1. Go to the artist page
+2. Select release types (albums, singles, compilations)
+3. Click "Download Discography"
+4. All albums will be queued automatically
 
-#### Firefox-based browsers
+## 🔍 Advanced Features
 
-Open the [web player](https://www.deezer.com/)
+### Custom File Naming
+Configure how files and folders are named:
+- `%artist%/%album%/%tracknum%. %title%`
+- `%ar_album%/%album% (%year%)/%title%`
+- Support for track numbers, artists, albums, years, and more
 
-There, press F12 and select "Storage"
+### Quality Settings
+- **Spotify**: OGG 96k, 160k, and 320k (320k requires Premium)
+- **Deezer**: MP3 128k, MP3 320k (sometimes requires Premium), and FLAC (Premium only)
+- **Conversion**: Convert to any supported format with custom bitrate
 
-![image](https://github.com/user-attachments/assets/601be3fb-1ec9-44d9-be4f-28b1d853df2f)
+### Fallback System
+- Configure primary and fallback services
+- Automatically switches if primary service fails
+- Useful for geographic restrictions or account limits
 
-Click the cookies host "https://www.deezer.com" and find the "arl" cookie.
+### Real-time Mode
+- **Spotify only**: Matches track length with download time for optimal timing
 
-![image](https://github.com/user-attachments/assets/ef8ea256-2c13-4780-ae9f-71527466df56)
 
-Copy that value and paste it into the correspondant setting in Spotizerr
+## 📊 System Requirements
 
-## Usage
+### Minimum
+- 1 CPU core
+- 512MB RAM
+- 10GB storage space
+- Docker support
 
-### Basic Operations
-1. **Search**:
-   - Enter query in search bar
-   - Select result type (Track/Album/Playlist/Artist)
-   - Click search button or press Enter
+### Recommended
+- 2+ CPU cores
+- 2GB+ RAM
+- 50GB+ storage space
+- SSD for better performance
 
-2. **Download**:
-   - Click download button on any result
-      - For artists, you can select a specific subset of albums you want to download
-   - Monitor progress in queue sidebar
+## 🆘 Support & Troubleshooting
 
-3. **Direct URLs**:
-   - Paste Spotify URLs directly into search
-   - Supports tracks, albums, playlists and artists (this will download the whole discogrpahy, you've been warned)
+### Common Issues
 
-### Advanced Features
-- **Fallback System**:
-  - Enable in settings
-  - Uses Deezer as primary when downloading with Spotify fallback
-
-- **Multiple Accounts**:
-  - Manage credentials in settings
-  - Switch active accounts per service
-
-- **Quality selector**
-   - For spotify: OGG 96k, 160k and 320k (premium only)
-   - For deezer: MP3 128k, MP3 320k (sometimes premium, it varies) and FLAC (premium only)
-
-- **Customizable formatting**:
-   - Track number padding (01. Track or 1. Track)
-  - Adjust retry parameters (max attempts, delay, delay increase)
-
-- **Watching artits/playlists**
-   - Start watching a spotify playlist and its tracks will be downloaded dynamically as it updates.
-   - Start watching a spotify artist and their albums will be automatically downloaded, never miss a release!
-
-## Troubleshooting
-
-**Common Issues**:
+**Downloads not starting?**
+- Check that service accounts are configured correctly
+- Verify API credentials are valid
+- Ensure sufficient storage space
 - "No accounts available" error: Add credentials in settings
-- Download failures: Check credential validity
-- Queue stalls: Verify service connectivity
-- Audiokey related: Spotify rate limit, let it cooldown about 30 seconds and click retry
-- API errors: Ensure your Spotify client ID and client secret are correctly entered
 
-**Log Locations**:
-- Application Logs: `docker logs spotizerr` (for main app and Celery workers)
-- Individual Task Logs: `./logs/tasks/` (inside the container, maps to your volume)
+**Download failures?**
+- Check credential validity and account status
+- Audiokey related errors: Spotify rate limit, wait ~30 seconds and retry
+- API errors: Ensure Spotify Client ID and Secret are correct
+
+**Watch system not working?**
+- Enable the watch system in settings
+- Check watch intervals aren't too frequent
+- Verify items are properly added to watchlist
+
+**Authentication problems?**
+- Check JWT secret is set
+- Verify SSO credentials if using
+- Clear browser cache and cookies
+
+**Queue stalling?**
+- Verify service connectivity
+- Check for network issues
+
+### Logs
+Access logs via Docker:
+```bash
+docker logs spotizerr
+```
+
+**Log Locations:**
+- Application Logs: `docker logs spotizerr` (main app and Celery workers)
+- Individual Task Logs: `./logs/tasks/` (inside container, maps to your volume)
 - Credentials: `./data/creds/`
 - Configuration Files: `./data/config/`
 - Downloaded Music: `./downloads/`
 - Watch Feature Database: `./data/watch/`
 - Download History Database: `./data/history/`
-- Spotify Token Cache: `./.cache/` (if `SPOTIPY_CACHE_PATH` is set to `/app/cache/.cache` and mapped)
+- Spotify Token Cache: `./.cache/` (if `SPOTIPY_CACHE_PATH` is mapped)
 
-## Notes
+## 🤝 Contributing
 
-- This app has no way of authentication, if you plan on exposing it, put a security layer on top of it (such as cloudflare tunnel, authelia or just leave it accessible only through a vpn)
-- Credentials are stored in plaintext - secure your installation
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the GPL yada yada, see [LICENSE](LICENSE) file for details.
+
+## ⚠️ Important Notes
+
+- **Credentials stored in plaintext** - Secure your installation appropriately
+- **Service limitations apply** - Account tier restrictions and geographic limitations
+
+### Legal Disclaimer
+This software is for educational purposes and personal use only. Ensure you comply with the terms of service of Spotify, Deezer, and any other services you use. Respect copyright laws and only download content you have the right to access.
+
+### File Handling
 - Downloaded files retain original metadata
 - Service limitations apply based on account types
 
-# Acknowledgements
+## 🙏 Acknowledgements
 
-- This project was inspired by the amazing [deezspot library](https://github.com/jakiepari/deezspot), although their creators are in no way related with Spotizerr, they still deserve credit.
+This project was inspired by the amazing [deezspot library](https://github.com/jakiepari/deezspot). Although their creators are in no way related to Spotizerr, they still deserve credit for their excellent work. 
