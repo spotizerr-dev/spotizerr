@@ -271,7 +271,7 @@ if __name__ == "__main__":
     # Run with uvicorn
     uvicorn.run(
         app,
-        host="0.0.0.0",
+        host="${HOST:-0.0.0.0}",
         port=7171,
         log_level="info",
         access_log=True
