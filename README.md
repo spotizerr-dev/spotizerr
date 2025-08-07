@@ -37,16 +37,13 @@ If you self-host a music server with other users than yourself, you almost certa
 - **Spotify URL Support** - Paste any Spotify URL directly to queue downloads
 
 ### 📱 **Modern Web Interface**
-- **Progressive Web App (PWA)** - Install as a native client on mobile/desktop
-- **Real-time Progress Tracking** - Live download progress with bandwidth and ETA
-- **Responsive Design** - Optimized for both mobile and desktop use
+- **Progressive Web App (PWA)** - Install as a native client on mobile/desktop (installation process may vary depending on the browser/device)
 - **Multiple Themes** - Light, dark, and system themes
 - **Touch-friendly** - Swipe gestures and mobile-optimized controls
 
 ### 🤖 **Intelligent Monitoring**
-- **Playlist Watching** - Automatically download new tracks added to playlists
+- **Playlist Watching** - Automatically download new tracks added to Spotify playlists
 - **Artist Watching** - Monitor artists for new releases and download them automatically
-- **Smart Change Detection** - Only processes new content using Spotify's snapshot system
 - **Configurable Intervals** - Set how often to check for updates
 - **Manual Triggers** - Force immediate checks when needed
 
@@ -58,11 +55,9 @@ If you self-host a music server with other users than yourself, you almost certa
 - **Cancellation Support** - Cancel individual downloads or clear entire queue
 
 ### 🔧 **Extensive Configuration**
-- **Multiple Services** - Support for both Spotify and Deezer premium accounts
-- **Quality Control** - Configure audio quality per service
-- **Format Options** - Convert to MP3, FLAC, AAC, OGG, OPUS, WAV, ALAC
+- **Quality Control** - Configure audio quality per service (limitations per account tier apply)
+- **Format Options** - Convert to MP3, FLAC, AAC, OGG, OPUS, WAV, ALAC in various bitrates
 - **Custom Naming** - Flexible file and folder naming patterns
-- **Fallback System** - Use alternative service if primary fails
 - **Content Filtering** - Hide explicit content if desired
 
 ### 📊 **Comprehensive History**
@@ -74,17 +69,8 @@ If you self-host a music server with other users than yourself, you almost certa
 
 ### 👥 **Multi-User Support**
 - **User Authentication** - Secure login system with JWT tokens
-- **Role-Based Access** - Admin and regular user roles
 - **SSO Integration** - Single Sign-On with Google and GitHub
 - **Admin Panel** - User management and system configuration
-- **Individual Profiles** - Personal settings and download history per user
-
-### 🔒 **Security & Privacy**
-- **Self-Hosted** - Your data stays on your server
-- **Encrypted Credentials** - Secure storage of service accounts
-- **Access Control** - Granular permissions and admin-only features
-- **Session Management** - Secure token handling with configurable expiration
-- **HTTPS Ready** - Full HTTPS support for production deployment
 
 ## 🚀 Quick Start
 
@@ -107,9 +93,9 @@ If you self-host a music server with other users than yourself, you almost certa
    # Update all variables (e.g. Redis credentials, PUID/PGID, UMASK)
    ```
 
-3. **Copy docker-compose.yml**
+3. **Copy docker-compose.yaml**
    ```bash
-   # Download docker-compose.yml from the repository
+   # Download docker-compose.yaml from the repository
    ```
 
 4. **Start the application**
@@ -117,11 +103,8 @@ If you self-host a music server with other users than yourself, you almost certa
    docker compose up -d
    ```
 
-5. **Access the interface**
-   - Open `http://localhost:7171` in your browser
-   - Complete initial setup and add your service accounts
-
-_Note: An UnRAID template is available in the file spotizerr.xml_
+5. **Next steps**
+   - Before doing anything, it is recommended to go straight to [Configuration](#-configuration)
 
 ### Environment Variables
 
