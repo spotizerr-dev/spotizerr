@@ -136,22 +136,16 @@ FRONTEND_URL=http://localhost:7171
 
 ### Service Accounts Setup
 
-1. **Add Spotify API Credentials**
-   - Go to Settings → Server → Spotify API Configuration
-   - Add your Spotify Client ID and Secret
+1. **Spotify setup**
+   - Spotify is very restrictive, so use the [spotizerr-auth](https://github.com/Xoconoch/spotizerr-auth) tool on a computer with the spotify client installed to simplify this part of the setup.
 
-2. **Add Spotify Premium Accounts**
-   - Navigate to Settings → Accounts
-   - Add your Spotify Premium credentials
-   - **Important**: Spotify is very restrictive, so use the [spotizerr-auth](https://github.com/Xoconoch/spotizerr-auth) tool to simplify this setup
-
-3. **Add Deezer Premium Accounts (Optional)**
+2. **Deezer setup (Optional but recommended for better stability, even if it's a free account)**
    - Get your Deezer ARL token:
      - **Chrome/Edge**: Open [Deezer](https://www.deezer.com/), press F12 → Application → Cookies → "https://www.deezer.com" → Copy "arl" value
      - **Firefox**: Open [Deezer](https://www.deezer.com/), press F12 → Storage → Cookies → "https://www.deezer.com" → Copy "arl" value
    - Add the ARL token in Settings → Accounts
 
-4. **Configure Download Settings**
+3. **Configure Download Settings**
    - Set audio quality preferences
    - Configure output format and naming
    - Adjust concurrent download limits
@@ -207,21 +201,6 @@ Configure how files and folders are named:
 
 ### Real-time Mode
 - **Spotify only**: Matches track length with download time for optimal timing
-
-
-## 📊 System Requirements
-
-### Minimum
-- 1 CPU core
-- 512MB RAM
-- 10GB storage space
-- Docker support
-
-### Recommended
-- 2+ CPU cores
-- 2GB+ RAM
-- 50GB+ storage space
-- SSD for better performance
 
 ## 🆘 Support & Troubleshooting
 
