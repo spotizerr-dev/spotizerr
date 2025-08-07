@@ -8,11 +8,23 @@ A self-hosted music download manager with a lossless twist. Download everything 
 
 ## Why?
 
-If you self-host a music server with other users than yourself, you almost certainly have realized that the process of adding requested items to the library is not without its friction; no matter how automated your flow is, unless your users are tech-savvy enough to do it themselves, chances are the process always needs some type of manual intervention from you, be it to rip the CDs yourself, tag some random files from youtube, etc. Well, no more! Spotizerr allows for your users to access a nice little frontend where they can add whatever they want to the library without bothering you. What's that? You want some screenshots? Sure, why not:
+If you self-host a music server with other users than yourself, you almost certainly have realized that the process of adding requested items to the library is not without its friction. No matter how automated your flow is, unless your users are tech-savvy enough to do it themselves, chances are the process always needs some type of manual intervention from you, be it to rip the CDs yourself, tag some random files from youtube, etc. No more! Spotizerr allows for your users to access a nice little frontend where they can add whatever they want to the library without bothering you. What's that? You want some screenshots? Sure, why not:
 
 <details>
   <summary>Main page</summary>
-  <img src="">
+  <img width="393" height="743" alt="image" src="https://github.com/user-attachments/assets/f60e6c51-2ab2-4c4f-8572-a4c43e781758" />
+</details>
+<details>
+  <summary>Search results</summary>
+  <img width="385" height="740" alt="image" src="https://github.com/user-attachments/assets/0208e063-092e-4538-b092-5b1ede57fc58" />
+</details>
+<details>
+  <summary>Track view</summary>
+  <img width="1632" height="946" alt="image" src="https://github.com/user-attachments/assets/7a2f8240-a3ab-4b71-a772-f983d6bfd691" />
+</details>
+<details>
+  <summary>Download history</summary>
+  <img width="1588" height="994" alt="image" src="https://github.com/user-attachments/assets/e34d7dbb-29e3-4d75-bcbd-0cee03fa57dc" />
 </details>
 
 ## ✨ Key Features
