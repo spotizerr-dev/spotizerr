@@ -76,8 +76,8 @@ If you self-host a music server with other users than yourself, you almost certa
 
 ### Prerequisites
 - Docker and Docker Compose
-- Spotify Premium account(s)
-- Deezer Premium account(s) (optional)
+- Spotify account(s)
+- Deezer account(s) (optional, but recommended)
 - Spotify API credentials (Client ID & Secret from Spotify Developer Dashboard)
 
 ### Installation
@@ -105,32 +105,6 @@ If you self-host a music server with other users than yourself, you almost certa
 
 5. **Next steps**
    - Before doing anything, it is recommended to go straight to [Configuration](#-configuration)
-
-### Environment Variables
-
-```bash
-# Authentication (optional but recommended)
-ENABLE_AUTH=true
-DISABLE_REGISTRATION=false
-JWT_SECRET=your-super-secret-jwt-key-change-in-production
-
-# SSO (optional)
-SSO_ENABLED=true
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GITHUB_CLIENT_ID=your-github-client-id
-GITHUB_CLIENT_SECRET=your-github-client-secret
-
-# Default admin (when auth is enabled)
-DEFAULT_ADMIN_USERNAME=admin
-DEFAULT_ADMIN_PASSWORD=admin123
-
-# Content filtering
-EXPLICIT_FILTER=false
-
-# Frontend URL (for SSO redirects)
-FRONTEND_URL=http://localhost:7171
-```
 
 ## 🔧 Configuration
 
