@@ -4,11 +4,20 @@ As of 2025, Spotify pays an average of $0.005 per stream to the artist. That mea
 
 # Spotizerr
 
-A self-hosted music download manager with automatic monitoring and real-time progress tracking. Download individual tracks, complete albums, playlists, or entire artist discographies from Spotify and Deezer.
+A self-hosted music download manager with a lossless twist. Download everything from Spotify, and if it happens to also be on Deezer, download from there so you get those tasty FLACs.
+
+## Why?
+
+If you self-host a music server with other users than yourself, you almost certainly have realized that the process of adding requested items to the library is not without its friction; no matter how automated your flow is, unless your users are tech-savvy enough to do it themselves, chances are the process always needs some type of manual intervention from you, be it to rip the CDs yourself, tag some random files from youtube, etc. Well, no more! Spotizerr allows for your users to access a nice little frontend where they can add whatever they want to the library without bothering you. What's that? You want some screenshots? Sure, why not:
+
+<details>
+  <summary>Main page</summary>
+  <img src="" alt="Hidden image">
+</details>
 
 ## ✨ Key Features
 
-### 🎵 **Comprehensive Download Support**
+### 🎵 **Granular download support**
 - **Individual Tracks** - Download any single track
 - **Complete Albums** - Download entire albums with proper metadata
 - **Full Playlists** - Download complete playlists (even massive ones with 1000+ tracks)
@@ -16,7 +25,7 @@ A self-hosted music download manager with automatic monitoring and real-time pro
 - **Spotify URL Support** - Paste any Spotify URL directly to queue downloads
 
 ### 📱 **Modern Web Interface**
-- **Progressive Web App (PWA)** - Install as a native app on mobile/desktop
+- **Progressive Web App (PWA)** - Install as a native client on mobile/desktop
 - **Real-time Progress Tracking** - Live download progress with bandwidth and ETA
 - **Responsive Design** - Optimized for both mobile and desktop use
 - **Multiple Themes** - Light, dark, and system themes
