@@ -12,7 +12,7 @@ If you self-host a music server with other users than yourself, you almost certa
 
 <details>
   <summary>Main page</summary>
-  <img src="" alt="Hidden image">
+  <img src="">
 </details>
 
 ## ✨ Key Features
