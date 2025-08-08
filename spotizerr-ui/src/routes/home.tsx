@@ -2,10 +2,26 @@ import { useState, useEffect, useMemo, useContext, useCallback, useRef } from "r
 import { useNavigate, useSearch, useRouterState } from "@tanstack/react-router";
 import { useDebounce } from "use-debounce";
 import { toast } from "sonner";
-import type { TrackType, AlbumType, ArtistType, PlaylistType, SearchResult } from "@/types/spotify";
+import type { TrackType, AlbumType, SearchResult } from "@/types/spotify";
 import { QueueContext } from "@/contexts/queue-context";
 import { SearchResultCard } from "@/components/SearchResultCard";
 import { indexRoute } from "@/router";
+
+// Utility function to safely get properties from search results
+const safelyGetProperty = <T,>(obj: any, path: string[], fallback: T): T => {
+  try {
+    let current = obj;
+    for (const key of path) {
+      if (current == null || typeof current !== 'object') {
+        return fallback;
+      }
+      current = current[key];
+    }
+    return current ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 const PAGE_SIZE = 12;
 
@@ -23,6 +39,41 @@ export const Home = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const context = useContext(QueueContext);
   const loaderRef = useRef<HTMLDivElement | null>(null);
+
+  // Prevent scrolling on mobile only when there are no results (empty state)
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768; // md breakpoint
+    if (!isMobile) return;
+
+    // Only prevent scrolling when there are no results to show
+    const shouldPreventScroll = !isLoading && displayedResults.length === 0 && !query.trim();
+
+    if (!shouldPreventScroll) return;
+
+    // Store original styles
+    const originalOverflow = document.body.style.overflow;
+    const originalHeight = document.body.style.height;
+    
+    // Find the mobile main content container
+    const mobileMain = document.querySelector('.pwa-main') as HTMLElement;
+    const originalMainOverflow = mobileMain?.style.overflow;
+
+    // Prevent body and main container scrolling on mobile when empty
+    document.body.style.overflow = 'hidden';
+    document.body.style.height = '100vh';
+    if (mobileMain) {
+      mobileMain.style.overflow = 'hidden';
+    }
+
+    // Cleanup function
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.height = originalHeight;
+      if (mobileMain) {
+        mobileMain.style.overflow = originalMainOverflow;
+      }
+    };
+  }, [isLoading, displayedResults.length, query]);
 
   useEffect(() => {
     navigate({ search: (prev) => ({ ...prev, q: debouncedQuery, type: searchType }) });
@@ -92,24 +143,32 @@ export const Home = () => {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {displayedResults.map((item) => {
+          // Add safety checks for essential properties
+          if (!item || !item.id || !item.name || !item.model) {
+            return null;
+          }
+
           let imageUrl;
           let onDownload;
           let subtitle;
 
           if (item.model === "track") {
-            imageUrl = (item as TrackType).album?.images?.[0]?.url;
+            imageUrl = safelyGetProperty(item, ['album', 'images', '0', 'url'], undefined);
             onDownload = () => handleDownloadTrack(item as TrackType);
-            subtitle = (item as TrackType).artists?.map((a) => a.name).join(", ");
+            const artists = safelyGetProperty(item, ['artists'], []);
+            subtitle = Array.isArray(artists) ? artists.map((a: any) => safelyGetProperty(a, ['name'], 'Unknown')).join(", ") : "Unknown Artist";
           } else if (item.model === "album") {
-            imageUrl = (item as AlbumType).images?.[0]?.url;
+            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
             onDownload = () => handleDownloadAlbum(item as AlbumType);
-            subtitle = (item as AlbumType).artists?.map((a) => a.name).join(", ");
+            const artists = safelyGetProperty(item, ['artists'], []);
+            subtitle = Array.isArray(artists) ? artists.map((a: any) => safelyGetProperty(a, ['name'], 'Unknown')).join(", ") : "Unknown Artist";
           } else if (item.model === "artist") {
-            imageUrl = (item as ArtistType).images?.[0]?.url;
+            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
             subtitle = "Artist";
           } else if (item.model === "playlist") {
-            imageUrl = (item as PlaylistType).images?.[0]?.url;
-            subtitle = `By ${(item as PlaylistType).owner?.display_name || "Unknown"}`;
+            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
+            const ownerName = safelyGetProperty(item, ['owner', 'display_name'], 'Unknown');
+            subtitle = `By ${ownerName}`;
           }
 
           return (
@@ -123,26 +182,28 @@ export const Home = () => {
               onDownload={onDownload}
             />
           );
-        })}
+        }).filter(Boolean)} {/* Filter out null components */}
       </div>
     );
   }, [displayedResults, handleDownloadTrack, handleDownloadAlbum]);
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Search Spotify</h1>
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+    <div className="max-w-4xl mx-auto h-full flex flex-col md:p-4">
+      <div className="text-center mb-4 md:mb-8 px-4 md:px-0">
+        <h1 className="text-2xl font-bold text-content-primary dark:text-content-primary-dark">Spotizerr</h1>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-3 mb-4 md:mb-6 px-4 md:px-0 flex-shrink-0">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search for a track, album, or artist"
-          className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         />
         <select
           value={searchType}
           onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")}
-          className="p-2 border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         >
           <option value="track">Track</option>
           <option value="album">Album</option>
@@ -150,15 +211,20 @@ export const Home = () => {
           <option value="playlist">Playlist</option>
         </select>
       </div>
-      {isLoading ? (
-        <p className="text-center my-4">Loading results...</p>
-      ) : (
-        <>
-          {resultComponent}
-          <div ref={loaderRef} />
-          {isLoadingMore && <p className="text-center my-4">Loading more results...</p>}
-        </>
-      )}
+      <div className={`flex-1 px-4 md:px-0 pb-4 ${
+        // Only restrict overflow on mobile when there are results, otherwise allow normal behavior
+        displayedResults.length > 0 ? 'overflow-y-auto md:overflow-visible' : ''
+      }`}>
+        {isLoading ? (
+          <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading results...</p>
+        ) : (
+          <>
+            {resultComponent}
+            <div ref={loaderRef} />
+            {isLoadingMore && <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>}
+          </>
+        )}
+      </div>
     </div>
   );
 };

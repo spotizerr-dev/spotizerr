@@ -1,8 +1,8 @@
 import { useForm, type SubmitHandler } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 // --- Type Definitions ---
 interface DownloadSettings {
@@ -23,6 +23,16 @@ interface DownloadSettings {
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
 }
 
+interface WatchConfig {
+  enabled: boolean;
+  interval: number;
+  playlists: string[];
+}
+
+interface Credential {
+  name: string;
+}
+
 interface DownloadsTabProps {
   config: DownloadSettings;
   isLoading: boolean;
@@ -40,13 +50,44 @@ const CONVERSION_FORMATS: Record<string, string[]> = {
 
 // --- API Functions ---
 const saveDownloadConfig = async (data: Partial<DownloadSettings>) => {
-  const { data: response } = await apiClient.post("/config", data);
+  const { data: response } = await authApiClient.client.post("/config", data);
   return response;
+};
+
+const fetchWatchConfig = async (): Promise<WatchConfig> => {
+  const { data } = await authApiClient.client.get("/config/watch");
+  return data;
+};
+
+const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credential[]> => {
+  const { data } = await authApiClient.client.get<string[]>(`/credentials/${service}`);
+  return data.map((name) => ({ name }));
 };
 
 // --- Component ---
 export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   const queryClient = useQueryClient();
+  const [validationError, setValidationError] = useState<string>("");
+
+  // Fetch watch config
+  const { data: watchConfig } = useQuery({
+    queryKey: ["watchConfig"],
+    queryFn: fetchWatchConfig,
+    staleTime: 30000, // 30 seconds
+  });
+
+  // Fetch credentials for fallback validation
+  const { data: spotifyCredentials } = useQuery({
+    queryKey: ["credentials", "spotify"],
+    queryFn: () => fetchCredentials("spotify"),
+    staleTime: 30000,
+  });
+
+  const { data: deezerCredentials } = useQuery({
+    queryKey: ["credentials", "deezer"], 
+    queryFn: () => fetchCredentials("deezer"),
+    staleTime: 30000,
+  });
 
   const mutation = useMutation({
     mutationFn: saveDownloadConfig,
@@ -70,8 +111,48 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   }, [config, reset]);
 
   const selectedFormat = watch("convertTo");
+  const realTime = watch("realTime");
+  const fallback = watch("fallback");
+
+  // Validation effect for watch + download method requirement
+  useEffect(() => {
+    let error = "";
+    
+    // Check watch requirements
+    if (watchConfig?.enabled && !realTime && !fallback) {
+      error = "When watch is enabled, either Real-time downloading or Download Fallback (or both) must be enabled.";
+    }
+    
+    // Check fallback account requirements
+    if (fallback && (!spotifyCredentials?.length || !deezerCredentials?.length)) {
+      const missingServices: string[] = [];
+      if (!spotifyCredentials?.length) missingServices.push("Spotify");
+      if (!deezerCredentials?.length) missingServices.push("Deezer");
+      error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
+    }
+    
+    setValidationError(error);
+  }, [watchConfig?.enabled, realTime, fallback, spotifyCredentials?.length, deezerCredentials?.length]);
 
   const onSubmit: SubmitHandler<DownloadSettings> = (data) => {
+    // Check watch requirements
+    if (watchConfig?.enabled && !data.realTime && !data.fallback) {
+      setValidationError("When watch is enabled, either Real-time downloading or Download Fallback (or both) must be enabled.");
+      toast.error("Validation failed: Watch requires at least one download method to be enabled.");
+      return;
+    }
+
+    // Check fallback account requirements
+    if (data.fallback && (!spotifyCredentials?.length || !deezerCredentials?.length)) {
+      const missingServices: string[] = [];
+      if (!spotifyCredentials?.length) missingServices.push("Spotify");
+      if (!deezerCredentials?.length) missingServices.push("Deezer");
+      const error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
+      setValidationError(error);
+      toast.error("Validation failed: " + error);
+      return;
+    }
+
     mutation.mutate({
       ...data,
       maxConcurrentDownloads: Number(data.maxConcurrentDownloads),
@@ -89,36 +170,67 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       {/* Download Settings */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Download Behavior</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Download Behavior</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="maxConcurrentDownloads">Max Concurrent Downloads</label>
+          <label htmlFor="maxConcurrentDownloads" className="text-content-primary dark:text-content-primary-dark">Max Concurrent Downloads</label>
           <input
             id="maxConcurrentDownloads"
             type="number"
             min="1"
             {...register("maxConcurrentDownloads")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex items-center justify-between">
-          <label htmlFor="realTimeToggle">Real-time downloading</label>
+          <label htmlFor="realTimeToggle" className="text-content-primary dark:text-content-primary-dark">Real-time downloading</label>
           <input id="realTimeToggle" type="checkbox" {...register("realTime")} className="h-6 w-6 rounded" />
         </div>
         <div className="flex items-center justify-between">
-          <label htmlFor="fallbackToggle">Download Fallback</label>
+          <label htmlFor="fallbackToggle" className="text-content-primary dark:text-content-primary-dark">Download Fallback</label>
           <input id="fallbackToggle" type="checkbox" {...register("fallback")} className="h-6 w-6 rounded" />
         </div>
+        
+        {/* Watch validation info */}
+        {watchConfig?.enabled && (
+          <div className="p-3 bg-info/10 border border-info/20 rounded-lg">
+            <p className="text-sm text-info font-medium mb-1">
+              Watch is currently enabled
+            </p>
+            <p className="text-xs text-content-muted dark:text-content-muted-dark">
+              At least one download method (Real-time or Fallback) must be enabled when using watch functionality.
+            </p>
+          </div>
+        )}
+        
+        {/* Fallback account requirements info */}
+        {fallback && (!spotifyCredentials?.length || !deezerCredentials?.length) && (
+          <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
+            <p className="text-sm text-warning font-medium mb-1">
+              Fallback accounts required
+            </p>
+            <p className="text-xs text-content-muted dark:text-content-muted-dark">
+              Download Fallback requires accounts for both Spotify and Deezer. Configure missing accounts in the Accounts tab.
+            </p>
+          </div>
+        )}
+        
+        {/* Validation error display */}
+        {validationError && (
+          <div className="p-3 bg-error/10 border border-error/20 rounded-lg">
+            <p className="text-sm text-error font-medium">{validationError}</p>
+          </div>
+        )}
       </div>
 
       {/* Source Quality Settings */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Source Quality</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Source Quality</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="spotifyQuality">Spotify Quality</label>
+          <label htmlFor="spotifyQuality" className="text-content-primary dark:text-content-primary-dark">Spotify Quality</label>
           <select
             id="spotifyQuality"
             {...register("spotifyQuality")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="NORMAL">OGG 96kbps</option>
             <option value="HIGH">OGG 160kbps</option>
@@ -126,31 +238,31 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="deezerQuality">Deezer Quality</label>
+          <label htmlFor="deezerQuality" className="text-content-primary dark:text-content-primary-dark">Deezer Quality</label>
           <select
             id="deezerQuality"
             {...register("deezerQuality")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="MP3_128">MP3 128kbps</option>
             <option value="MP3_320">MP3 320kbps</option>
             <option value="FLAC">FLAC (HiFi)</option>
           </select>
         </div>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">
           This sets the quality of the original download. Conversion settings below are applied after download.
         </p>
       </div>
 
       {/* Conversion Settings */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Conversion</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Conversion</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="convertToSelect">Convert To Format</label>
+          <label htmlFor="convertToSelect" className="text-content-primary dark:text-content-primary-dark">Convert To Format</label>
           <select
             id="convertToSelect"
             {...register("convertTo")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="">No Conversion</option>
             {Object.keys(CONVERSION_FORMATS).map((format) => (
@@ -161,11 +273,11 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           </select>
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="bitrateSelect">Bitrate</label>
+          <label htmlFor="bitrateSelect" className="text-content-primary dark:text-content-primary-dark">Bitrate</label>
           <select
             id="bitrateSelect"
             {...register("bitrate")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
             disabled={!selectedFormat || CONVERSION_FORMATS[selectedFormat]?.length === 0}
           >
             <option value="">Auto</option>
@@ -180,43 +292,43 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
 
       {/* Retry Options */}
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Retries</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Retries</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="maxRetries">Max Retry Attempts</label>
+          <label htmlFor="maxRetries" className="text-content-primary dark:text-content-primary-dark">Max Retry Attempts</label>
           <input
             id="maxRetries"
             type="number"
             min="0"
             {...register("maxRetries")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="retryDelaySeconds">Initial Retry Delay (s)</label>
+          <label htmlFor="retryDelaySeconds" className="text-content-primary dark:text-content-primary-dark">Initial Retry Delay (s)</label>
           <input
             id="retryDelaySeconds"
             type="number"
             min="1"
             {...register("retryDelaySeconds")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="retryDelayIncrease">Retry Delay Increase (s)</label>
+          <label htmlFor="retryDelayIncrease" className="text-content-primary dark:text-content-primary-dark">Retry Delay Increase (s)</label>
           <input
             id="retryDelayIncrease"
             type="number"
             min="0"
             {...register("retryDelayIncrease")}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
       </div>
 
       <button
         type="submit"
-        disabled={mutation.isPending}
-        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+        disabled={mutation.isPending || !!validationError}
+        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
       >
         {mutation.isPending ? "Saving..." : "Save Download Settings"}
       </button>

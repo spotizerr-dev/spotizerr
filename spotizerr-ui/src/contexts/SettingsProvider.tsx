@@ -1,7 +1,8 @@
 import { type ReactNode } from "react";
-import apiClient from "../lib/api-client";
+import { authApiClient } from "../lib/api-client";
 import { SettingsContext, type AppSettings } from "./settings-context";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "./auth-context";
 
 // --- Case Conversion Utility ---
 // This is added here to simplify the fix and avoid module resolution issues.
@@ -100,36 +101,52 @@ interface FetchedCamelCaseSettings {
 }
 
 const fetchSettings = async (): Promise<FlatAppSettings> => {
-  const [{ data: generalConfig }, { data: watchConfig }] = await Promise.all([
-    apiClient.get("/config"),
-    apiClient.get("/config/watch"),
-  ]);
+  try {
+    const [{ data: generalConfig }, { data: watchConfig }] = await Promise.all([
+      authApiClient.client.get("/config"),
+      authApiClient.client.get("/config/watch"),
+    ]);
 
-  const combinedConfig = {
-    ...generalConfig,
-    watch: watchConfig,
-  };
+    const combinedConfig = {
+      ...generalConfig,
+      watch: watchConfig,
+    };
 
-  // Transform the keys before returning the data
-  const camelData = convertKeysToCamelCase(combinedConfig) as FetchedCamelCaseSettings;
+    // Transform the keys before returning the data
+    const camelData = convertKeysToCamelCase(combinedConfig) as FetchedCamelCaseSettings;
 
-  return camelData as unknown as FlatAppSettings;
+    return camelData as unknown as FlatAppSettings;
+  } catch (error: any) {
+    // If we get authentication errors, return default settings
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.log("Authentication required for config access, using default settings");
+      return defaultSettings;
+    }
+    // Re-throw other errors for React Query to handle
+    throw error;
+  }
 };
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const { isLoading, authEnabled, isAuthenticated, user } = useAuth();
+  
+  // Only fetch settings when auth is ready and user is admin (or auth is disabled)
+  const shouldFetchSettings = !isLoading && (!authEnabled || (isAuthenticated && user?.role === "admin"));
+  
   const {
     data: settings,
-    isLoading,
+    isLoading: isSettingsLoading,
     isError,
   } = useQuery({
     queryKey: ["config"],
     queryFn: fetchSettings,
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: false,
+    enabled: shouldFetchSettings, // Only run query when auth is ready and user is admin
   });
 
   // Use default settings on error to prevent app crash
-  const value = { settings: isError ? defaultSettings : settings || null, isLoading };
+  const value = { settings: isError ? defaultSettings : settings || null, isLoading: isSettingsLoading };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

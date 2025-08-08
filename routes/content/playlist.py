@@ -1,4 +1,5 @@
-from flask import Blueprint, Response, request, jsonify
+from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.responses import JSONResponse
 import json
 import traceback
 import logging  # Added logging import
@@ -29,39 +30,43 @@ from routes.utils.watch.manager import (
 )  # For manual trigger & config
 from routes.utils.errors import DuplicateDownloadError
 
+# Import authentication dependencies
+from routes.auth.middleware import require_auth_from_state, require_admin_from_state, User
+
 logger = logging.getLogger(__name__)  # Added logger initialization
-playlist_bp = Blueprint("playlist", __name__, url_prefix="/api/playlist")
+router = APIRouter()
 
 
-@playlist_bp.route("/download/<playlist_id>", methods=["GET"])
-def handle_download(playlist_id):
+def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
+    """Construct a Spotify URL for a given item ID and type."""
+    return f"https://open.spotify.com/{item_type}/{item_id}"
+
+
+@router.get("/download/{playlist_id}")
+async def handle_download(playlist_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     # Retrieve essential parameters from the request.
     # name = request.args.get('name') # Removed
     # artist = request.args.get('artist') # Removed
-    orig_params = request.args.to_dict()
+    orig_params = dict(request.query_params)
 
     # Construct the URL from playlist_id
-    url = f"https://open.spotify.com/playlist/{playlist_id}"
-    orig_params["original_url"] = (
-        request.url
-    )  # Update original_url to the constructed one
+    url = construct_spotify_url(playlist_id, "playlist")
+    orig_params["original_url"] = str(request.url)  # Update original_url to the constructed one
 
-    # Fetch metadata from Spotify
+    # Fetch metadata from Spotify using optimized function
     try:
-        playlist_info = get_spotify_info(playlist_id, "playlist")
+        from routes.utils.get_info import get_playlist_metadata
+        playlist_info = get_playlist_metadata(playlist_id)
         if (
             not playlist_info
             or not playlist_info.get("name")
             or not playlist_info.get("owner")
         ):
-            return Response(
-                json.dumps(
-                    {
-                        "error": f"Could not retrieve metadata for playlist ID: {playlist_id}"
-                    }
-                ),
-                status=404,
-                mimetype="application/json",
+            return JSONResponse(
+                content={
+                    "error": f"Could not retrieve metadata for playlist ID: {playlist_id}"
+                },
+                status_code=404
             )
 
         name_from_spotify = playlist_info.get("name")
@@ -70,22 +75,18 @@ def handle_download(playlist_id):
         artist_from_spotify = owner_info.get("display_name", "Unknown Owner")
 
     except Exception as e:
-        return Response(
-            json.dumps(
-                {
-                    "error": f"Failed to fetch metadata for playlist {playlist_id}: {str(e)}"
-                }
-            ),
-            status=500,
-            mimetype="application/json",
+        return JSONResponse(
+            content={
+                "error": f"Failed to fetch metadata for playlist {playlist_id}: {str(e)}"
+            },
+            status_code=500
         )
 
     # Validate required parameters
     if not url:  # This check might be redundant now but kept for safety
-        return Response(
-            json.dumps({"error": "Missing required parameter: url"}),
-            status=400,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": "Missing required parameter: url"},
+            status_code=400
         )
 
     try:
@@ -99,15 +100,12 @@ def handle_download(playlist_id):
             }
         )
     except DuplicateDownloadError as e:
-        return Response(
-            json.dumps(
-                {
-                    "error": "Duplicate download detected.",
-                    "existing_task": e.existing_task,
-                }
-            ),
-            status=409,
-            mimetype="application/json",
+        return JSONResponse(
+            content={
+                "error": "Duplicate download detected.",
+                "existing_task": e.existing_task,
+            },
+            status_code=409
         )
     except Exception as e:
         # Generic error handling for other issues during task submission
@@ -132,62 +130,58 @@ def handle_download(playlist_id):
                 "timestamp": time.time(),
             },
         )
-        return Response(
-            json.dumps(
-                {
-                    "error": f"Failed to queue playlist download: {str(e)}",
-                    "task_id": error_task_id,
-                }
-            ),
-            status=500,
-            mimetype="application/json",
+        return JSONResponse(
+            content={
+                "error": f"Failed to queue playlist download: {str(e)}",
+                "task_id": error_task_id,
+            },
+            status_code=500
         )
 
-    return Response(
-        json.dumps({"task_id": task_id}),
-        status=202,
-        mimetype="application/json",
+    return JSONResponse(
+        content={"task_id": task_id},
+        status_code=202
     )
 
 
-@playlist_bp.route("/download/cancel", methods=["GET"])
-def cancel_download():
+@router.get("/download/cancel")
+async def cancel_download(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Cancel a running playlist download process by its task id.
     """
-    task_id = request.args.get("task_id")
+    task_id = request.query_params.get("task_id")
     if not task_id:
-        return Response(
-            json.dumps({"error": "Missing task id (task_id) parameter"}),
-            status=400,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": "Missing task id (task_id) parameter"},
+            status_code=400
         )
 
     # Use the queue manager's cancellation method.
     result = download_queue_manager.cancel_task(task_id)
     status_code = 200 if result.get("status") == "cancelled" else 404
 
-    return Response(json.dumps(result), status=status_code, mimetype="application/json")
+    return JSONResponse(content=result, status_code=status_code)
 
 
-@playlist_bp.route("/info", methods=["GET"])
-def get_playlist_info():
+@router.get("/info")
+async def get_playlist_info(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve Spotify playlist metadata given a Spotify playlist ID.
     Expects a query parameter 'id' that contains the Spotify playlist ID.
     """
-    spotify_id = request.args.get("id")
+    spotify_id = request.query_params.get("id")
+    include_tracks = request.query_params.get("include_tracks", "false").lower() == "true"
 
     if not spotify_id:
-        return Response(
-            json.dumps({"error": "Missing parameter: id"}),
-            status=400,
-            mimetype="application/json",
+        return JSONResponse(
+            content={"error": "Missing parameter: id"},
+            status_code=400
         )
 
     try:
-        # Import and use the get_spotify_info function from the utility module.
-        playlist_info = get_spotify_info(spotify_id, "playlist")
+        # Use the optimized playlist info function
+        from routes.utils.get_info import get_playlist_info_optimized
+        playlist_info = get_playlist_info_optimized(spotify_id, include_tracks=include_tracks)
 
         # If playlist_info is successfully fetched, check if it's watched
         # and augment track items with is_locally_known status
@@ -208,40 +202,96 @@ def get_playlist_info():
             # If not watched, or no tracks, is_locally_known will not be added, or tracks won't exist to add it to.
             # Frontend should handle absence of this key as false.
 
-        return Response(
-            json.dumps(playlist_info), status=200, mimetype="application/json"
+        return JSONResponse(
+            content=playlist_info, status_code=200
         )
     except Exception as e:
         error_data = {"error": str(e), "traceback": traceback.format_exc()}
-        return Response(json.dumps(error_data), status=500, mimetype="application/json")
+        return JSONResponse(content=error_data, status_code=500)
 
 
-@playlist_bp.route("/watch/<string:playlist_spotify_id>", methods=["PUT"])
-def add_to_watchlist(playlist_spotify_id):
+@router.get("/metadata")
+async def get_playlist_metadata(request: Request, current_user: User = Depends(require_auth_from_state)):
+    """
+    Retrieve only Spotify playlist metadata (no tracks) to avoid rate limiting.
+    Expects a query parameter 'id' that contains the Spotify playlist ID.
+    """
+    spotify_id = request.query_params.get("id")
+
+    if not spotify_id:
+        return JSONResponse(
+            content={"error": "Missing parameter: id"},
+            status_code=400
+        )
+
+    try:
+        # Use the optimized playlist metadata function
+        from routes.utils.get_info import get_playlist_metadata
+        playlist_metadata = get_playlist_metadata(spotify_id)
+
+        return JSONResponse(
+            content=playlist_metadata, status_code=200
+        )
+    except Exception as e:
+        error_data = {"error": str(e), "traceback": traceback.format_exc()}
+        return JSONResponse(content=error_data, status_code=500)
+
+
+@router.get("/tracks")
+async def get_playlist_tracks(request: Request, current_user: User = Depends(require_auth_from_state)):
+    """
+    Retrieve playlist tracks with pagination support for progressive loading.
+    Expects query parameters: 'id' (playlist ID), 'limit' (optional), 'offset' (optional).
+    """
+    spotify_id = request.query_params.get("id")
+    limit = int(request.query_params.get("limit", 50))
+    offset = int(request.query_params.get("offset", 0))
+
+    if not spotify_id:
+        return JSONResponse(
+            content={"error": "Missing parameter: id"},
+            status_code=400
+        )
+
+    try:
+        # Use the optimized playlist tracks function
+        from routes.utils.get_info import get_playlist_tracks
+        tracks_data = get_playlist_tracks(spotify_id, limit=limit, offset=offset)
+
+        return JSONResponse(
+            content=tracks_data, status_code=200
+        )
+    except Exception as e:
+        error_data = {"error": str(e), "traceback": traceback.format_exc()}
+        return JSONResponse(content=error_data, status_code=500)
+
+
+@router.put("/watch/{playlist_spotify_id}")
+async def add_to_watchlist(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Adds a playlist to the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        return jsonify({"error": "Watch feature is currently disabled globally."}), 403
+        raise HTTPException(status_code=403, detail={"error": "Watch feature is currently disabled globally."})
 
     logger.info(f"Attempting to add playlist {playlist_spotify_id} to watchlist.")
     try:
         # Check if already watched
         if get_watched_playlist(playlist_spotify_id):
-            return jsonify(
-                {"message": f"Playlist {playlist_spotify_id} is already being watched."}
-            ), 200
+            return {"message": f"Playlist {playlist_spotify_id} is already being watched."}
 
         # Fetch playlist details from Spotify to populate our DB
-        playlist_data = get_spotify_info(playlist_spotify_id, "playlist")
+        from routes.utils.get_info import get_playlist_metadata
+        playlist_data = get_playlist_metadata(playlist_spotify_id)
         if not playlist_data or "id" not in playlist_data:
             logger.error(
                 f"Could not fetch details for playlist {playlist_spotify_id} from Spotify."
             )
-            return jsonify(
-                {
+            raise HTTPException(
+                status_code=404,
+                detail={
                     "error": f"Could not fetch details for playlist {playlist_spotify_id} from Spotify."
                 }
-            ), 404
+            )
 
         add_playlist_db(playlist_data)  # This also creates the tracks table
 
@@ -256,99 +306,104 @@ def add_to_watchlist(playlist_spotify_id):
         logger.info(
             f"Playlist {playlist_spotify_id} added to watchlist. Its tracks will be processed by the watch manager."
         )
-        return jsonify(
-            {
-                "message": f"Playlist {playlist_spotify_id} added to watchlist. Tracks will be processed shortly."
-            }
-        ), 201
+        return {
+            "message": f"Playlist {playlist_spotify_id} added to watchlist. Tracks will be processed shortly."
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Error adding playlist {playlist_spotify_id} to watchlist: {e}",
             exc_info=True,
         )
-        return jsonify({"error": f"Could not add playlist to watchlist: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"Could not add playlist to watchlist: {str(e)}"})
 
 
-@playlist_bp.route("/watch/<string:playlist_spotify_id>/status", methods=["GET"])
-def get_playlist_watch_status(playlist_spotify_id):
+@router.get("/watch/{playlist_spotify_id}/status")
+async def get_playlist_watch_status(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Checks if a specific playlist is being watched."""
     logger.info(f"Checking watch status for playlist {playlist_spotify_id}.")
     try:
         playlist = get_watched_playlist(playlist_spotify_id)
         if playlist:
-            return jsonify({"is_watched": True, "playlist_data": playlist}), 200
+            return {"is_watched": True, "playlist_data": playlist}
         else:
             # Return 200 with is_watched: false, so frontend can clearly distinguish
             # between "not watched" and an actual error fetching status.
-            return jsonify({"is_watched": False}), 200
+            return {"is_watched": False}
     except Exception as e:
         logger.error(
             f"Error checking watch status for playlist {playlist_spotify_id}: {e}",
             exc_info=True,
         )
-        return jsonify({"error": f"Could not check watch status: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"Could not check watch status: {str(e)}"})
 
 
-@playlist_bp.route("/watch/<string:playlist_spotify_id>", methods=["DELETE"])
-def remove_from_watchlist(playlist_spotify_id):
+@router.delete("/watch/{playlist_spotify_id}")
+async def remove_from_watchlist(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Removes a playlist from the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        return jsonify({"error": "Watch feature is currently disabled globally."}), 403
+        raise HTTPException(status_code=403, detail={"error": "Watch feature is currently disabled globally."})
 
     logger.info(f"Attempting to remove playlist {playlist_spotify_id} from watchlist.")
     try:
         if not get_watched_playlist(playlist_spotify_id):
-            return jsonify(
-                {"error": f"Playlist {playlist_spotify_id} not found in watchlist."}
-            ), 404
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"Playlist {playlist_spotify_id} not found in watchlist."}
+            )
 
         remove_playlist_db(playlist_spotify_id)
         logger.info(
             f"Playlist {playlist_spotify_id} removed from watchlist successfully."
         )
-        return jsonify(
-            {"message": f"Playlist {playlist_spotify_id} removed from watchlist."}
-        ), 200
+        return {"message": f"Playlist {playlist_spotify_id} removed from watchlist."}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Error removing playlist {playlist_spotify_id} from watchlist: {e}",
             exc_info=True,
         )
-        return jsonify(
-            {"error": f"Could not remove playlist from watchlist: {str(e)}"}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Could not remove playlist from watchlist: {str(e)}"}
+        )
 
 
-@playlist_bp.route("/watch/<string:playlist_spotify_id>/tracks", methods=["POST"])
-def mark_tracks_as_known(playlist_spotify_id):
+@router.post("/watch/{playlist_spotify_id}/tracks")
+async def mark_tracks_as_known(playlist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """Fetches details for given track IDs and adds/updates them in the playlist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        return jsonify(
-            {
+        raise HTTPException(
+            status_code=403,
+            detail={
                 "error": "Watch feature is currently disabled globally. Cannot mark tracks."
             }
-        ), 403
+        )
 
     logger.info(
         f"Attempting to mark tracks as known for playlist {playlist_spotify_id}."
     )
     try:
-        track_ids = request.json
+        track_ids = await request.json()
         if not isinstance(track_ids, list) or not all(
             isinstance(tid, str) for tid in track_ids
         ):
-            return jsonify(
-                {
+            raise HTTPException(
+                status_code=400,
+                detail={
                     "error": "Invalid request body. Expecting a JSON array of track Spotify IDs."
                 }
-            ), 400
+            )
 
         if not get_watched_playlist(playlist_spotify_id):
-            return jsonify(
-                {"error": f"Playlist {playlist_spotify_id} is not being watched."}
-            ), 404
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"Playlist {playlist_spotify_id} is not being watched."}
+            )
 
         fetched_tracks_details = []
         for track_id in track_ids:
@@ -366,12 +421,10 @@ def mark_tracks_as_known(playlist_spotify_id):
                 )
 
         if not fetched_tracks_details:
-            return jsonify(
-                {
-                    "message": "No valid track details could be fetched to mark as known.",
-                    "processed_count": 0,
-                }
-            ), 200
+            return {
+                "message": "No valid track details could be fetched to mark as known.",
+                "processed_count": 0,
+            }
 
         add_specific_tracks_to_playlist_table(
             playlist_spotify_id, fetched_tracks_details
@@ -379,48 +432,51 @@ def mark_tracks_as_known(playlist_spotify_id):
         logger.info(
             f"Successfully marked/updated {len(fetched_tracks_details)} tracks as known for playlist {playlist_spotify_id}."
         )
-        return jsonify(
-            {
-                "message": f"Successfully processed {len(fetched_tracks_details)} tracks for playlist {playlist_spotify_id}."
-            }
-        ), 200
+        return {
+            "message": f"Successfully processed {len(fetched_tracks_details)} tracks for playlist {playlist_spotify_id}."
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Error marking tracks as known for playlist {playlist_spotify_id}: {e}",
             exc_info=True,
         )
-        return jsonify({"error": f"Could not mark tracks as known: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"Could not mark tracks as known: {str(e)}"})
 
 
-@playlist_bp.route("/watch/<string:playlist_spotify_id>/tracks", methods=["DELETE"])
-def mark_tracks_as_missing_locally(playlist_spotify_id):
+@router.delete("/watch/{playlist_spotify_id}/tracks")
+async def mark_tracks_as_missing_locally(playlist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
     """Removes specified tracks from the playlist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        return jsonify(
-            {
+        raise HTTPException(
+            status_code=403,
+            detail={
                 "error": "Watch feature is currently disabled globally. Cannot mark tracks."
             }
-        ), 403
+        )
 
     logger.info(
         f"Attempting to mark tracks as missing (remove locally) for playlist {playlist_spotify_id}."
     )
     try:
-        track_ids = request.json
+        track_ids = await request.json()
         if not isinstance(track_ids, list) or not all(
             isinstance(tid, str) for tid in track_ids
         ):
-            return jsonify(
-                {
+            raise HTTPException(
+                status_code=400,
+                detail={
                     "error": "Invalid request body. Expecting a JSON array of track Spotify IDs."
                 }
-            ), 400
+            )
 
         if not get_watched_playlist(playlist_spotify_id):
-            return jsonify(
-                {"error": f"Playlist {playlist_spotify_id} is not being watched."}
-            ), 404
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"Playlist {playlist_spotify_id} is not being watched."}
+            )
 
         deleted_count = remove_specific_tracks_from_playlist_table(
             playlist_spotify_id, track_ids
@@ -428,72 +484,71 @@ def mark_tracks_as_missing_locally(playlist_spotify_id):
         logger.info(
             f"Successfully removed {deleted_count} tracks locally for playlist {playlist_spotify_id}."
         )
-        return jsonify(
-            {
-                "message": f"Successfully removed {deleted_count} tracks locally for playlist {playlist_spotify_id}."
-            }
-        ), 200
+        return {
+            "message": f"Successfully removed {deleted_count} tracks locally for playlist {playlist_spotify_id}."
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Error marking tracks as missing (deleting locally) for playlist {playlist_spotify_id}: {e}",
             exc_info=True,
         )
-        return jsonify({"error": f"Could not mark tracks as missing: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"Could not mark tracks as missing: {str(e)}"})
 
 
-@playlist_bp.route("/watch/list", methods=["GET"])
-def list_watched_playlists_endpoint():
+@router.get("/watch/list")
+async def list_watched_playlists_endpoint(current_user: User = Depends(require_auth_from_state)):
     """Lists all playlists currently in the watchlist."""
     try:
         playlists = get_watched_playlists()
-        return jsonify(playlists), 200
+        return playlists
     except Exception as e:
         logger.error(f"Error listing watched playlists: {e}", exc_info=True)
-        return jsonify({"error": f"Could not list watched playlists: {str(e)}"}), 500
+        raise HTTPException(status_code=500, detail={"error": f"Could not list watched playlists: {str(e)}"})
 
 
-@playlist_bp.route("/watch/trigger_check", methods=["POST"])
-def trigger_playlist_check_endpoint():
+@router.post("/watch/trigger_check")
+async def trigger_playlist_check_endpoint(current_user: User = Depends(require_auth_from_state)):
     """Manually triggers the playlist checking mechanism for all watched playlists."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        return jsonify(
-            {
+        raise HTTPException(
+            status_code=403,
+            detail={
                 "error": "Watch feature is currently disabled globally. Cannot trigger check."
             }
-        ), 403
+        )
 
     logger.info("Manual trigger for playlist check received for all playlists.")
     try:
         # Run check_watched_playlists without an ID to check all
         thread = threading.Thread(target=check_watched_playlists, args=(None,))
         thread.start()
-        return jsonify(
-            {
-                "message": "Playlist check triggered successfully in the background for all playlists."
-            }
-        ), 202
+        return {
+            "message": "Playlist check triggered successfully in the background for all playlists."
+        }
     except Exception as e:
         logger.error(
             f"Error manually triggering playlist check for all: {e}", exc_info=True
         )
-        return jsonify(
-            {"error": f"Could not trigger playlist check for all: {str(e)}"}
-        ), 500
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Could not trigger playlist check for all: {str(e)}"}
+        )
 
 
-@playlist_bp.route(
-    "/watch/trigger_check/<string:playlist_spotify_id>", methods=["POST"]
-)
-def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str):
+@router.post("/watch/trigger_check/{playlist_spotify_id}")
+async def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
     """Manually triggers the playlist checking mechanism for a specific playlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        return jsonify(
-            {
+        raise HTTPException(
+            status_code=403,
+            detail={
                 "error": "Watch feature is currently disabled globally. Cannot trigger check."
             }
-        ), 403
+        )
 
     logger.info(
         f"Manual trigger for specific playlist check received for ID: {playlist_spotify_id}"
@@ -505,11 +560,12 @@ def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str):
             logger.warning(
                 f"Trigger specific check: Playlist ID {playlist_spotify_id} not found in watchlist."
             )
-            return jsonify(
-                {
+            raise HTTPException(
+                status_code=404,
+                detail={
                     "error": f"Playlist {playlist_spotify_id} is not in the watchlist. Add it first."
                 }
-            ), 404
+            )
 
         # Run check_watched_playlists with the specific ID
         thread = threading.Thread(
@@ -519,18 +575,19 @@ def trigger_specific_playlist_check_endpoint(playlist_spotify_id: str):
         logger.info(
             f"Playlist check triggered in background for specific playlist ID: {playlist_spotify_id}"
         )
-        return jsonify(
-            {
-                "message": f"Playlist check triggered successfully in the background for {playlist_spotify_id}."
-            }
-        ), 202
+        return {
+            "message": f"Playlist check triggered successfully in the background for {playlist_spotify_id}."
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             f"Error manually triggering specific playlist check for {playlist_spotify_id}: {e}",
             exc_info=True,
         )
-        return jsonify(
-            {
+        raise HTTPException(
+            status_code=500,
+            detail={
                 "error": f"Could not trigger playlist check for {playlist_spotify_id}: {str(e)}"
             }
-        ), 500
+        )

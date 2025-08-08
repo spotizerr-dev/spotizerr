@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -23,7 +23,7 @@ interface FormattingTabProps {
 
 // --- API Functions ---
 const saveFormattingConfig = async (data: Partial<FormattingSettings>) => {
-  const { data: response } = await apiClient.post("/config", data);
+  const { data: response } = await authApiClient.client.post("/config", data);
   return response;
 };
 
@@ -50,7 +50,7 @@ const placeholders = {
 const PlaceholderSelector = ({ onSelect }: { onSelect: (value: string) => void }) => (
   <select
     onChange={(e) => onSelect(e.target.value)}
-    className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm mt-1"
+    className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus text-sm mt-1"
   >
     <option value="">-- Insert Placeholder --</option>
     {Object.entries(placeholders).map(([group, options]) => (
@@ -104,15 +104,15 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
   };
 
   if (isLoading) {
-    return <div>Loading formatting settings...</div>;
+    return <div className="text-content-muted dark:text-content-muted-dark">Loading formatting settings...</div>;
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">File Naming</h3>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">File Naming</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="customDirFormat">Custom Directory Format</label>
+          <label htmlFor="customDirFormat" className="text-content-primary dark:text-content-primary-dark">Custom Directory Format</label>
           <input
             id="customDirFormat"
             type="text"
@@ -121,12 +121,12 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
               dirFormatRef(e);
               dirInputRef.current = e;
             }}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
           <PlaceholderSelector onSelect={handlePlaceholderSelect("customDirFormat", dirInputRef)} />
         </div>
         <div className="flex flex-col gap-2">
-          <label htmlFor="customTrackFormat">Custom Track Format</label>
+          <label htmlFor="customTrackFormat" className="text-content-primary dark:text-content-primary-dark">Custom Track Format</label>
           <input
             id="customTrackFormat"
             type="text"
@@ -135,12 +135,12 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
               trackFormatRef(e);
               trackInputRef.current = e;
             }}
-            className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
           <PlaceholderSelector onSelect={handlePlaceholderSelect("customTrackFormat", trackInputRef)} />
         </div>
         <div className="flex items-center justify-between">
-          <label htmlFor="tracknumPaddingToggle">Track Number Padding</label>
+          <label htmlFor="tracknumPaddingToggle" className="text-content-primary dark:text-content-primary-dark">Track Number Padding</label>
           <input
             id="tracknumPaddingToggle"
             type="checkbox"
@@ -149,7 +149,7 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
           />
         </div>
         <div className="flex items-center justify-between">
-          <label htmlFor="saveCoverToggle">Save Album Cover</label>
+          <label htmlFor="saveCoverToggle" className="text-content-primary dark:text-content-primary-dark">Save Album Cover</label>
           <input id="saveCoverToggle" type="checkbox" {...register("saveCover")} className="h-6 w-6 rounded" />
         </div>
       </div>
@@ -157,7 +157,7 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
       <button
         type="submit"
         disabled={mutation.isPending}
-        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
       >
         {mutation.isPending ? "Saving..." : "Save Formatting Settings"}
       </button>

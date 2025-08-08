@@ -1,29 +1,57 @@
-from deezspot.easy_spoty import Spo
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 import logging
 from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
+import time
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
+# Global Spotify client instance for reuse (same pattern as get_info.py)
+_spotify_client = None
+_last_client_init = 0
+_client_init_interval = 3600  # Reinitialize client every hour
+
+def _get_spotify_client():
+    """
+    Get or create a Spotify client with global credentials.
+    Implements client reuse and periodic reinitialization.
+    """
+    global _spotify_client, _last_client_init
+    
+    current_time = time.time()
+    
+    # Reinitialize client if it's been more than an hour or if client doesn't exist
+    if (_spotify_client is None or 
+        current_time - _last_client_init > _client_init_interval):
+        
+        client_id, client_secret = _get_global_spotify_api_creds()
+        
+        if not client_id or not client_secret:
+            raise ValueError(
+                "Global Spotify API client_id or client_secret not configured in ./data/creds/search.json."
+            )
+        
+        # Create new client
+        _spotify_client = spotipy.Spotify(
+            client_credentials_manager=SpotifyClientCredentials(
+                client_id=client_id,
+                client_secret=client_secret
+            )
+        )
+        _last_client_init = current_time
+        logger.info("Spotify client initialized/reinitialized for search")
+    
+    return _spotify_client
 
 def search(query: str, search_type: str, limit: int = 3, main: str = None) -> dict:
     logger.info(
         f"Search requested: query='{query}', type={search_type}, limit={limit}, main_account_name={main}"
-    )
-
-    client_id, client_secret = _get_global_spotify_api_creds()
-
-    if not client_id or not client_secret:
-        logger.error(
-            "Global Spotify API client_id or client_secret not configured in ./data/creds/search.json."
-        )
-        raise ValueError(
-            "Spotify API credentials are not configured globally for search."
         )
 
     if main:
         logger.debug(
-            f"Spotify account context '{main}' was provided for search. API keys are global, but this account might be used for other context by Spo if relevant."
+            f"Spotify account context '{main}' was provided for search. API keys are global, but this account might be used for other context."
         )
         try:
             get_credential("spotify", main)
@@ -41,14 +69,32 @@ def search(query: str, search_type: str, limit: int = 3, main: str = None) -> di
             "No specific 'main' account context provided for search. Using global API keys."
         )
 
-    logger.debug("Initializing Spotify client with global API credentials for search.")
-    Spo.__init__(client_id, client_secret)
+    logger.debug("Getting Spotify client for search.")
+    client = _get_spotify_client()
 
     logger.debug(
         f"Executing Spotify search with query='{query}', type={search_type}, limit={limit}"
     )
     try:
-        spotify_response = Spo.search(query=query, search_type=search_type, limit=limit)
+        # Map search types to Spotipy search types
+        search_type_map = {
+            'track': 'track',
+            'album': 'album', 
+            'artist': 'artist',
+            'playlist': 'playlist',
+            'episode': 'episode',
+            'show': 'show'
+        }
+        
+        spotify_type = search_type_map.get(search_type.lower(), 'track')
+        
+        # Execute search using Spotipy
+        spotify_response = client.search(
+            q=query,
+            type=spotify_type,
+            limit=limit
+        )
+        
         logger.info(f"Search completed successfully for query: '{query}'")
         return spotify_response
     except Exception as e:

@@ -4,6 +4,8 @@
 .gitattributes
 
 # Docker
+docker-compose.yaml
+docker-compose.yml
 Dockerfile
 .dockerignore
 
@@ -54,3 +56,7 @@ static/js/*
 logs/
 data
 tests/
+
+# Non-essential files
+docs/
+README.md

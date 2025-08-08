@@ -1,15 +1,18 @@
-import { createRouter, createRootRoute, createRoute } from "@tanstack/react-router";
-import { Root } from "./routes/root";
-import { Album } from "./routes/album";
-import { Artist } from "./routes/artist";
-import { Track } from "./routes/track";
-import { Home } from "./routes/home";
-import { Config } from "./routes/config";
-import { Playlist } from "./routes/playlist";
-import { History } from "./routes/history";
-import { Watchlist } from "./routes/watchlist";
+import { createRouter, createRootRoute, createRoute, lazyRouteComponent } from "@tanstack/react-router";
+import Root from "./routes/root";
 import apiClient from "./lib/api-client";
-import type { SearchResult } from "./types/spotify";
+import type { SearchResult, SearchApiResponse } from "./types/spotify";
+import { isValidSearchResult } from "./types/spotify";
+
+// Lazy load route components for code splitting
+const Album = lazyRouteComponent(() => import("./routes/album").then(m => ({ default: m.Album })));
+const Artist = lazyRouteComponent(() => import("./routes/artist").then(m => ({ default: m.Artist })));
+const Track = lazyRouteComponent(() => import("./routes/track").then(m => ({ default: m.Track })));
+const Home = lazyRouteComponent(() => import("./routes/home").then(m => ({ default: m.Home })));
+const Config = lazyRouteComponent(() => import("./routes/config").then(m => ({ default: m.Config })));
+const Playlist = lazyRouteComponent(() => import("./routes/playlist").then(m => ({ default: m.Playlist })));
+const History = lazyRouteComponent(() => import("./routes/history").then(m => ({ default: m.History })));
+const Watchlist = lazyRouteComponent(() => import("./routes/watchlist").then(m => ({ default: m.Watchlist })));
 
 const rootRoute = createRootRoute({
   component: Root,
@@ -40,12 +43,17 @@ export const indexRoute = createRoute({
       return { items: [{ ...response.data, model: urlType as "track" | "album" | "artist" | "playlist" }] };
     }
 
-    const response = await apiClient.get<{ items: SearchResult[] }>(`/search?q=${q}&search_type=${type}&limit=50`);
-    const augmentedResults = response.data.items.map((item) => ({
-      ...item,
-      model: type,
-    }));
-    return { items: augmentedResults };
+    const response = await apiClient.get<SearchApiResponse>(`/search?q=${q}&search_type=${type}&limit=50`);
+    
+    // Filter out null values and add the model property
+    const validResults = response.data.items
+      .filter(isValidSearchResult)
+      .map((item) => ({
+        ...item,
+        model: type,
+      }));
+    
+    return { items: validResults };
   },
   gcTime: 5 * 60 * 1000, // 5 minutes
   staleTime: 5 * 60 * 1000, // 5 minutes
@@ -73,6 +81,11 @@ const configRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/config",
   component: Config,
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => {
+    return {
+      tab: typeof search.tab === "string" ? search.tab : undefined,
+    };
+  },
 });
 
 const playlistRoute = createRoute({

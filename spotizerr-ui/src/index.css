@@ -1,7 +1,237 @@
 @import "tailwindcss";
 
+/* Override dark mode to use class-based instead of prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Background Colors with automatic dark mode variants and gradients */
+  --color-surface: #ffffff;
+  --color-surface-dark: #0a0a0a;
+  --color-surface-secondary: #fafbfc;
+  --color-surface-secondary-dark: #141418;
+  --color-surface-muted: #f4f6f8;
+  --color-surface-muted-dark: #1f1f23;
+  --color-surface-accent: #e8ecf0;
+  --color-surface-accent-dark: #2d2d33;
+  --color-surface-overlay: rgba(255, 255, 255, 0.85);
+  --color-surface-overlay-dark: rgba(10, 10, 12, 0.85);
+
+  /* Gradient backgrounds for depth */
+  --gradient-surface: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
+  --gradient-surface-dark: linear-gradient(135deg, #0a0a0a 0%, #141418 100%);
+  --gradient-muted: linear-gradient(135deg, #f4f6f8 0%, #e8ecf0 100%);
+  --gradient-muted-dark: linear-gradient(135deg, #1f1f23 0%, #2d2d33 100%);
+  --gradient-accent: linear-gradient(135deg, #e8ecf0 0%, #d6dce4 100%);
+  --gradient-accent-dark: linear-gradient(135deg, #2d2d33 0%, #3a3a42 100%);
+
+  /* Text Colors with automatic dark mode variants and subtle tints */
+  --color-content-primary: #0d1117;
+  --color-content-primary-dark: #f0f6fc;
+  --color-content-secondary: #4a5568;
+  --color-content-secondary-dark: #a0aec0;
+  --color-content-muted: #718096;
+  --color-content-muted-dark: #9ca3af;
+  --color-content-accent: #6b7280;
+  --color-content-accent-dark: #6b7280;
+  --color-content-inverse: #ffffff;
+  --color-content-inverse-dark: #0d1117;
+
+  /* Interactive Colors - Enhanced Spotify green with sophistication */
+  --color-primary: #1ed760;
+  --color-primary-hover: #1fdf64;
+  --color-primary-active: #1db954;
+  --color-primary-muted: #d1f7e0;
+  
+  /* Secondary colors with purple accent for contrast */
+  --color-secondary: #8b5fbf;
+  --color-secondary-hover: #9d70d1;
+  --color-secondary-active: #7a4fa3;
+  --color-secondary-muted: #f0ebff;
+  
+  /* Accent purple for complementary design */
+  --color-accent: #8b5fbf;
+  --color-accent-hover: #9d70d1;
+  --color-accent-active: #7a4fa3;
+  --color-accent-muted: #f0ebff;
+
+  /* Status Colors - Refined and harmonious */
+  --color-success: #28a745;
+  --color-success-hover: #1e7b34;
+  --color-success-muted: #d4edda;
+  --color-success-text: #155724;
+  
+  --color-error: #dc3545;
+  --color-error-hover: #c82333;
+  --color-error-muted: #f8d7da;
+  --color-error-text: #721c24;
+  
+  --color-warning: #fd7e14;
+  --color-warning-hover: #e8590c;
+  --color-warning-muted: #fff3cd;
+  --color-warning-text: #856404;
+  
+  --color-info: #17a2b8;
+  --color-info-hover: #138496;
+  --color-info-muted: #d1ecf1;
+  --color-info-text: #0c5460;
+  
+  --color-processing: #8b5fbf;
+  --color-processing-hover: #7a4fa3;
+  --color-processing-muted: #f0ebff;
+  --color-processing-text: #5d3e7a;
+
+  /* Border Colors with automatic dark mode variants and gradients */
+  --color-border: #e2e8f0;
+  --color-border-dark: #374151;
+  --color-border-muted: #f1f5f9;
+  --color-border-muted-dark: #1f2937;
+  --color-border-accent: #cbd5e1;
+  --color-border-accent-dark: #4b5563;
+  --color-border-focus: #1ed760;
+
+  /* Gradient borders for enhanced depth */
+  --gradient-border: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  --gradient-border-dark: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+
+  /* Input Colors with automatic dark mode variants and gradients */
+  --color-input-background: #f8fafc;
+  --color-input-background-dark: #1f2937;
+  --color-input-border: #e2e8f0;
+  --color-input-border-dark: #374151;
+  --color-input-focus: #1ed760;
+  --gradient-input: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  --gradient-input-dark: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+
+  /* Button Colors */
+  --color-button-primary: #1ed760;
+  --color-button-primary-hover: #1fdf64;
+  --color-button-primary-text: #ffffff;
+  
+  --color-button-secondary: #f4f6f8;
+  --color-button-secondary-hover: #8b5fbf;
+  --color-button-secondary-text: #57606a;
+  --color-button-secondary-text-hover: #ffffff;
+  
+  --color-button-success: #28a745;
+  --color-button-success-hover: #1e7b34;
+  --color-button-success-text: #ffffff;
+
+  --color-icon-button-hover: #f1f5f9;
+  --color-icon-button-hover-dark: #374151;
+
+  /* Icon Colors */
+  --color-icon-primary: #000000;
+  --color-icon-primary-hover: #000000;
+  --color-icon-primary-active: #000000;
+  --color-icon-primary-dark: #ffffff;
+  --color-icon-primary-hover-dark: #ffffff;
+  --color-icon-primary-active-dark: #ffffff;
+  
+  --color-icon-secondary: #000000;
+  --color-icon-secondary-hover: #000000;
+  --color-icon-secondary-active: #000000;
+  --color-icon-secondary-dark: #ffffff;
+  --color-icon-secondary-hover-dark: #ffffff;
+  --color-icon-secondary-active-dark: #ffffff;
+  
+  --color-icon-muted: #000000;
+  --color-icon-muted-hover: #000000;
+  --color-icon-muted-active: #000000;
+  --color-icon-muted-dark: #ffffff;
+  --color-icon-muted-hover-dark: #ffffff;
+  --color-icon-muted-active-dark: #ffffff;
+  
+  --color-icon-accent: #000000;
+  --color-icon-accent-hover: #000000;
+  --color-icon-accent-active: #000000;
+  --color-icon-accent-dark: #ffffff;
+  --color-icon-accent-hover-dark: #ffffff;
+  --color-icon-accent-active-dark: #ffffff;
+  
+  --color-icon-success: #000000;
+  --color-icon-success-hover: #000000;
+  --color-icon-success-active: #000000;
+  --color-icon-success-dark: #ffffff;
+  --color-icon-success-hover-dark: #ffffff;
+  --color-icon-success-active-dark: #ffffff;
+  
+  --color-icon-error: #000000;
+  --color-icon-error-hover: #000000;
+  --color-icon-error-active: #000000;
+  --color-icon-error-dark: #ffffff;
+  --color-icon-error-hover-dark: #ffffff;
+  --color-icon-error-active-dark: #ffffff;
+  
+  --color-icon-warning: #000000;
+  --color-icon-warning-hover: #000000;
+  --color-icon-warning-active: #000000;
+  --color-icon-warning-dark: #ffffff;
+  --color-icon-warning-hover-dark: #ffffff;
+  --color-icon-warning-active-dark: #ffffff;
+  
+  --color-icon-inverse: #ffffff;
+  --color-icon-inverse-dark: #000000;
+}
+
 @layer base {
+  /* PWA Safe Area Support */
+  :root {
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  }
+
+  /* PWA specific body styling */
+  body {
+    background: var(--color-surface);
+    overscroll-behavior: none;
+  }
+  .dark body {
+    background: var(--color-surface-dark);
+  }
+
+  /* PWA viewport fixes */
+  html {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    padding: 0;
+  }
+
   a {
     @apply no-underline hover:underline cursor-pointer;
   }
+  
+  /* Logo Utility Classes - Using Tailwind utilities */
+  .logo {
+    @apply brightness-0 dark:invert;
+  }
+  
+
+
+  /* PWA Header Safe Area Classes */
+  .pwa-header {
+    padding-top: var(--safe-area-inset-top);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+
+  .pwa-footer {
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+
+  /* PWA Main Content Safe Area */
+  .pwa-main {
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+
 }

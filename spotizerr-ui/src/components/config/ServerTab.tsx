@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
-import apiClient from "../../lib/api-client";
+import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -18,10 +18,10 @@ interface WebhookSettings {
 
 // --- API Functions ---
 const fetchSpotifyApiConfig = async (): Promise<SpotifyApiSettings> => {
-  const { data } = await apiClient.get("/credentials/spotify_api_config");
+  const { data } = await authApiClient.client.get("/credentials/spotify_api_config");
   return data;
 };
-const saveSpotifyApiConfig = (data: SpotifyApiSettings) => apiClient.put("/credentials/spotify_api_config", data);
+const saveSpotifyApiConfig = (data: SpotifyApiSettings) => authApiClient.client.put("/credentials/spotify_api_config", data);
 
 const fetchWebhookConfig = async (): Promise<WebhookSettings> => {
   // Mock a response since backend endpoint doesn't exist
@@ -62,34 +62,34 @@ function SpotifyApiForm() {
 
   const onSubmit = (formData: SpotifyApiSettings) => mutation.mutate(formData);
 
-  if (isLoading) return <p>Loading Spotify API settings...</p>;
+  if (isLoading) return <p className="text-content-muted dark:text-content-muted-dark">Loading Spotify API settings...</p>;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="flex flex-col gap-2">
-        <label htmlFor="client_id">Client ID</label>
+        <label htmlFor="client_id" className="text-content-primary dark:text-content-primary-dark">Client ID</label>
         <input
           id="client_id"
           type="password"
           {...register("client_id")}
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           placeholder="Optional"
         />
       </div>
       <div className="flex flex-col gap-2">
-        <label htmlFor="client_secret">Client Secret</label>
+        <label htmlFor="client_secret" className="text-content-primary dark:text-content-primary-dark">Client Secret</label>
         <input
           id="client_secret"
           type="password"
           {...register("client_secret")}
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           placeholder="Optional"
         />
       </div>
       <button
         type="submit"
         disabled={mutation.isPending}
-        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
       >
         {mutation.isPending ? "Saving..." : "Save Spotify API"}
       </button>
@@ -126,22 +126,22 @@ function WebhookForm() {
 
   const onSubmit = (formData: WebhookSettings) => mutation.mutate(formData);
 
-  if (isLoading) return <p>Loading Webhook settings...</p>;
+  if (isLoading) return <p className="text-content-muted dark:text-content-muted-dark">Loading Webhook settings...</p>;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="flex flex-col gap-2">
-        <label htmlFor="webhookUrl">Webhook URL</label>
+        <label htmlFor="webhookUrl" className="text-content-primary dark:text-content-primary-dark">Webhook URL</label>
         <input
           id="webhookUrl"
           type="url"
           {...register("url")}
-          className="block w-full p-2 border rounded-md bg-gray-50 dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           placeholder="https://example.com/webhook"
         />
       </div>
       <div className="flex flex-col gap-2">
-        <label>Webhook Events</label>
+        <label className="text-content-primary dark:text-content-primary-dark">Webhook Events</label>
         <div className="grid grid-cols-2 gap-4 pt-2">
           {data?.available_events.map((event) => (
             <Controller
@@ -149,7 +149,7 @@ function WebhookForm() {
               name="events"
               control={control}
               render={({ field }) => (
-                <label className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-content-primary dark:text-content-primary-dark">
                   <input
                     type="checkbox"
                     className="h-5 w-5 rounded"
@@ -171,7 +171,7 @@ function WebhookForm() {
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+          className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
         >
           {mutation.isPending ? "Saving..." : "Save Webhook"}
         </button>
@@ -179,7 +179,7 @@ function WebhookForm() {
           type="button"
           onClick={() => testMutation.mutate(currentUrl)}
           disabled={!currentUrl || testMutation.isPending}
-          className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
+          className="px-4 py-2 bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded-md disabled:opacity-50"
         >
           Test
         </button>
@@ -192,14 +192,14 @@ export function ServerTab() {
   return (
     <div className="space-y-8">
       <div>
-        <h3 className="text-xl font-semibold">Spotify API</h3>
-        <p className="text-sm text-gray-500 mt-1">Provide your own API credentials to avoid rate-limiting issues.</p>
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Spotify API</h3>
+        <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">Provide your own API credentials to avoid rate-limiting issues.</p>
         <SpotifyApiForm />
       </div>
-      <hr className="border-gray-600" />
+      <hr className="border-border dark:border-border-dark" />
       <div>
-        <h3 className="text-xl font-semibold">Webhooks</h3>
-        <p className="text-sm text-gray-500 mt-1">
+        <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Webhooks</h3>
+        <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">
           Get notifications for events like download completion. (Currently disabled)
         </p>
         <WebhookForm />

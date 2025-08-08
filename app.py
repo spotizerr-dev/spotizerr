@@ -1,14 +1,8 @@
-from flask import Flask, request, send_from_directory
-from flask_cors import CORS
-from routes.search import search_bp
-from routes.credentials import credentials_bp
-from routes.album import album_bp
-from routes.track import track_bp
-from routes.playlist import playlist_bp
-from routes.prgs import prgs_bp
-from routes.config import config_bp
-from routes.artist import artist_bp
-from routes.history import history_bp
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 import logging
 import logging.handlers
 import time
@@ -20,10 +14,29 @@ import redis
 import socket
 from urllib.parse import urlparse
 
+# Import route routers (to be created)
+from routes.auth.credentials import router as credentials_router
+from routes.auth.auth import router as auth_router
+from routes.content.artist import router as artist_router
+from routes.content.album import router as album_router
+from routes.content.track import router as track_router
+from routes.content.playlist import router as playlist_router
+from routes.core.search import router as search_router
+from routes.core.history import router as history_router
+from routes.system.progress import router as prgs_router
+from routes.system.config import router as config_router
+
+
 # Import Celery configuration and manager
 from routes.utils.celery_manager import celery_manager
 from routes.utils.celery_config import REDIS_URL
-from routes.utils.history_manager import init_history_db
+
+# Import authentication system
+from routes.auth import AUTH_ENABLED
+from routes.auth.middleware import AuthMiddleware
+
+# Import and initialize routes (this will start the watch manager)
+import routes
 
 
 # Configure application-wide logging
@@ -67,178 +80,199 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     # Set up specific loggers
-    for logger_name in ["werkzeug", "celery", "routes", "flask", "waitress"]:
-        module_logger = logging.getLogger(logger_name)
-        module_logger.setLevel(logging.INFO)
-        # Handlers are inherited from root logger
+    for logger_name in [
+        "routes",
+        "routes.utils",
+        "routes.utils.celery_manager",
+        "routes.utils.celery_tasks",
+        "routes.utils.watch",
+    ]:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.INFO)
+        logger.propagate = True  # Propagate to root logger
 
-    # Enable propagation for all loggers
-    logging.getLogger("celery").propagate = True
-
-    # Notify successful setup
-    root_logger.info("Logging system initialized")
-
-    # Return the main file handler for permissions adjustment
-    return file_handler
+    logging.info("Logging system initialized")
 
 
 def check_redis_connection():
-    """Check if Redis is reachable and retry with exponential backoff if not"""
-    max_retries = 5
-    retry_count = 0
-    retry_delay = 1  # start with 1 second
+    """Check if Redis is available and accessible"""
+    if not REDIS_URL:
+        logging.error("REDIS_URL is not configured. Please check your environment.")
+        return False
 
-    # Extract host and port from REDIS_URL
-    redis_host = "redis"  # default
-    redis_port = 6379  # default
+    try:
+        # Parse Redis URL
+        parsed_url = urlparse(REDIS_URL)
+        host = parsed_url.hostname or "localhost"
+        port = parsed_url.port or 6379
 
-    # Parse from REDIS_URL if possible
-    if REDIS_URL:
-        # parse hostname and port (handles optional auth)
-        try:
-            parsed = urlparse(REDIS_URL)
-            if parsed.hostname:
-                redis_host = parsed.hostname
-            if parsed.port:
-                redis_port = parsed.port
-        except Exception:
-            pass
+        logging.info(f"Testing Redis connection to {host}:{port}...")
 
-    # Log Redis connection details
-    logging.info(f"Checking Redis connection to {redis_host}:{redis_port}")
+        # Test socket connection first
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((host, port))
+        sock.close()
 
-    while retry_count < max_retries:
-        try:
-            # First try socket connection to check if Redis port is open
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            result = sock.connect_ex((redis_host, redis_port))
-            sock.close()
+        if result != 0:
+            logging.error(f"Cannot connect to Redis at {host}:{port}")
+            return False
 
-            if result != 0:
-                raise ConnectionError(
-                    f"Cannot connect to Redis at {redis_host}:{redis_port}"
-                )
+        # Test Redis client connection
+        r = redis.from_url(REDIS_URL, socket_connect_timeout=5, socket_timeout=5)
+        r.ping()
+        logging.info("Redis connection successful")
+        return True
 
-            # If socket connection successful, try Redis ping
-            r = redis.Redis.from_url(REDIS_URL)
-            r.ping()
-            logging.info("Successfully connected to Redis")
-            return True
-        except Exception as e:
-            retry_count += 1
-            if retry_count >= max_retries:
-                logging.error(
-                    f"Failed to connect to Redis after {max_retries} attempts: {e}"
-                )
-                logging.error(
-                    f"Make sure Redis is running at {redis_host}:{redis_port}"
-                )
-                return False
+    except redis.ConnectionError as e:
+        logging.error(f"Redis connection error: {e}")
+        return False
+    except redis.TimeoutError as e:
+        logging.error(f"Redis timeout error: {e}")
+        return False
+    except Exception as e:
+        logging.error(f"Unexpected error checking Redis connection: {e}")
+        return False
 
-            logging.warning(f"Redis connection attempt {retry_count} failed: {e}")
-            logging.info(f"Retrying in {retry_delay} seconds...")
-            time.sleep(retry_delay)
-            retry_delay *= 2  # exponential backoff
 
-    return False
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown"""
+    # Startup
+    setup_logging()
+    
+    # Check Redis connection
+    if not check_redis_connection():
+        logging.error("Failed to connect to Redis. Please ensure Redis is running and accessible.")
+        # Don't exit, but warn - some functionality may not work
+    
+    # Start Celery workers
+    try:
+        celery_manager.start()
+        logging.info("Celery workers started successfully")
+    except Exception as e:
+        logging.error(f"Failed to start Celery workers: {e}")
+    
+    yield
+    
+    # Shutdown
+    try:
+        celery_manager.stop()
+        logging.info("Celery workers stopped")
+    except Exception as e:
+        logging.error(f"Error stopping Celery workers: {e}")
 
 
 def create_app():
-    app = Flask(__name__, static_folder="spotizerr-ui/dist", static_url_path="/")
+    app = FastAPI(
+        title="Spotizerr API",
+        description="Music download service API",
+        version="3.0.0",
+        lifespan=lifespan,
+        redirect_slashes=True  # Enable automatic trailing slash redirects
+    )
 
     # Set up CORS
-    CORS(app)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-    # Initialize databases
-    init_history_db()
+    # Add authentication middleware (only if auth is enabled)
+    if AUTH_ENABLED:
+        app.add_middleware(AuthMiddleware)
+        logging.info("Authentication system enabled")
+    else:
+        logging.info("Authentication system disabled")
 
-    # Register blueprints
-    app.register_blueprint(config_bp, url_prefix="/api")
-    app.register_blueprint(search_bp, url_prefix="/api")
-    app.register_blueprint(credentials_bp, url_prefix="/api/credentials")
-    app.register_blueprint(album_bp, url_prefix="/api/album")
-    app.register_blueprint(track_bp, url_prefix="/api/track")
-    app.register_blueprint(playlist_bp, url_prefix="/api/playlist")
-    app.register_blueprint(artist_bp, url_prefix="/api/artist")
-    app.register_blueprint(prgs_bp, url_prefix="/api/prgs")
-    app.register_blueprint(history_bp, url_prefix="/api/history")
-
-    # Serve React App
-    @app.route("/", defaults={"path": ""})
-    @app.route("/<path:path>")
-    def serve_react_app(path):
-        if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-            return send_from_directory(app.static_folder, path)
-        else:
-            return send_from_directory(app.static_folder, "index.html")
+    # Register routers with URL prefixes
+    app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+    
+    # Include SSO router if available
+    try:
+        from routes.auth.sso import router as sso_router
+        app.include_router(sso_router, prefix="/api/auth", tags=["sso"])
+        logging.info("SSO functionality enabled")
+    except ImportError as e:
+        logging.warning(f"SSO functionality not available: {e}")
+    app.include_router(config_router, prefix="/api/config", tags=["config"])
+    app.include_router(search_router, prefix="/api/search", tags=["search"])
+    app.include_router(credentials_router, prefix="/api/credentials", tags=["credentials"])
+    app.include_router(album_router, prefix="/api/album", tags=["album"])
+    app.include_router(track_router, prefix="/api/track", tags=["track"])
+    app.include_router(playlist_router, prefix="/api/playlist", tags=["playlist"])
+    app.include_router(artist_router, prefix="/api/artist", tags=["artist"])
+    app.include_router(prgs_router, prefix="/api/prgs", tags=["progress"])
+    app.include_router(history_router, prefix="/api/history", tags=["history"])
 
     # Add request logging middleware
-    @app.before_request
-    def log_request():
-        request.start_time = time.time()
-        app.logger.debug(f"Request: {request.method} {request.path}")
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        start_time = time.time()
+        
+        # Log request
+        logger = logging.getLogger("uvicorn.access")
+        logger.debug(f"Request: {request.method} {request.url.path}")
+        
+        try:
+            response = await call_next(request)
+            
+            # Log response
+            duration = round((time.time() - start_time) * 1000, 2)
+            logger.debug(f"Response: {response.status_code} | Duration: {duration}ms")
+            
+            return response
+        except Exception as e:
+            # Log errors
+            logger.error(f"Server error: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal Server Error")
 
-    @app.after_request
-    def log_response(response):
-        if hasattr(request, "start_time"):
-            duration = round((time.time() - request.start_time) * 1000, 2)
-            app.logger.debug(f"Response: {response.status} | Duration: {duration}ms")
-        return response
-
-    # Error logging
-    @app.errorhandler(Exception)
-    def handle_exception(e):
-        app.logger.error(f"Server error: {str(e)}", exc_info=True)
-        return "Internal Server Error", 500
+    # Mount static files for React app
+    if os.path.exists("spotizerr-ui/dist"):
+        app.mount("/static", StaticFiles(directory="spotizerr-ui/dist"), name="static")
+        
+        # Serve React App - catch-all route for SPA (but not for API routes)
+        @app.get("/{full_path:path}")
+        async def serve_react_app(full_path: str):
+            """Serve React app with fallback to index.html for SPA routing"""
+            static_dir = "spotizerr-ui/dist"
+            
+            # Don't serve React app for API routes (more specific check)
+            if full_path.startswith("api") or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="API endpoint not found")
+            
+            # If it's a file that exists, serve it
+            if full_path and os.path.exists(os.path.join(static_dir, full_path)):
+                return FileResponse(os.path.join(static_dir, full_path))
+            else:
+                # Fallback to index.html for SPA routing
+                return FileResponse(os.path.join(static_dir, "index.html"))
+    else:
+        logging.warning("React app build directory not found at spotizerr-ui/dist")
 
     return app
 
 
 def start_celery_workers():
     """Start Celery workers with dynamic configuration"""
-    logging.info("Starting Celery workers with dynamic configuration")
-    celery_manager.start()
-
-    # Register shutdown handler
-    atexit.register(celery_manager.stop)
+    # This function is now handled by the lifespan context manager
+    # and the celery_manager.start() call
+    pass
 
 
 if __name__ == "__main__":
-    # Configure application logging
-    log_handler = setup_logging()
-
-    # Set permissions for log file
-    try:
-        if os.name != "nt":  # Not Windows
-            os.chmod(log_handler.baseFilename, 0o666)
-    except Exception as e:
-        logging.warning(f"Could not set permissions on log file: {e}")
-
-    # Check Redis connection before starting
-    if not check_redis_connection():
-        logging.error("Exiting: Could not establish Redis connection.")
-        sys.exit(1)
-
-    # Start Celery workers in a separate thread
-    start_celery_workers()
-
-    # Clean up Celery workers on exit
-    atexit.register(celery_manager.stop)
-
-    # Create Flask app
+    import uvicorn
+    
     app = create_app()
-
-    # Get host and port from environment variables or use defaults
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 7171))
-
-    # Use Flask's built-in server for development
-    # logging.info(f"Starting Flask development server on http://{host}:{port}")
-    # app.run(host=host, port=port, debug=True)
-
-    # The following uses Waitress, a production-ready server.
-    # To use it, comment out the app.run() line above and uncomment the lines below.
-    logging.info(f"Starting server with Waitress on http://{host}:{port}")
-    from waitress import serve
-    serve(app, host=host, port=port)
+    
+    # Run with uvicorn
+    uvicorn.run(
+        app,
+        host="${HOST:-0.0.0.0}",
+        port=7171,
+        log_level="info",
+        access_log=True
+    )
