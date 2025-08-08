@@ -226,6 +226,8 @@ async def handle_config(current_user: User = Depends(require_admin_from_state)):
 
 @router.post("/")
 @router.put("/")
+@router.post("")
+@router.put("")
 async def update_config(request: Request, current_user: User = Depends(require_admin_from_state)):
     """Handles POST/PUT requests to update the main configuration."""
     try:

@@ -14,6 +14,7 @@ router = APIRouter()
 
 
 @router.get("/")
+@router.get("")
 async def get_history(request: Request, current_user: User = Depends(require_auth_from_state)):
     """
     Retrieve download history with optional filtering and pagination.
