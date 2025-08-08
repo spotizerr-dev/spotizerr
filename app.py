@@ -51,7 +51,7 @@ def setup_logging():
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(logging.DEBUG)
 
     # Clear any existing handlers from the root logger
     if root_logger.hasHandlers():
@@ -265,14 +265,22 @@ def start_celery_workers():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     app = create_app()
-    
-    # Run with uvicorn
+
+    # Use HOST environment variable if present, otherwise fall back to IPv4 wildcard
+    host = os.getenv("HOST", "0.0.0.0")
+
+    # Allow overriding port via PORT env var, with default 7171
+    try:
+        port = int(os.getenv("PORT", "7171"))
+    except ValueError:
+        port = 7171
+
     uvicorn.run(
         app,
-        host="${HOST:-0.0.0.0}",
-        port=7171,
+        host=host,
+        port=port,
         log_level="info",
         access_log=True
     )
