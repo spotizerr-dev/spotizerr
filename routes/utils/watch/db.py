@@ -1408,3 +1408,29 @@ def is_album_in_artist_db(artist_spotify_id: str, album_spotify_id: str) -> bool
             exc_info=True,
         )
         return False  # Assume not present on error
+
+
+# --- Eager module initialization to ensure DBs and core tables exist ---
+_initialized_on_import = False
+
+
+def initialize_databases_eagerly() -> None:
+    """Create DB directory and initialize core tables so they exist before any usage."""
+    global _initialized_on_import
+    if _initialized_on_import:
+        return
+    try:
+        # Ensure base directory exists
+        DB_DIR.mkdir(parents=True, exist_ok=True)
+        # Initialize core databases and tables
+        init_playlists_db()
+        init_artists_db()
+        _initialized_on_import = True
+        logger.info("Eagerly initialized watch databases and core tables.")
+    except Exception:
+        # Log and proceed; functions will attempt to (re)initialize as needed
+        logger.error("Failed to eagerly initialize watch databases.", exc_info=True)
+
+
+# Invoke eager initialization at import time
+initialize_databases_eagerly()

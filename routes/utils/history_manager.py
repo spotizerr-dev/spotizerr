@@ -273,6 +273,8 @@ class HistoryManager:
                         track.get("duration_ms", 0)
                     ))
                 else:
+                    # Ensure target children table exists before write
+                    self._create_children_table(table)
                     # Store in children table (for album/playlist tracks)
                     logger.info(f"Storing track '{track.get('title', 'Unknown')}' in CHILDREN table '{table}' for task {task_id}")
                     # Extract ISRC
@@ -528,6 +530,8 @@ class HistoryManager:
     def _populate_album_children_table(self, table_name: str, summary: Dict, album_title: str):
         """Populate children table with individual track records from album summary."""
         try:
+            # Ensure table exists before population
+            self._create_children_table(table_name)
             all_tracks = []
             
             # Add successful tracks
@@ -566,6 +570,8 @@ class HistoryManager:
     def _populate_playlist_children_table(self, table_name: str, summary: Dict):
         """Populate children table with individual track records from playlist summary."""
         try:
+            # Ensure table exists before population
+            self._create_children_table(table_name)
             all_tracks = []
             
             # Add successful tracks
@@ -722,6 +728,8 @@ class HistoryManager:
             List of track records
         """
         try:
+            # Ensure table exists before reading
+            self._create_children_table(children_table)
             with self._get_connection() as conn:
                 cursor = conn.execute(f"""
                     SELECT * FROM {children_table} 
