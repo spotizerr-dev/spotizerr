@@ -23,6 +23,9 @@ from routes.utils.watch.manager import (
 from routes.auth.middleware import require_admin_from_state, User
 from routes.auth import AUTH_ENABLED, DISABLE_REGISTRATION
 
+# Import credential utilities (DB-backed)
+from routes.utils.credentials import list_credentials, _get_global_spotify_api_creds
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -45,13 +48,18 @@ NOTIFY_PARAMETERS = [
 def has_credentials(service: str) -> bool:
     """Check if credentials exist for the specified service (spotify or deezer)."""
     try:
-        credentials_path = Path(f"./data/credentials/{service}")
-        if not credentials_path.exists():
+        if service not in ("spotify", "deezer"):
             return False
-        
-        # Check if there are any credential files in the directory
-        credential_files = list(credentials_path.glob("*.json"))
-        return len(credential_files) > 0
+
+        account_names = list_credentials(service)
+        has_any_accounts = bool(account_names)
+
+        if service == "spotify":
+            client_id, client_secret = _get_global_spotify_api_creds()
+            has_global_api_creds = bool(client_id) and bool(client_secret)
+            return has_any_accounts and has_global_api_creds
+
+        return has_any_accounts
     except Exception as e:
         logger.warning(f"Error checking credentials for {service}: {e}")
         return False

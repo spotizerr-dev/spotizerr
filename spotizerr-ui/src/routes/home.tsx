@@ -40,40 +40,7 @@ export const Home = () => {
   const context = useContext(QueueContext);
   const loaderRef = useRef<HTMLDivElement | null>(null);
 
-  // Prevent scrolling on mobile only when there are no results (empty state)
-  useEffect(() => {
-    const isMobile = window.innerWidth < 768; // md breakpoint
-    if (!isMobile) return;
-
-    // Only prevent scrolling when there are no results to show
-    const shouldPreventScroll = !isLoading && displayedResults.length === 0 && !query.trim();
-
-    if (!shouldPreventScroll) return;
-
-    // Store original styles
-    const originalOverflow = document.body.style.overflow;
-    const originalHeight = document.body.style.height;
-    
-    // Find the mobile main content container
-    const mobileMain = document.querySelector('.pwa-main') as HTMLElement;
-    const originalMainOverflow = mobileMain?.style.overflow;
-
-    // Prevent body and main container scrolling on mobile when empty
-    document.body.style.overflow = 'hidden';
-    document.body.style.height = '100vh';
-    if (mobileMain) {
-      mobileMain.style.overflow = 'hidden';
-    }
-
-    // Cleanup function
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      document.body.style.height = originalHeight;
-      if (mobileMain) {
-        mobileMain.style.overflow = originalMainOverflow;
-      }
-    };
-  }, [isLoading, displayedResults.length, query]);
+  // Removed scroll locking on mobile empty state to avoid blocking scroll globally
 
   useEffect(() => {
     navigate({ search: (prev) => ({ ...prev, q: debouncedQuery, type: searchType }) });

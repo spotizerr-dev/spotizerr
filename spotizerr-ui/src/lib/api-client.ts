@@ -32,8 +32,8 @@ class AuthApiClient {
     // Request interceptor to add auth token
     this.apiClient.interceptors.request.use(
       (config) => {
-        // Only add auth header if auth is enabled and we have a token
-        if (this.authEnabled && this.token) {
+        // Add auth header whenever we have a token so startup validation works before authEnabled is known
+        if (this.token) {
           config.headers.Authorization = `Bearer ${this.token}`;
         }
         return config;

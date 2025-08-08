@@ -82,9 +82,9 @@ function AppLayout() {
   const { toggleVisibility, totalTasks } = useContext(QueueContext) || {};
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-surface-secondary via-surface-muted to-surface-accent dark:from-surface-dark dark:via-surface-muted-dark dark:to-surface-secondary-dark text-content-primary dark:text-content-primary-dark flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-surface-secondary via-surface-muted to-surface-accent dark:from-surface-dark dark:via-surface-muted-dark dark:to-surface-secondary-dark text-content-primary dark:text-content-primary-dark flex flex-col overflow-hidden">
       {/* Desktop Header */}
-      <header className="hidden md:block sticky top-0 z-40 w-full border-b border-border dark:border-border-dark bg-surface-overlay dark:bg-surface-overlay-dark backdrop-blur-sm">
+      <header className="hidden md:block sticky top-0 z-50 w-full border-b border-border dark:border-border-dark bg-surface dark:bg-surface-dark">
         <div className="container mx-auto h-14 flex items-center justify-between">
           <Link to="/" className="flex items-center">
             <img src="/spotizerr.svg" alt="Spotizerr" className="h-8 w-auto logo" />
@@ -119,9 +119,9 @@ function AppLayout() {
       </main>
 
       {/* Mobile Layout Container */}
-      <div className="md:hidden flex flex-col h-screen">
+      <div className="md:hidden flex flex-col min-h-screen overflow-hidden">
         {/* Mobile Header - Fixed */}
-        <header className="fixed top-0 left-0 right-0 z-40 border-b border-border dark:border-border-dark bg-surface-overlay dark:bg-surface-overlay-dark backdrop-blur-sm pwa-header">
+        <header className="fixed top-0 left-0 right-0 z-50 border-b border-border dark:border-border-dark bg-surface dark:bg-surface-dark pwa-header">
           <div className="container mx-auto h-14 flex items-center justify-between px-4">
             <Link to="/" className="flex items-center">
               <img src="/spotizerr.svg" alt="Spotizerr" className="h-8 w-auto logo" />
@@ -131,12 +131,12 @@ function AppLayout() {
           </div>
         </header>
 
-        {/* Mobile Main Content - Scrollable container */}
-        <main className="flex-1 overflow-y-auto mt-14 mb-16 pwa-main">
+        {/* Mobile Main Content - Constrained scroll area between headers */}
+        <div className="fixed top-14 bottom-16 left-0 right-0 overflow-y-auto pwa-main bg-gradient-to-br from-surface-secondary via-surface-muted to-surface-accent dark:from-surface-dark dark:via-surface-muted-dark dark:to-surface-secondary-dark">
           <div className="container mx-auto p-4">
             <Outlet />
           </div>
-        </main>
+        </div>
 
         {/* Mobile Bottom Navigation - Fixed */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border dark:border-border-dark bg-surface-overlay dark:bg-surface-overlay-dark backdrop-blur-md pwa-footer">

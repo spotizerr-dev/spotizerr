@@ -185,23 +185,21 @@
   /* PWA specific body styling */
   body {
     background: var(--color-surface);
-    overscroll-behavior: none;
   }
   .dark body {
     background: var(--color-surface-dark);
   }
 
   /* PWA viewport fixes */
-  html {
-    height: 100vh;
-    height: 100dvh; /* Dynamic viewport height for mobile */
+  html, body {
+    height: 100%;
+    min-height: 100%;
   }
 
   body {
-    min-height: 100vh;
-    min-height: 100dvh;
     margin: 0;
     padding: 0;
+    overflow-y: auto;
   }
 
   a {
@@ -232,6 +230,8 @@
   .pwa-main {
     padding-left: var(--safe-area-inset-left);
     padding-right: var(--safe-area-inset-right);
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
 }
