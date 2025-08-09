@@ -14,6 +14,10 @@ on:
       - '.github/workflows/compose-image-guard.yml'
       - '.github/scripts/ensure_compose_image.py'
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   validate-compose-image:
     runs-on: ubuntu-latest
@@ -31,6 +35,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml
 
-      - name: Validate docker-compose image
-        run: |
-          python .github/scripts/ensure_compose_image.py docker-compose.yaml --autocommit
+      # On pushes to this repo: normalize and push
+      - name: Validate and normalize (auto-commit on push)
+        if: github.event_name == 'push' && github.repository == 'Xoconoch/spotizerr'
+        run: python .github/scripts/ensure_compose_image.py docker-compose.yaml --autocommit
+
+      # On PRs (including forks): validate only, no push
+      - name: Validate (no auto-commit on PR)
+        if: github.event_name != 'push' || github.repository != 'Xoconoch/spotizerr'
+        run: python .github/scripts/ensure_compose_image.py docker-compose.yaml
