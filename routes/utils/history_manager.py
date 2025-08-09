@@ -498,6 +498,27 @@ class HistoryManager:
             tracks = album.get("tracks", [])
             total_duration = self._calculate_total_duration(tracks)
             
+            # Derive accurate status if we have counters
+            status_to_store = status
+            try:
+                if total_tracks:
+                    if successful_tracks >= total_tracks and failed_tracks == 0 and skipped_tracks == 0:
+                        status_to_store = "completed"
+                    elif successful_tracks > 0:
+                        status_to_store = "partial"
+                    else:
+                        # None succeeded but there are failures/skips or unknown issues
+                        status_to_store = "failed"
+                else:
+                    # Fallback: if any failure recorded, mark failed/partial conservatively
+                    if failed_tracks > 0 and successful_tracks == 0:
+                        status_to_store = "failed"
+                    elif failed_tracks > 0 and successful_tracks > 0:
+                        status_to_store = "partial"
+            except Exception:
+                # Keep provided status
+                pass
+            
             # Prepare metadata
             metadata = {
                 "callback_type": "album",
@@ -521,7 +542,7 @@ class HistoryManager:
                     album.get("title", "Unknown"),
                     json.dumps(artists),
                     callback_data.get("timestamp", time.time()),
-                    status,
+                    status_to_store,
                     self._get_primary_service(external_ids),
                     status_info.get("convert_to"),
                     status_info.get("bitrate"),
@@ -542,7 +563,7 @@ class HistoryManager:
             
             # Children table is populated progressively during track processing, not from summary
             
-            logger.info(f"Stored album history for '{album.get('title')}' (task: {task_id}, children: {children_table})")
+            logger.info(f"Stored album history for '{album.get('title')}' (task: {task_id}, children: {children_table}, status: {status_to_store})")
             return None
             
         except Exception as e:
@@ -600,6 +621,24 @@ class HistoryManager:
             total_tracks = len(tracks)
             total_duration = self._calculate_total_duration(tracks)
             
+            # Derive accurate status
+            status_to_store = status
+            try:
+                if total_tracks:
+                    if successful_tracks >= total_tracks and failed_tracks == 0 and skipped_tracks == 0:
+                        status_to_store = "completed"
+                    elif successful_tracks > 0:
+                        status_to_store = "partial"
+                    else:
+                        status_to_store = "failed"
+                else:
+                    if failed_tracks > 0 and successful_tracks == 0:
+                        status_to_store = "failed"
+                    elif failed_tracks > 0 and successful_tracks > 0:
+                        status_to_store = "partial"
+            except Exception:
+                pass
+            
             # Extract owner information
             owner = playlist.get("owner", {})
             
@@ -626,7 +665,7 @@ class HistoryManager:
                     playlist.get("title", "Unknown"),
                     json.dumps([owner.get("name", "Unknown")]),  # Use owner as "artist"
                     callback_data.get("timestamp", time.time()),
-                    status,
+                    status_to_store,
                     self._get_primary_service(external_ids),
                     status_info.get("convert_to"),
                     status_info.get("bitrate"),
@@ -646,9 +685,9 @@ class HistoryManager:
             
             # Children table is populated progressively during track processing, not from summary
             
-            logger.info(f"Stored playlist history for '{playlist.get('title')}' (task: {task_id}, children: {children_table})")
+            logger.info(f"Stored playlist history for '{playlist.get('title')}' (task: {task_id}, children: {children_table}, status: {status_to_store})")
             return None
-            
+             
         except Exception as e:
             logger.error(f"Failed to store playlist history for task {task_id}: {e}")
             return None

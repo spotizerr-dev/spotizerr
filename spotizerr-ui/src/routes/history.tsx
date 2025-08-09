@@ -17,7 +17,7 @@ type HistoryEntry = {
   title: string;
   artists: string[];
   timestamp: number;
-  status: "completed" | "failed" | "skipped" | "in_progress";
+  status: "completed" | "failed" | "skipped" | "in_progress" | "partial";
   service: string;
   quality_format?: string;
   quality_bitrate?: string;
@@ -67,6 +67,7 @@ type ChildrenResponse = {
 
 const STATUS_CLASS: Record<string, string> = {
   completed: "text-success",
+  partial: "text-warning",
   failed: "text-error",
   in_progress: "text-warning",
   skipped: "text-content-muted dark:text-content-muted-dark",
@@ -475,6 +476,7 @@ export const History = () => {
               <option value="failed">Failed</option>
               <option value="skipped">Skipped</option>
               <option value="in_progress">In Progress</option>
+              <option value="partial">Partial</option>
             </select>
             <select
               value={typeFilter}
