@@ -492,8 +492,14 @@ class HistoryManager:
             successful_tracks = summary.get("total_successful", 0)
             failed_tracks = summary.get("total_failed", 0) 
             skipped_tracks = summary.get("total_skipped", 0)
-            total_tracks = album.get("total_tracks", 0)
-            
+            total_tracks = summary.get("total_successful", 0) + summary.get("total_skipped", 0) + summary.get("total_failed", 0) or album.get("total_tracks", 0)
+
+            # Enrich album metadata if missing
+            try:
+                album = self._enrich_album_metadata_from_summary(album, summary)
+            except Exception:
+                pass
+
             # Calculate total duration
             tracks = album.get("tracks", [])
             total_duration = self._calculate_total_duration(tracks)
@@ -561,7 +567,12 @@ class HistoryManager:
                     total_duration
                 ))
             
-            # Children table is populated progressively during track processing, not from summary
+            # If we have a summary (e.g., on cancellation), populate children from it including failed ones
+            try:
+                if summary:
+                    self._populate_album_children_table(children_table, summary, album.get("title", ""))
+            except Exception as e:
+                logger.warning(f"Failed to populate children from summary for album {children_table}: {e}")
             
             logger.info(f"Stored album history for '{album.get('title')}' (task: {task_id}, children: {children_table}, status: {status_to_store})")
             return None
@@ -616,9 +627,21 @@ class HistoryManager:
             successful_tracks = summary.get("total_successful", 0)
             failed_tracks = summary.get("total_failed", 0)
             skipped_tracks = summary.get("total_skipped", 0)
-            
+
+            # Improve metadata for playlist main row using summary first success/skip/failed track
+            try:
+                if not playlist.get("images"):
+                    for arr_key in ("successful_tracks", "skipped_tracks", "failed_tracks"):
+                        arr = summary.get(arr_key, []) or []
+                        candidate = (arr[0].get("album") if arr_key == "failed_tracks" and isinstance(arr[0], dict) else (arr[0].get("album") if arr and isinstance(arr[0], dict) else {})) if arr else {}
+                        if candidate and candidate.get("images"):
+                            playlist.setdefault("images", candidate.get("images", []))
+                            break
+            except Exception:
+                pass
+
             tracks = playlist.get("tracks", [])
-            total_tracks = len(tracks)
+            total_tracks = (summary.get("total_successful", 0) + summary.get("total_skipped", 0) + summary.get("total_failed", 0)) or len(tracks)
             total_duration = self._calculate_total_duration(tracks)
             
             # Derive accurate status
@@ -683,8 +706,13 @@ class HistoryManager:
                     total_duration
                 ))
             
-            # Children table is populated progressively during track processing, not from summary
-            
+            # If we have a summary (e.g., on cancellation), populate children from it including failed ones
+            try:
+                if summary:
+                    self._populate_playlist_children_table(children_table, summary)
+            except Exception as e:
+                logger.warning(f"Failed to populate children from summary for playlist {children_table}: {e}")
+
             logger.info(f"Stored playlist history for '{playlist.get('title')}' (task: {task_id}, children: {children_table}, status: {status_to_store})")
             return None
              
@@ -697,37 +725,31 @@ class HistoryManager:
         try:
             # Ensure table exists before population
             self._create_children_table(table_name)
-            all_tracks = []
+            all_rows = []
             
             # Add successful tracks
             for track in summary.get("successful_tracks", []):
                 track_data = self._prepare_child_track_data(track, album_title, "completed")
-                all_tracks.append(track_data)
+                all_rows.append(self._map_values_to_row(track_data["values"]))
             
             # Add failed tracks  
             for failed_item in summary.get("failed_tracks", []):
                 track = failed_item.get("track", {})
                 track_data = self._prepare_child_track_data(track, album_title, "failed")
                 track_data["metadata"]["failure_reason"] = failed_item.get("reason", "Unknown error")
-                all_tracks.append(track_data)
+                all_rows.append(self._map_values_to_row(track_data["values"]))
             
             # Add skipped tracks
             for track in summary.get("skipped_tracks", []):
                 track_data = self._prepare_child_track_data(track, album_title, "skipped")
-                all_tracks.append(track_data)
+                all_rows.append(self._map_values_to_row(track_data["values"]))
             
-            # Insert all tracks
+            # Upsert all rows
             with self._get_connection() as conn:
-                for track_data in all_tracks:
-                    conn.execute(f"""
-                        INSERT INTO {table_name} (
-                            title, artists, album_title, duration_ms, track_number,
-                            disc_number, explicit, status, external_ids, genres,
-                            isrc, timestamp, position, metadata
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, track_data["values"])
+                for row in all_rows:
+                    self._upsert_child_row(conn, table_name, row)
             
-            logger.info(f"Populated {len(all_tracks)} tracks in children table {table_name}")
+            logger.info(f"Populated {len(all_rows)} tracks in children table {table_name}")
             
         except Exception as e:
             logger.error(f"Failed to populate album children table {table_name}: {e}")
@@ -737,37 +759,30 @@ class HistoryManager:
         try:
             # Ensure table exists before population
             self._create_children_table(table_name)
-            all_tracks = []
+            all_rows = []
             
             # Add successful tracks
             for track in summary.get("successful_tracks", []):
                 track_data = self._prepare_child_track_data(track, "", "completed")
-                all_tracks.append(track_data)
+                all_rows.append(self._map_values_to_row(track_data["values"]))
             
             # Add failed tracks
             for failed_item in summary.get("failed_tracks", []):
                 track = failed_item.get("track", {})
                 track_data = self._prepare_child_track_data(track, "", "failed")
                 track_data["metadata"]["failure_reason"] = failed_item.get("reason", "Unknown error")
-                all_tracks.append(track_data)
+                all_rows.append(self._map_values_to_row(track_data["values"]))
             
             # Add skipped tracks  
             for track in summary.get("skipped_tracks", []):
                 track_data = self._prepare_child_track_data(track, "", "skipped")
-                all_tracks.append(track_data)
+                all_rows.append(self._map_values_to_row(track_data["values"]))
             
-            # Insert all tracks
             with self._get_connection() as conn:
-                for track_data in all_tracks:
-                    conn.execute(f"""
-                        INSERT INTO {table_name} (
-                            title, artists, album_title, duration_ms, track_number,
-                            disc_number, explicit, status, external_ids, genres,
-                            isrc, timestamp, position, metadata
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, track_data["values"])
+                for row in all_rows:
+                    self._upsert_child_row(conn, table_name, row)
             
-            logger.info(f"Populated {len(all_tracks)} tracks in children table {table_name}")
+            logger.info(f"Populated {len(all_rows)} tracks in children table {table_name}")
             
         except Exception as e:
             logger.error(f"Failed to populate playlist children table {table_name}: {e}")
@@ -1105,6 +1120,213 @@ class HistoryManager:
         except Exception as e:
             logger.error(f"Failed to clear old history: {e}")
             return 0
+
+    # --- New helpers for failed children insertion and metadata enrichment ---
+    def _populate_failed_children_for_album(self, table_name: str, summary: Dict, album_title: str) -> None:
+        try:
+            self._create_children_table(table_name)
+            with self._get_connection() as conn:
+                for failed_item in summary.get("failed_tracks", []):
+                    track = failed_item.get("track", {})
+                    track_data = self._prepare_child_track_data(track, album_title, "failed")
+                    track_data["metadata"]["failure_reason"] = failed_item.get("reason", "cancelled")
+                    conn.execute(f"""
+                        INSERT INTO {table_name} (
+                            title, artists, album_title, duration_ms, track_number,
+                            disc_number, explicit, status, external_ids, genres,
+                            isrc, timestamp, position, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, track_data["values"])
+        except Exception as e:
+            logger.error(f"Failed to insert failed children for album into {table_name}: {e}")
+
+    def _populate_failed_children_for_playlist(self, table_name: str, summary: Dict) -> None:
+        try:
+            self._create_children_table(table_name)
+            with self._get_connection() as conn:
+                for failed_item in summary.get("failed_tracks", []):
+                    track = failed_item.get("track", {})
+                    track_data = self._prepare_child_track_data(track, "", "failed")
+                    track_data["metadata"]["failure_reason"] = failed_item.get("reason", "cancelled")
+                    conn.execute(f"""
+                        INSERT INTO {table_name} (
+                            title, artists, album_title, duration_ms, track_number,
+                            disc_number, explicit, status, external_ids, genres,
+                            isrc, timestamp, position, metadata
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, track_data["values"])
+        except Exception as e:
+            logger.error(f"Failed to insert failed children for playlist into {table_name}: {e}")
+
+    def _enrich_album_metadata_from_summary(self, album: Dict, summary: Dict) -> Dict:
+        if album.get("images") and album.get("release_date") and album.get("genres"):
+            return album
+        # Prefer successful track album data, then skipped, then failed
+        src_track = None
+        for key in ("successful_tracks", "skipped_tracks", "failed_tracks"):
+            arr = summary.get(key, []) or []
+            if arr:
+                src_track = arr[0] if key != "failed_tracks" else (arr[0].get("track") if isinstance(arr[0], dict) else None)
+                break
+        if isinstance(src_track, dict):
+            album_obj = src_track.get("album", {}) or {}
+            album.setdefault("images", album_obj.get("images", []))
+            album.setdefault("release_date", album_obj.get("release_date", {}))
+            album.setdefault("genres", album_obj.get("genres", []))
+            album.setdefault("album_type", album_obj.get("album_type", album.get("album_type")))
+        return album
+
+    # --- Upsert helpers to avoid duplicate children rows and keep most complete ---
+    def _map_values_to_row(self, values: tuple) -> Dict:
+        (
+            title,
+            artists_json,
+            album_title,
+            duration_ms,
+            track_number,
+            disc_number,
+            explicit,
+            status,
+            external_ids_json,
+            genres_json,
+            isrc,
+            timestamp,
+            position,
+            metadata_json,
+        ) = values
+        return {
+            "title": title,
+            "artists": artists_json,
+            "album_title": album_title,
+            "duration_ms": duration_ms,
+            "track_number": track_number,
+            "disc_number": disc_number,
+            "explicit": explicit,
+            "status": status,
+            "external_ids": external_ids_json,
+            "genres": genres_json,
+            "isrc": isrc,
+            "timestamp": timestamp,
+            "position": position,
+            "metadata": metadata_json,
+        }
+
+    def _status_priority(self, status: str) -> int:
+        order = {"completed": 3, "skipped": 2, "failed": 1}
+        return order.get((status or "").lower(), 0)
+
+    def _merge_child_rows(self, existing: Dict, new: Dict) -> Dict:
+        merged = existing.copy()
+        # Prefer non-empty/non-null values; for status use priority
+        for key in [
+            "artists",
+            "album_title",
+            "duration_ms",
+            "track_number",
+            "disc_number",
+            "explicit",
+            "external_ids",
+            "genres",
+            "isrc",
+            "metadata",
+        ]:
+            old_val = merged.get(key)
+            new_val = new.get(key)
+            # Consider JSON strings: prefer longer/ non-empty
+            if (old_val in (None, "", 0)) and new_val not in (None, ""):
+                merged[key] = new_val
+            elif isinstance(new_val, str) and isinstance(old_val, str) and len(new_val) > len(old_val):
+                merged[key] = new_val
+        # Status: keep highest priority
+        if self._status_priority(new.get("status")) > self._status_priority(existing.get("status")):
+            merged["status"] = new.get("status")
+        # Timestamp: keep earliest for creation but allow update to latest timestamp for last update
+        merged["timestamp"] = max(existing.get("timestamp") or 0, new.get("timestamp") or 0)
+        return merged
+
+    def _find_existing_child_row(self, conn: sqlite3.Connection, table_name: str, new_row: Dict) -> Optional[Dict]:
+        try:
+            cursor = conn.execute(f"SELECT * FROM {table_name} WHERE title = ?", (new_row.get("title", ""),))
+            candidates = [dict(r) for r in cursor.fetchall()]
+            if not candidates:
+                return None
+            # Try match by ISRC
+            isrc = new_row.get("isrc")
+            if isrc:
+                for r in candidates:
+                    if (r.get("isrc") or "") == isrc:
+                        return r
+            # Try match by position (playlist) then track_number (album)
+            pos = new_row.get("position")
+            if pos is not None:
+                for r in candidates:
+                    if r.get("position") == pos:
+                        return r
+            tn = new_row.get("track_number")
+            if tn:
+                for r in candidates:
+                    if r.get("track_number") == tn:
+                        return r
+            # Fallback: first candidate with same title
+            return candidates[0]
+        except Exception:
+            return None
+
+    def _upsert_child_row(self, conn: sqlite3.Connection, table_name: str, row: Dict) -> None:
+        existing = self._find_existing_child_row(conn, table_name, row)
+        if existing:
+            merged = self._merge_child_rows(existing, row)
+            conn.execute(
+                f"""
+                UPDATE {table_name}
+                SET artists = ?, album_title = ?, duration_ms = ?, track_number = ?,
+                    disc_number = ?, explicit = ?, status = ?, external_ids = ?,
+                    genres = ?, isrc = ?, timestamp = ?, position = ?, metadata = ?
+                WHERE id = ?
+                """,
+                (
+                    merged.get("artists"),
+                    merged.get("album_title"),
+                    merged.get("duration_ms"),
+                    merged.get("track_number"),
+                    merged.get("disc_number"),
+                    merged.get("explicit"),
+                    merged.get("status"),
+                    merged.get("external_ids"),
+                    merged.get("genres"),
+                    merged.get("isrc"),
+                    merged.get("timestamp"),
+                    merged.get("position"),
+                    merged.get("metadata"),
+                    existing.get("id"),
+                ),
+            )
+        else:
+            conn.execute(
+                f"""
+                INSERT INTO {table_name} (
+                    title, artists, album_title, duration_ms, track_number,
+                    disc_number, explicit, status, external_ids, genres,
+                    isrc, timestamp, position, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row.get("title"),
+                    row.get("artists"),
+                    row.get("album_title"),
+                    row.get("duration_ms"),
+                    row.get("track_number"),
+                    row.get("disc_number"),
+                    row.get("explicit"),
+                    row.get("status"),
+                    row.get("external_ids"),
+                    row.get("genres"),
+                    row.get("isrc"),
+                    row.get("timestamp"),
+                    row.get("position"),
+                    row.get("metadata"),
+                ),
+            )
 
 
 # Global history manager instance

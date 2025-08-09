@@ -873,6 +873,12 @@ async def cancel_task_endpoint(task_id: str, current_user: User = Depends(requir
         if task_info:
             # This is a task ID in the new system
             result = cancel_task(task_id)
+            try:
+                # Push an immediate SSE update so clients reflect cancellation and partial summary
+                await trigger_sse_update(task_id, "cancelled")
+                result["sse_notified"] = True
+            except Exception as e:
+                logger.error(f"SSE notify after cancel failed for {task_id}: {e}")
             return result
 
         # If not found in new system, we need to handle the old system cancellation
