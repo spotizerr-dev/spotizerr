@@ -1,3 +1,4 @@
+#!/bin/bash
 set -e
 
 # Set umask if UMASK variable is provided
