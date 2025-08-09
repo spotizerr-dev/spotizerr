@@ -33,4 +33,4 @@ jobs:
 
       - name: Validate docker-compose image
         run: |
-          python .github/scripts/ensure_compose_image.py docker-compose.yaml
+          python .github/scripts/ensure_compose_image.py docker-compose.yaml --autocommit
