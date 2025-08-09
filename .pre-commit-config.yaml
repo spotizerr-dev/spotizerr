@@ -1,32 +1,11 @@
 repos:
     # Various general + format-specific helpers
     - repo: https://github.com/pre-commit/pre-commit-hooks
-      rev: v5.0.0
+      rev: v4.6.0
       hooks:
-          - id: check-symlinks
-            exclude: ^spotizerr-ui/
-          - id: trailing-whitespace
-            exclude: ^spotizerr-ui/
-          - id: mixed-line-ending
-            args: [--fix=lf]
-            exclude: ^spotizerr-ui/
           - id: check-yaml
-            exclude: 'mkdocs.yml|^spotizerr-ui/'
-          - id: check-toml
-            exclude: ^spotizerr-ui/
-          - id: check-json
-            exclude: ^spotizerr-ui/
-          - id: check-ast
-            exclude: ^spotizerr-ui/
-          - id: debug-statements
-            exclude: ^spotizerr-ui/
-          - id: check-merge-conflict
-            exclude: ^spotizerr-ui/
-          - id: check-shebang-scripts-are-executable
-            exclude: ^spotizerr-ui/
-          - id: check-added-large-files
-            args: [--maxkb=10000]
-            exclude: ^spotizerr-ui/
+          - id: end-of-file-fixer
+          - id: trailing-whitespace
     - repo: https://github.com/python-jsonschema/check-jsonschema
       rev: '0.33.0'
       hooks:
@@ -53,3 +32,10 @@ repos:
             exclude: ^spotizerr-ui/
             # NOTE: you might need to add some deps here:
             additional_dependencies: [waitress==3.0.2, types-waitress, types-requests]
+    - repo: local
+      hooks:
+        - id: ensure-compose-image
+          name: Ensure docker-compose image is cooldockerizer93/spotizerr
+          entry: python3 .github/scripts/ensure_compose_image.py docker-compose.yaml
+          language: system
+          files: ^docker-compose\.ya?ml$
