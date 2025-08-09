@@ -1,0 +1,46 @@
+name: Compose Image Guard
+
+on:
+  push:
+    branches: [ dev, main, master ]
+    paths:
+      - 'docker-compose.yaml'
+      - '.github/workflows/compose-image-guard.yml'
+      - '.github/scripts/ensure_compose_image.py'
+  pull_request:
+    branches: [ dev, main, master ]
+    paths:
+      - 'docker-compose.yaml'
+      - '.github/workflows/compose-image-guard.yml'
+      - '.github/scripts/ensure_compose_image.py'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate-compose-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      # On pushes to this repo: normalize and push
+      - name: Validate and normalize (auto-commit on push)
+        if: github.event_name == 'push' && github.repository == 'Xoconoch/spotizerr'
+        run: python .github/scripts/ensure_compose_image.py docker-compose.yaml --autocommit
+
+      # On PRs (including forks): validate only, no push
+      - name: Validate (no auto-commit on PR)
+        if: github.event_name != 'push' || github.repository != 'Xoconoch/spotizerr'
+        run: python .github/scripts/ensure_compose_image.py docker-compose.yaml

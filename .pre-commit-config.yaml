@@ -52,4 +52,4 @@ repos:
             args: [--no-strict-optional, --ignore-missing-imports]
             exclude: ^spotizerr-ui/
             # NOTE: you might need to add some deps here:
-            additional_dependencies: [waitress==3.0.2, types-waitress, types-requests]
+            additional_dependencies: [waitress==3.0.2, types-waitress, types-requests, types-PyYAML]
