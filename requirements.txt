@@ -1,7 +1,7 @@
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
 celery==5.5.3
-deezspot-spotizerr==2.2.3
+deezspot-spotizerr==2.2.4
 httpx==0.28.1
 bcrypt==4.2.1
 PyJWT==2.10.1
