@@ -2,7 +2,7 @@ name: spotizerr
 
 services:
   spotizerr:
-    image: cooldockerizer93/spotizerr:ee
+    image: cooldockerizer93/spotizerr:eee
     volumes:
       - ./data:/app/data
       - ./downloads:/app/downloads  # <-- Change this for your music library dir
