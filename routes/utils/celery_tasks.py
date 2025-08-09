@@ -35,6 +35,172 @@ from routes.utils.history_manager import history_manager
 # Create Redis connection for storing task data that's not part of the Celery result backend
 import redis
 
+# --- Helpers to build partial summaries from task logs ---
+def _read_task_log_json_lines(task_id: str) -> list:
+    log_file_path = Path("./logs/tasks") / f"{task_id}.log"
+    if not log_file_path.exists():
+        return []
+    lines = []
+    try:
+        with open(log_file_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    lines.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception:
+        return []
+    return lines
+
+
+def _extract_parent_initial_tracks(log_lines: list, parent_type: str) -> dict:
+    """
+    Returns a mapping from a stable track key to the track object from the initial parent callback.
+    For albums: key by ids.spotify or f"{track_number}:{title}" as fallback.
+    For playlists: key by ids.spotify or f"{position}:{title}" as fallback.
+    """
+    track_map: dict[str, dict] = {}
+    if parent_type == "album":
+        for obj in log_lines:
+            album = obj.get("album")
+            if album and isinstance(album, dict) and album.get("tracks"):
+                for t in album.get("tracks", []):
+                    ids = (t or {}).get("ids", {}) or {}
+                    key = ids.get("spotify") or f"{(t or {}).get('track_number', 0)}:{(t or {}).get('title', '')}"
+                    track_map[key] = t
+                break
+    elif parent_type == "playlist":
+        for obj in log_lines:
+            playlist = obj.get("playlist")
+            if playlist and isinstance(playlist, dict) and playlist.get("tracks"):
+                for t in playlist.get("tracks", []):
+                    ids = (t or {}).get("ids", {}) or {}
+                    # TrackPlaylistObject uses position
+                    key = ids.get("spotify") or f"{(t or {}).get('position', 0)}:{(t or {}).get('title', '')}"
+                    track_map[key] = t
+                break
+    return track_map
+
+
+def _extract_completed_and_skipped_from_logs(log_lines: list) -> tuple[set, set, dict, dict]:
+    """
+    Returns (completed_keys, skipped_keys, completed_objects_by_key, skipped_objects_by_key)
+    Keys prefer ids.spotify, falling back to index+title scheme consistent with initial map.
+    """
+    completed_keys: set[str] = set()
+    skipped_keys: set[str] = set()
+    completed_objs: dict[str, dict] = {}
+    skipped_objs: dict[str, dict] = {}
+    for obj in log_lines:
+        track = obj.get("track")
+        if not track:
+            continue
+        status_info = obj.get("status_info", {}) or {}
+        status = status_info.get("status")
+        ids = (track or {}).get("ids", {}) or {}
+        # Fallback keys try track_number:title and position:title
+        fallback_key = f"{(track or {}).get('track_number', 0)}:{(track or {}).get('title', '')}"
+        key = ids.get("spotify") or fallback_key
+        if status == "done":
+            completed_keys.add(key)
+            completed_objs[key] = track
+        elif status == "skipped":
+            skipped_keys.add(key)
+            skipped_objs[key] = track
+    return completed_keys, skipped_keys, completed_objs, skipped_objs
+
+
+def _to_track_object_from_initial(initial_track: dict, parent_type: str) -> dict:
+    """Convert initial album/playlist track entry to a TrackObject-like dict."""
+    # Common fields
+    title = initial_track.get("title", "")
+    disc_number = initial_track.get("disc_number", 1)
+    track_number = initial_track.get("track_number", 0)
+    duration_ms = initial_track.get("duration_ms", 0)
+    explicit = initial_track.get("explicit", False)
+    ids = initial_track.get("ids", {}) or {}
+
+    # Convert artists to ArtistTrackObject[] shape
+    artists_src = initial_track.get("artists", []) or []
+    artists_conv = []
+    for a in artists_src:
+        if isinstance(a, dict):
+            artists_conv.append({
+                "type": "artistTrack",
+                "name": a.get("name", ""),
+                "ids": a.get("ids", {}) or {},
+            })
+
+    # Convert album to AlbumTrackObject-like shape
+    album_src = initial_track.get("album", {}) or {}
+    album_conv = {
+        "type": "albumTrack",
+        "album_type": album_src.get("album_type", ""),
+        "title": album_src.get("title", ""),
+        "release_date": album_src.get("release_date", {}) or {},
+        "total_tracks": album_src.get("total_tracks", 0),
+        "genres": album_src.get("genres", []) or [],
+        "images": album_src.get("images", []) or [],
+        "ids": album_src.get("ids", {}) or {},
+        "artists": [
+            {
+                "type": "artistAlbumTrack",
+                "name": aa.get("name", ""),
+                "ids": aa.get("ids", {}) or {},
+            }
+            for aa in (album_src.get("artists", []) or [])
+            if isinstance(aa, dict)
+        ],
+    }
+
+    return {
+        "type": "track",
+        "title": title,
+        "disc_number": disc_number,
+        "track_number": track_number,
+        "duration_ms": duration_ms,
+        "explicit": explicit,
+        "genres": [],
+        "album": album_conv,
+        "artists": artists_conv,
+        "ids": ids,
+    }
+
+
+def build_partial_summary_from_task_log(task_id: str, parent_type: str) -> dict:
+    """
+    Build a SummaryObject-like dict using the task's log lines.
+    Includes arrays successful_tracks, skipped_tracks, failed_tracks (with reason), and totals.
+    """
+    log_lines = _read_task_log_json_lines(task_id)
+    initial_tracks_map = _extract_parent_initial_tracks(log_lines, parent_type)
+    completed_keys, skipped_keys, completed_objs, skipped_objs = _extract_completed_and_skipped_from_logs(log_lines)
+
+    # Determine failed as initial - completed - skipped
+    initial_keys = set(initial_tracks_map.keys())
+    failed_keys = initial_keys.difference(completed_keys.union(skipped_keys))
+
+    successful_tracks = [completed_objs[k] for k in completed_keys if k in completed_objs]
+    skipped_tracks = [skipped_objs[k] for k in skipped_keys if k in skipped_objs]
+    failed_tracks = [
+        {"track": _to_track_object_from_initial(initial_tracks_map[k], parent_type), "reason": "cancelled"}
+        for k in failed_keys
+        if k in initial_tracks_map
+    ]
+
+    return {
+        "successful_tracks": successful_tracks,
+        "skipped_tracks": skipped_tracks,
+        "failed_tracks": failed_tracks,
+        "total_successful": len(successful_tracks),
+        "total_skipped": len(skipped_tracks),
+        "total_failed": len(failed_tracks),
+    }
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -249,6 +415,8 @@ def cancel_task(task_id):
         store_task_status(
             task_id,
             {
+                "status": ProgressState.CANCELLED,
+                "error": "Task cancelled by user",
                 "status_info": {
                     "status": ProgressState.CANCELLED,
                     "error": "Task cancelled by user",
@@ -1065,6 +1233,53 @@ def task_postrun_handler(
             last_status_for_history.get("status") if last_status_for_history else None
         )
 
+        # If task was cancelled/revoked, finalize parent history with partial summary
+        try:
+            if state == states.REVOKED or current_redis_status == ProgressState.CANCELLED:
+                parent_type = (task_info.get("download_type") or task_info.get("type") or "").lower()
+                if parent_type in ["album", "playlist"]:
+                    # Build detailed summary from the task log
+                    summary = build_partial_summary_from_task_log(task_id, parent_type)
+                    status_info = {"status": "done", "summary": summary}
+                    title = task_info.get("name", "Unknown")
+                    total_tracks = task_info.get("total_tracks", 0)
+
+                    # Try to enrich parent payload with initial callback object (to capture artists, ids, images)
+                    try:
+                        log_lines = _read_task_log_json_lines(task_id)
+                        initial_parent = _extract_initial_parent_object(log_lines, parent_type)
+                    except Exception:
+                        initial_parent = None
+
+                    if parent_type == "album":
+                        album_payload = {"title": title, "total_tracks": total_tracks}
+                        if isinstance(initial_parent, dict):
+                            for k in ["artists", "ids", "images", "release_date", "genres", "album_type", "tracks"]:
+                                if k in initial_parent:
+                                    album_payload[k] = initial_parent.get(k)
+                        # Ensure a main history entry exists even on cancellation
+                        history_manager.store_album_history(
+                            {"album": album_payload, "status_info": status_info},
+                            task_id,
+                            "failed",
+                        )
+                    else:
+                        playlist_payload = {"title": title}
+                        if isinstance(initial_parent, dict):
+                            for k in ["owner", "ids", "images", "tracks", "description"]:
+                                if k in initial_parent:
+                                    playlist_payload[k] = initial_parent.get(k)
+                        history_manager.store_playlist_history(
+                            {"playlist": playlist_payload, "status_info": status_info},
+                            task_id,
+                            "failed",
+                        )
+        except Exception as finalize_err:
+            logger.error(
+                f"Failed to finalize partial history for cancelled task {task_id}: {finalize_err}",
+                exc_info=True,
+            )
+
         if state == states.SUCCESS:
             if current_redis_status not in [ProgressState.COMPLETE, "done"]:
                 # The final status is now set by the 'done' callback from deezspot.
@@ -1683,6 +1898,17 @@ def trigger_sse_update_task(self, task_id: str, reason: str = "status_update"):
         # Only log errors, not success cases
         logger.error(f"SSE Task: Failed to publish summary update for task {task_id}: {e}", exc_info=True)
         # Don't raise exception to avoid task retry - SSE updates are best-effort
+
+
+def _extract_initial_parent_object(log_lines: list, parent_type: str) -> dict | None:
+    """Return the first album/playlist object from the log's initializing callback, if present."""
+    key = "album" if parent_type == "album" else ("playlist" if parent_type == "playlist" else None)
+    if not key:
+        return None
+    for obj in log_lines:
+        if key in obj and isinstance(obj[key], dict):
+            return obj[key]
+    return None
 
 
 
