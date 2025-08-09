@@ -1,9 +1,30 @@
-#!/bin/bash
 set -e
 
 # Set umask if UMASK variable is provided
 if [ -n "${UMASK}" ]; then
     umask "${UMASK}"
+fi
+
+# Compose Redis URLs from base variables if not explicitly provided
+if [ -z "${REDIS_URL}" ]; then
+    REDIS_HOST=${REDIS_HOST:-redis}
+    REDIS_PORT=${REDIS_PORT:-6379}
+    REDIS_DB=${REDIS_DB:-0}
+
+    if [ -n "${REDIS_PASSWORD}" ]; then
+        if [ -n "${REDIS_USERNAME}" ]; then
+            AUTH_PART="${REDIS_USERNAME}:${REDIS_PASSWORD}@"
+        else
+            AUTH_PART=":${REDIS_PASSWORD}@"
+        fi
+    else
+        AUTH_PART=""
+    fi
+    export REDIS_URL="redis://${AUTH_PART}${REDIS_HOST}:${REDIS_PORT}/${REDIS_DB}"
+fi
+
+if [ -z "${REDIS_BACKEND}" ]; then
+    export REDIS_BACKEND="${REDIS_URL}"
 fi
 
 # Redis is now in a separate container so we don't need to start it locally
@@ -50,10 +71,15 @@ else
             echo "Created user: ${USER_NAME} (UID: ${PUID})"
         fi
 
-        # Ensure proper permissions for all app directories
-        echo "Setting permissions for /app directories..."
-        chown -R "${USER_NAME}:${GROUP_NAME}" /app/downloads /app/data /app/logs || true
-        # Ensure Spotipy cache file exists and is writable
+        # Ensure proper permissions for all app directories unless skipped via env var
+        if [ "${SKIP_SET_PERMISSIONS}" = "true" ] || [ "${SKIP_SET_PERMISSIONS}" = "1" ]; then
+            echo "SKIP_SET_PERMISSIONS is set; skipping permissions for /app/downloads /app/data /app/logs"
+        else
+            echo "Setting permissions for /app directories..."
+            chown -R "${USER_NAME}:${GROUP_NAME}" /app/downloads /app/data /app/logs || true
+        fi
+
+        # Ensure Spotipy cache file exists and is writable (fast, local to container)
         touch /app/.cache || true
         chown "${USER_NAME}:${GROUP_NAME}" /app/.cache || true
 
