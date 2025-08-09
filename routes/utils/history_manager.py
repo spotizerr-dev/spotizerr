@@ -28,52 +28,127 @@ class HistoryManager:
         self._ensure_database_exists()
     
     def _ensure_database_exists(self):
-        """Create database and main table if they don't exist."""
+        """Create database and main table if they don't exist and migrate schema safely."""
+        expected_download_history_columns: Dict[str, str] = {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "download_type": "TEXT NOT NULL",
+            "title": "TEXT NOT NULL",
+            "artists": "TEXT",
+            "timestamp": "REAL NOT NULL",
+            "status": "TEXT NOT NULL",
+            "service": "TEXT",
+            "quality_format": "TEXT",
+            "quality_bitrate": "TEXT",
+            "total_tracks": "INTEGER",
+            "successful_tracks": "INTEGER",
+            "failed_tracks": "INTEGER",
+            "skipped_tracks": "INTEGER",
+            "children_table": "TEXT",
+            "task_id": "TEXT",
+            "external_ids": "TEXT",
+            "metadata": "TEXT",
+            "release_date": "TEXT",
+            "genres": "TEXT",
+            "images": "TEXT",
+            "owner": "TEXT",
+            "album_type": "TEXT",
+            "duration_total_ms": "INTEGER",
+            "explicit": "BOOLEAN"
+        }
+
         with self._get_connection() as conn:
-            conn.execute("""
+            cursor = conn.cursor()
+            # 1) Create table if missing with minimal schema
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS download_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    download_type TEXT NOT NULL,  -- 'track', 'album', 'playlist'
-                    title TEXT NOT NULL,
-                    artists TEXT,  -- JSON array of artist names
-                    timestamp REAL NOT NULL,
-                    status TEXT NOT NULL,  -- 'completed', 'failed', 'skipped', 'in_progress'
-                    service TEXT,  -- 'spotify', 'deezer'
-                    quality_format TEXT,  -- 'mp3', 'flac', etc.
-                    quality_bitrate TEXT,  -- '320', '1411', etc.
-                    total_tracks INTEGER,  -- For albums/playlists
-                    successful_tracks INTEGER,  -- For albums/playlists
-                    failed_tracks INTEGER,  -- For albums/playlists  
-                    skipped_tracks INTEGER,  -- For albums/playlists
-                    children_table TEXT,  -- Table name for nested tracks
-                    task_id TEXT,
-                    external_ids TEXT,  -- JSON object with service IDs
-                    metadata TEXT,  -- JSON object with additional data
-                    release_date TEXT,  -- JSON object with date info
-                    genres TEXT,  -- JSON array of genres
-                    images TEXT,  -- JSON array of image objects
-                    owner TEXT,  -- For playlists - JSON object
-                    album_type TEXT,  -- 'album', 'ep', 'single', etc.
-                    duration_total_ms INTEGER,  -- Total duration for albums/playlists
-                    explicit BOOLEAN,  -- For individual tracks
-                    UNIQUE(task_id, download_type, external_ids)
+                    download_type TEXT NOT NULL,
+                    title TEXT NOT NULL
                 )
             """)
+
+            # 2) Ensure/upgrade schema columns idempotently
+            self._ensure_table_schema(cursor, "download_history", expected_download_history_columns, "download history")
+
+            # 3) Migrate legacy columns to new ones (best-effort, non-fatal)
+            try:
+                cursor.execute("PRAGMA table_info(download_history)")
+                cols = {row[1] for row in cursor.fetchall()}
+
+                # Legacy timestamp columns → timestamp
+                if "timestamp" not in cols:
+                    # Add column first
+                    cursor.execute("ALTER TABLE download_history ADD COLUMN timestamp REAL")
+                    # Backfill from legacy columns if present
+                    legacy_time_cols = [c for c in ["time", "created_at", "date"] if c in cols]
+                    if legacy_time_cols:
+                        # Pick the first legacy column to backfill
+                        legacy_col = legacy_time_cols[0]
+                        try:
+                            cursor.execute(f"UPDATE download_history SET timestamp = CASE WHEN {legacy_col} IS NOT NULL THEN {legacy_col} ELSE strftime('%s','now') END")
+                        except sqlite3.Error:
+                            # Fallback: just set to now
+                            cursor.execute("UPDATE download_history SET timestamp = strftime('%s','now')")
+                    else:
+                        # Default all to now if nothing to migrate
+                        cursor.execute("UPDATE download_history SET timestamp = strftime('%s','now')")
+                
+                # quality → quality_format, bitrate → quality_bitrate
+                # Handle common legacy pairs non-fataly
+                cursor.execute("PRAGMA table_info(download_history)")
+                cols = {row[1] for row in cursor.fetchall()}
+                if "quality_format" not in cols and "quality" in cols:
+                    cursor.execute("ALTER TABLE download_history ADD COLUMN quality_format TEXT")
+                    try:
+                        cursor.execute("UPDATE download_history SET quality_format = quality WHERE quality_format IS NULL")
+                    except sqlite3.Error:
+                        pass
+                if "quality_bitrate" not in cols and "bitrate" in cols:
+                    cursor.execute("ALTER TABLE download_history ADD COLUMN quality_bitrate TEXT")
+                    try:
+                        cursor.execute("UPDATE download_history SET quality_bitrate = bitrate WHERE quality_bitrate IS NULL")
+                    except sqlite3.Error:
+                        pass
+            except Exception as e:
+                logger.warning(f"Non-fatal: failed legacy column migration for download_history: {e}")
+
+            # 4) Create indexes only if columns exist (avoid startup failures)
+            try:
+                cursor.execute("PRAGMA table_info(download_history)")
+                cols = {row[1] for row in cursor.fetchall()}
+
+                if "timestamp" in cols:
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_download_history_timestamp
+                        ON download_history(timestamp)
+                    """)
+                if {"download_type", "status"}.issubset(cols):
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_download_history_type_status
+                        ON download_history(download_type, status)
+                    """)
+                if "task_id" in cols:
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_download_history_task_id
+                        ON download_history(task_id)
+                    """)
+                # Preserve uniqueness from previous schema using a unique index (safer than table constraint for migrations)
+                if {"task_id", "download_type", "external_ids"}.issubset(cols):
+                    cursor.execute(
+                        """
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_download_history_task_type_ids
+                        ON download_history(task_id, download_type, external_ids)
+                        """
+                    )
+            except Exception as e:
+                logger.warning(f"Non-fatal: failed to create indexes for download_history: {e}")
+
+            # 5) Best-effort upgrade of existing children tables (album_*, playlist_*)
+            try:
+                self._migrate_existing_children_tables(cursor)
+            except Exception as e:
+                logger.warning(f"Non-fatal: failed to migrate children tables: {e}")
             
-            # Create index for faster queries
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_download_history_timestamp 
-                ON download_history(timestamp DESC)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_download_history_task_id 
-                ON download_history(task_id)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_download_history_type_status 
-                ON download_history(download_type, status)
-            """)
-    
     @contextmanager
     def _get_connection(self):
         """Get database connection with proper error handling."""
@@ -92,33 +167,84 @@ class HistoryManager:
             if conn:
                 conn.close()
     
+    def _ensure_table_schema(self, cursor: sqlite3.Cursor, table_name: str, expected_columns: Dict[str, str], table_description: str) -> None:
+        """Ensure all expected columns exist in the given table, adding any missing columns."""
+        try:
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            existing_info = cursor.fetchall()
+            existing_names = {row[1] for row in existing_info}
+
+            for col_name, col_type in expected_columns.items():
+                if col_name not in existing_names:
+                    # Avoid adding PRIMARY KEY on existing tables; strip it for ALTER
+                    col_type_for_add = col_type.replace("PRIMARY KEY", "").replace("AUTOINCREMENT", "").strip()
+                    try:
+                        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type_for_add}")
+                        logger.info(f"Added missing column '{col_name} {col_type_for_add}' to {table_description} table '{table_name}'.")
+                    except sqlite3.Error as e:
+                        logger.warning(f"Could not add column '{col_name}' to {table_description} table '{table_name}': {e}")
+        except sqlite3.Error as e:
+            logger.error(f"Error ensuring schema for {table_description} table '{table_name}': {e}")
+
     def _create_children_table(self, table_name: str):
         """
         Create a children table for storing individual tracks of an album/playlist.
+        Ensures schema upgrades for existing tables.
         
         Args:
             table_name: Name of the children table (e.g., 'album_abc123')
         """
         with self._get_connection() as conn:
-            conn.execute(f"""
+            cursor = conn.cursor()
+            cursor.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_name} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
-                    artists TEXT,  -- JSON array of artist names
+                    artists TEXT,
                     album_title TEXT,
                     duration_ms INTEGER,
                     track_number INTEGER,
                     disc_number INTEGER,
                     explicit BOOLEAN,
-                    status TEXT NOT NULL,  -- 'completed', 'failed', 'skipped'
-                    external_ids TEXT,  -- JSON object with service IDs
-                    genres TEXT,  -- JSON array of genres
+                    status TEXT NOT NULL,
+                    external_ids TEXT,
+                    genres TEXT,
                     isrc TEXT,
                     timestamp REAL NOT NULL,
-                    position INTEGER,  -- For playlist tracks
-                    metadata TEXT  -- JSON object with additional track data
+                    position INTEGER,
+                    metadata TEXT
                 )
             """)
+            expected_children_columns = {
+                "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+                "title": "TEXT NOT NULL",
+                "artists": "TEXT",
+                "album_title": "TEXT",
+                "duration_ms": "INTEGER",
+                "track_number": "INTEGER",
+                "disc_number": "INTEGER",
+                "explicit": "BOOLEAN",
+                "status": "TEXT NOT NULL",
+                "external_ids": "TEXT",
+                "genres": "TEXT",
+                "isrc": "TEXT",
+                "timestamp": "REAL NOT NULL",
+                "position": "INTEGER",
+                "metadata": "TEXT",
+            }
+            self._ensure_table_schema(cursor, table_name, expected_children_columns, "children history")
+
+    def _migrate_existing_children_tables(self, cursor: sqlite3.Cursor) -> None:
+        """Find album_* and playlist_* children tables and ensure they have the expected schema."""
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'album_%' OR name LIKE 'playlist_%')")
+        tables = [row[0] for row in cursor.fetchall() if row[0] != "download_history"]
+        for t in tables:
+            try:
+                # Ensure existence + schema upgrades
+                cursor.execute(f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL)")
+                self._create_children_table(t)
+            except Exception as e:
+                logger.warning(f"Non-fatal: failed to migrate children table {t}: {e}")
     
     def _extract_artists(self, obj: Dict) -> List[str]:
         """Extract artist names from various object types."""
