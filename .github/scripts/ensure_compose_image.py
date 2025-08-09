@@ -4,9 +4,9 @@ from pathlib import Path
 
 try:
     import yaml
-except Exception as e:
-    sys.stderr.write("PyYAML is required to run this hook.\n")
-    raise
+except Exception:
+    sys.stderr.write("PyYAML is required to run this check.\n")
+    sys.exit(2)
 
 EXPECTED_IMAGE = "cooldockerizer93/spotizerr"
 
@@ -23,28 +23,15 @@ def validate_compose_image(path: Path) -> int:
         sys.stderr.write(f"Failed to parse YAML from {path}: {e}\n")
         return 1
 
-    image = (
-        (data or {})
-        .get("services", {})
-        .get("spotizerr", {})
-        .get("image")
-    )
+    image = (data or {}).get("services", {}).get("spotizerr", {}).get("image")
 
-    errors = []
-    if not isinstance(image, str):
-        errors.append("services.spotizerr.image is missing or not a string")
-    else:
-        if image != EXPECTED_IMAGE:
-            errors.append(
-                f"services.spotizerr.image must be '{EXPECTED_IMAGE}' (found '{image}')"
-            )
-
-    if errors:
-        sys.stderr.write("docker-compose.yaml validation failed:\n")
-        for err in errors:
-            sys.stderr.write(f" - {err}\n")
+    if image != EXPECTED_IMAGE:
+        sys.stderr.write(
+            f"services.spotizerr.image must be '{EXPECTED_IMAGE}' (found '{image}')\n"
+        )
         return 1
 
+    print(f"OK: docker-compose image is '{EXPECTED_IMAGE}'")
     return 0
 
 
@@ -54,4 +41,4 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv)) 
+    sys.exit(main(sys.argv))

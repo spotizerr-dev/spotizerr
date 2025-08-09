@@ -1,0 +1,36 @@
+name: Compose Image Guard
+
+on:
+  push:
+    branches: [ dev, main, master ]
+    paths:
+      - 'docker-compose.yaml'
+      - '.github/workflows/compose-image-guard.yml'
+      - '.github/scripts/ensure_compose_image.py'
+  pull_request:
+    branches: [ dev, main, master ]
+    paths:
+      - 'docker-compose.yaml'
+      - '.github/workflows/compose-image-guard.yml'
+      - '.github/scripts/ensure_compose_image.py'
+
+jobs:
+  validate-compose-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Validate docker-compose image
+        run: |
+          python .github/scripts/ensure_compose_image.py docker-compose.yaml
