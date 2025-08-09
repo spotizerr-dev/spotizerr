@@ -1,32 +1,28 @@
 name: spotizerr
-
 services:
   spotizerr:
-    image: cooldockerizer93/spotizerr:eee
+    image: cooldockerizer93/spotizerr
     volumes:
-      - ./data:/app/data
-      - ./downloads:/app/downloads  # <-- Change this for your music library dir
-      - ./logs:/app/logs  # <-- Volume for persistent logs
+    - ./data:/app/data
+    - ./downloads:/app/downloads
+    - ./logs:/app/logs
     ports:
-      - 7171:7171
+    - 7171:7171
     container_name: spotizerr-app
     restart: unless-stopped
     env_file:
-      - .env
-
+    - .env
     depends_on:
-      - redis
-
+    - redis
   redis:
     image: redis:alpine
     container_name: spotizerr-redis
     restart: unless-stopped
     env_file:
-      - .env
+    - .env
     volumes:
-      - redis-data:/data
+    - redis-data:/data
     command: sh -c 'redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes'
-
 volumes:
   redis-data:
     driver: local
