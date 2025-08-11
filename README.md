@@ -78,7 +78,7 @@ If you self-host a music server with other users than yourself, you almost certa
 - Docker and Docker Compose
 - Spotify account(s)
 - Deezer account(s) (optional, but recommended)
-- Spotify API credentials (Client ID & Secret from [Spotify Developer Dashboard](https://developer.spotify.com/dasboard))
+- Spotify API credentials (Client ID & Secret from [Spotify Developer Dashboard](https://developer.spotify.com/dashboard))
 
 ### Installation
 
