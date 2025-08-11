@@ -1,11 +1,8 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse
 import json
 import logging
 import os
-from typing import Any, Optional, List
-from pathlib import Path
-from pydantic import BaseModel
+from typing import Any
 
 # Import the centralized config getters that handle file creation and defaults
 from routes.utils.celery_config import (
@@ -16,12 +13,11 @@ from routes.utils.celery_config import (
 from routes.utils.watch.manager import (
     get_watch_config as get_watch_manager_config,
     DEFAULT_WATCH_CONFIG,
-    CONFIG_FILE_PATH as WATCH_CONFIG_FILE_PATH,
+    MAIN_CONFIG_FILE_PATH as WATCH_MAIN_CONFIG_FILE_PATH,
 )
 
 # Import authentication dependencies
 from routes.auth.middleware import require_admin_from_state, User
-from routes.auth import AUTH_ENABLED, DISABLE_REGISTRATION
 
 # Import credential utilities (DB-backed)
 from routes.utils.credentials import list_credentials, _get_global_spotify_api_creds
@@ -75,37 +71,45 @@ def validate_config(config_data: dict, watch_config: dict = None) -> tuple[bool,
         # Get current watch config if not provided
         if watch_config is None:
             watch_config = get_watch_config_http()
-        
+
         # Check if fallback is enabled but missing required accounts
         if config_data.get("fallback", False):
             has_spotify = has_credentials("spotify")
             has_deezer = has_credentials("deezer")
-            
+
             if not has_spotify or not has_deezer:
                 missing_services = []
                 if not has_spotify:
                     missing_services.append("Spotify")
                 if not has_deezer:
                     missing_services.append("Deezer")
-                
-                return False, f"Download Fallback requires accounts to be configured for both services. Missing: {', '.join(missing_services)}. Configure accounts before enabling fallback."
-        
+
+                return (
+                    False,
+                    f"Download Fallback requires accounts to be configured for both services. Missing: {', '.join(missing_services)}. Configure accounts before enabling fallback.",
+                )
+
         # Check if watch is enabled but no download methods are available
         if watch_config.get("enabled", False):
             real_time = config_data.get("realTime", False)
             fallback = config_data.get("fallback", False)
-            
+
             if not real_time and not fallback:
-                return False, "Watch functionality requires either Real-time downloading or Download Fallback to be enabled."
-        
+                return (
+                    False,
+                    "Watch functionality requires either Real-time downloading or Download Fallback to be enabled.",
+                )
+
         return True, ""
-        
+
     except Exception as e:
         logger.error(f"Error validating configuration: {e}", exc_info=True)
         return False, f"Configuration validation error: {str(e)}"
 
 
-def validate_watch_config(watch_data: dict, main_config: dict = None) -> tuple[bool, str]:
+def validate_watch_config(
+    watch_data: dict, main_config: dict = None
+) -> tuple[bool, str]:
     """
     Validate watch configuration for consistency and requirements.
     Returns (is_valid, error_message).
@@ -114,31 +118,37 @@ def validate_watch_config(watch_data: dict, main_config: dict = None) -> tuple[b
         # Get current main config if not provided
         if main_config is None:
             main_config = get_config()
-        
+
         # Check if trying to enable watch without download methods
         if watch_data.get("enabled", False):
             real_time = main_config.get("realTime", False)
             fallback = main_config.get("fallback", False)
-            
+
             if not real_time and not fallback:
-                return False, "Cannot enable watch: either Real-time downloading or Download Fallback must be enabled in download settings."
-            
+                return (
+                    False,
+                    "Cannot enable watch: either Real-time downloading or Download Fallback must be enabled in download settings.",
+                )
+
             # If fallback is enabled, check for required accounts
             if fallback:
                 has_spotify = has_credentials("spotify")
                 has_deezer = has_credentials("deezer")
-                
+
                 if not has_spotify or not has_deezer:
                     missing_services = []
                     if not has_spotify:
                         missing_services.append("Spotify")
                     if not has_deezer:
                         missing_services.append("Deezer")
-                    
-                    return False, f"Cannot enable watch with fallback: missing accounts for {', '.join(missing_services)}. Configure accounts before enabling watch."
-        
+
+                    return (
+                        False,
+                        f"Cannot enable watch with fallback: missing accounts for {', '.join(missing_services)}. Configure accounts before enabling watch.",
+                    )
+
         return True, ""
-        
+
     except Exception as e:
         logger.error(f"Error validating watch configuration: {e}", exc_info=True)
         return False, f"Watch configuration validation error: {str(e)}"
@@ -150,7 +160,27 @@ def get_config():
     return get_main_config_params()
 
 
-# Helper to save main config
+def _migrate_legacy_keys_inplace(cfg: dict) -> bool:
+    """Migrate legacy snake_case keys in the main config to camelCase. Returns True if modified."""
+    legacy_map = {
+        "tracknum_padding": "tracknumPadding",
+        "save_cover": "saveCover",
+        "retry_delay_increase": "retryDelayIncrease",
+        "artist_separator": "artistSeparator",
+        "recursive_quality": "recursiveQuality",
+    }
+    modified = False
+    for legacy, camel in legacy_map.items():
+        if legacy in cfg and camel not in cfg:
+            cfg[camel] = cfg.pop(legacy)
+            modified = True
+    # Ensure watch block exists and migrate inside watch defaults handled in manager.get_watch_config
+    if "watch" not in cfg or not isinstance(cfg.get("watch"), dict):
+        cfg["watch"] = DEFAULT_WATCH_CONFIG.copy()
+        modified = True
+    return modified
+
+
 def save_config(config_data):
     """Saves the main configuration data to main.json."""
     try:
@@ -167,6 +197,10 @@ def save_config(config_data):
         for key, value in config_data.items():
             existing_config[key] = value
 
+        # Migration: unify legacy keys to camelCase
+        if _migrate_legacy_keys_inplace(existing_config):
+            logger.info("Migrated legacy config keys to camelCase.")
+
         # Ensure all default keys are still there
         for default_key, default_value in DEFAULT_MAIN_CONFIG.items():
             if default_key not in existing_config:
@@ -181,39 +215,37 @@ def save_config(config_data):
         return False, str(e)
 
 
-# Helper to get watch config (uses the one from watch/manager.py)
-def get_watch_config_http():  # Renamed to avoid conflict with the imported get_watch_config
-    """Retrieves the watch configuration, creating it with defaults if necessary."""
+def get_watch_config_http():
+    """Retrieves the watch configuration from main.json watch key."""
     return get_watch_manager_config()
 
 
-# Helper to save watch config
-def save_watch_config_http(watch_config_data):  # Renamed
-    """Saves the watch configuration data to watch.json."""
+def save_watch_config_http(watch_config_data):
+    """Saves the watch configuration data to the 'watch' key in main.json."""
     try:
-        WATCH_CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-        # Similar logic to save_config: merge with defaults/existing
-        existing_config = {}
-        if WATCH_CONFIG_FILE_PATH.exists():
-            with open(WATCH_CONFIG_FILE_PATH, "r") as f_read:
-                existing_config = json.load(f_read)
-        else:  # Should be rare if get_watch_manager_config was called
-            existing_config = DEFAULT_WATCH_CONFIG.copy()
-
-        for key, value in watch_config_data.items():
-            existing_config[key] = value
-
-        for default_key, default_value in DEFAULT_WATCH_CONFIG.items():
-            if default_key not in existing_config:
-                existing_config[default_key] = default_value
-
-        with open(WATCH_CONFIG_FILE_PATH, "w") as f:
-            json.dump(existing_config, f, indent=4)
-        logger.info(f"Watch configuration saved to {WATCH_CONFIG_FILE_PATH}")
+        WATCH_MAIN_CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if WATCH_MAIN_CONFIG_FILE_PATH.exists():
+            with open(WATCH_MAIN_CONFIG_FILE_PATH, "r") as f:
+                main_cfg = json.load(f) or {}
+        else:
+            main_cfg = DEFAULT_MAIN_CONFIG.copy()
+        current_watch = (main_cfg.get("watch") or {}).copy()
+        current_watch.update(watch_config_data or {})
+        # Ensure defaults
+        for k, v in DEFAULT_WATCH_CONFIG.items():
+            if k not in current_watch:
+                current_watch[k] = v
+        main_cfg["watch"] = current_watch
+        # Migrate legacy main keys as well
+        _migrate_legacy_keys_inplace(main_cfg)
+        with open(WATCH_MAIN_CONFIG_FILE_PATH, "w") as f:
+            json.dump(main_cfg, f, indent=4)
+        logger.info("Watch configuration updated in main.json under 'watch'.")
         return True, None
     except Exception as e:
-        logger.error(f"Error saving watch configuration: {e}", exc_info=True)
+        logger.error(
+            f"Error saving watch configuration to main.json: {e}", exc_info=True
+        )
         return False, str(e)
 
 
@@ -228,7 +260,7 @@ async def handle_config(current_user: User = Depends(require_admin_from_state)):
         logger.error(f"Error in GET /config: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to retrieve configuration", "details": str(e)}
+            detail={"error": "Failed to retrieve configuration", "details": str(e)},
         )
 
 
@@ -236,12 +268,16 @@ async def handle_config(current_user: User = Depends(require_admin_from_state)):
 @router.put("/")
 @router.post("")
 @router.put("")
-async def update_config(request: Request, current_user: User = Depends(require_admin_from_state)):
+async def update_config(
+    request: Request, current_user: User = Depends(require_admin_from_state)
+):
     """Handles POST/PUT requests to update the main configuration."""
     try:
         new_config = await request.json()
         if not isinstance(new_config, dict):
-            raise HTTPException(status_code=400, detail={"error": "Invalid config format"})
+            raise HTTPException(
+                status_code=400, detail={"error": "Invalid config format"}
+            )
 
         # Preserve the explicitFilter setting from environment
         explicit_filter_env = os.environ.get("EXPLICIT_FILTER", "false").lower()
@@ -252,7 +288,10 @@ async def update_config(request: Request, current_user: User = Depends(require_a
         if not is_valid:
             raise HTTPException(
                 status_code=400,
-                detail={"error": "Configuration validation failed", "details": error_message}
+                detail={
+                    "error": "Configuration validation failed",
+                    "details": error_message,
+                },
             )
 
         success, error_msg = save_config(new_config)
@@ -264,14 +303,17 @@ async def update_config(request: Request, current_user: User = Depends(require_a
                 # and get_config handles errors by returning a default or None.
                 raise HTTPException(
                     status_code=500,
-                    detail={"error": "Failed to retrieve configuration after saving"}
+                    detail={"error": "Failed to retrieve configuration after saving"},
                 )
 
             return updated_config_values
         else:
             raise HTTPException(
                 status_code=500,
-                detail={"error": "Failed to update configuration", "details": error_msg}
+                detail={
+                    "error": "Failed to update configuration",
+                    "details": error_msg,
+                },
             )
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail={"error": "Invalid JSON data"})
@@ -281,7 +323,7 @@ async def update_config(request: Request, current_user: User = Depends(require_a
         logger.error(f"Error in POST/PUT /config: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to update configuration", "details": str(e)}
+            detail={"error": "Failed to update configuration", "details": str(e)},
         )
 
 
@@ -297,59 +339,70 @@ async def check_config_changes(current_user: User = Depends(require_admin_from_s
         logger.error(f"Error in GET /config/check: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to check configuration", "details": str(e)}
+            detail={"error": "Failed to check configuration", "details": str(e)},
         )
 
 
 @router.post("/validate")
-async def validate_config_endpoint(request: Request, current_user: User = Depends(require_admin_from_state)):
+async def validate_config_endpoint(
+    request: Request, current_user: User = Depends(require_admin_from_state)
+):
     """Validate configuration without saving it."""
     try:
         config_data = await request.json()
         if not isinstance(config_data, dict):
-            raise HTTPException(status_code=400, detail={"error": "Invalid config format"})
+            raise HTTPException(
+                status_code=400, detail={"error": "Invalid config format"}
+            )
 
         is_valid, error_message = validate_config(config_data)
-        
+
         return {
             "valid": is_valid,
             "message": "Configuration is valid" if is_valid else error_message,
-            "details": error_message if not is_valid else None
+            "details": error_message if not is_valid else None,
         }
-        
+
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail={"error": "Invalid JSON data"})
     except Exception as e:
         logger.error(f"Error in POST /config/validate: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to validate configuration", "details": str(e)}
+            detail={"error": "Failed to validate configuration", "details": str(e)},
         )
 
 
 @router.post("/watch/validate")
-async def validate_watch_config_endpoint(request: Request, current_user: User = Depends(require_admin_from_state)):
+async def validate_watch_config_endpoint(
+    request: Request, current_user: User = Depends(require_admin_from_state)
+):
     """Validate watch configuration without saving it."""
     try:
         watch_data = await request.json()
         if not isinstance(watch_data, dict):
-            raise HTTPException(status_code=400, detail={"error": "Invalid watch config format"})
+            raise HTTPException(
+                status_code=400, detail={"error": "Invalid watch config format"}
+            )
 
         is_valid, error_message = validate_watch_config(watch_data)
-        
+
         return {
             "valid": is_valid,
             "message": "Watch configuration is valid" if is_valid else error_message,
-            "details": error_message if not is_valid else None
+            "details": error_message if not is_valid else None,
         }
-        
+
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail={"error": "Invalid JSON data"})
     except Exception as e:
         logger.error(f"Error in POST /config/watch/validate: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to validate watch configuration", "details": str(e)}
+            detail={
+                "error": "Failed to validate watch configuration",
+                "details": str(e),
+            },
         )
 
 
@@ -363,25 +416,35 @@ async def handle_watch_config(current_user: User = Depends(require_admin_from_st
         logger.error(f"Error in GET /config/watch: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to retrieve watch configuration", "details": str(e)}
+            detail={
+                "error": "Failed to retrieve watch configuration",
+                "details": str(e),
+            },
         )
 
 
 @router.post("/watch")
 @router.put("/watch")
-async def update_watch_config(request: Request, current_user: User = Depends(require_admin_from_state)):
+async def update_watch_config(
+    request: Request, current_user: User = Depends(require_admin_from_state)
+):
     """Handles POST/PUT requests to update the watch configuration."""
     try:
         new_watch_config = await request.json()
         if not isinstance(new_watch_config, dict):
-            raise HTTPException(status_code=400, detail={"error": "Invalid watch config format"})
+            raise HTTPException(
+                status_code=400, detail={"error": "Invalid watch config format"}
+            )
 
         # Validate watch configuration before saving
         is_valid, error_message = validate_watch_config(new_watch_config)
         if not is_valid:
             raise HTTPException(
                 status_code=400,
-                detail={"error": "Watch configuration validation failed", "details": error_message}
+                detail={
+                    "error": "Watch configuration validation failed",
+                    "details": error_message,
+                },
             )
 
         success, error_msg = save_watch_config_http(new_watch_config)
@@ -390,15 +453,20 @@ async def update_watch_config(request: Request, current_user: User = Depends(req
         else:
             raise HTTPException(
                 status_code=500,
-                detail={"error": "Failed to update watch configuration", "details": error_msg}
+                detail={
+                    "error": "Failed to update watch configuration",
+                    "details": error_msg,
+                },
             )
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail={"error": "Invalid JSON data for watch config"})
+        raise HTTPException(
+            status_code=400, detail={"error": "Invalid JSON data for watch config"}
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error in POST/PUT /config/watch: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "Failed to update watch configuration", "details": str(e)}
+            detail={"error": "Failed to update watch configuration", "details": str(e)},
         )

@@ -41,6 +41,7 @@ EXPECTED_PLAYLIST_TRACKS_COLUMNS = {
     "is_present_in_spotify": "INTEGER DEFAULT 1",
     "last_seen_in_spotify": "INTEGER",
     "snapshot_id": "TEXT",  # Track the snapshot_id when this track was added/updated
+    "final_path": "TEXT",  # Absolute path of the downloaded file from deezspot callback
 }
 
 EXPECTED_WATCHED_ARTISTS_COLUMNS = {
@@ -883,8 +884,12 @@ def add_single_track_to_playlist_db(
         if not album_artist_names:
             album_artist_names = "N/A"
 
+        # Extract final_path from status_info if present (new deezspot field)
+        status_info = callback_data.get("status_info", {}) or {}
+        final_path = status_info.get("final_path")
+
         logger.debug(
-            f"Extracted metadata from deezspot callback for '{track_name}': track_number={track_number}"
+            f"Extracted metadata from deezspot callback for '{track_name}': track_number={track_number}, final_path={final_path}"
         )
 
     except Exception as e:
@@ -921,6 +926,7 @@ def add_single_track_to_playlist_db(
         1,
         current_time,
         snapshot_id,
+        final_path,
     )
     try:
         with _get_playlists_db_connection() as conn:  # Use playlists connection
@@ -929,8 +935,8 @@ def add_single_track_to_playlist_db(
             cursor.execute(
                 f"""
                 INSERT OR REPLACE INTO {table_name}
-                (spotify_track_id, title, artist_names, album_name, album_artist_names, track_number, album_spotify_id, duration_ms, added_at_playlist, added_to_db, is_present_in_spotify, last_seen_in_spotify, snapshot_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (spotify_track_id, title, artist_names, album_name, album_artist_names, track_number, album_spotify_id, duration_ms, added_at_playlist, added_to_db, is_present_in_spotify, last_seen_in_spotify, snapshot_id, final_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 track_data_tuple,
             )

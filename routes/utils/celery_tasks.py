@@ -480,7 +480,7 @@ def retry_task(task_id):
         config_params = get_config_params()
         max_retries = config_params.get("maxRetries", 3)
         initial_retry_delay = config_params.get("retryDelaySeconds", 5)
-        retry_delay_increase = config_params.get("retry_delay_increase", 5)
+        retry_delay_increase = config_params.get("retryDelayIncrease", 5)
 
         # Check if we've exceeded max retries
         if retry_count >= max_retries:
@@ -1612,16 +1612,16 @@ def download_track(self, **task_data):
             config_params.get("customTrackFormat", "%tracknum%. %music%"),
         )
         pad_tracks = task_data.get(
-            "pad_tracks", config_params.get("tracknum_padding", True)
+            "pad_tracks", config_params.get("tracknumPadding", True)
         )
-        save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
+        save_cover = task_data.get("save_cover", config_params.get("saveCover", True))
         convert_to = task_data.get("convertTo", config_params.get("convertTo"))
         bitrate = task_data.get("bitrate", config_params.get("bitrate"))
         recursive_quality = task_data.get(
-            "recursive_quality", config_params.get("recursive_quality", False)
+            "recursive_quality", config_params.get("recursiveQuality", False)
         )
         artist_separator = task_data.get(
-            "artist_separator", config_params.get("artist_separator", "; ")
+            "artist_separator", config_params.get("artistSeparator", "; ")
         )
 
         # Execute the download - service is now determined from URL
@@ -1707,16 +1707,16 @@ def download_album(self, **task_data):
             config_params.get("customTrackFormat", "%tracknum%. %music%"),
         )
         pad_tracks = task_data.get(
-            "pad_tracks", config_params.get("tracknum_padding", True)
+            "pad_tracks", config_params.get("tracknumPadding", True)
         )
-        save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
+        save_cover = task_data.get("save_cover", config_params.get("saveCover", True))
         convert_to = task_data.get("convertTo", config_params.get("convertTo"))
         bitrate = task_data.get("bitrate", config_params.get("bitrate"))
         recursive_quality = task_data.get(
-            "recursive_quality", config_params.get("recursive_quality", False)
+            "recursive_quality", config_params.get("recursiveQuality", False)
         )
         artist_separator = task_data.get(
-            "artist_separator", config_params.get("artist_separator", "; ")
+            "artist_separator", config_params.get("artistSeparator", "; ")
         )
 
         # Execute the download - service is now determined from URL
@@ -1802,16 +1802,16 @@ def download_playlist(self, **task_data):
             config_params.get("customTrackFormat", "%tracknum%. %music%"),
         )
         pad_tracks = task_data.get(
-            "pad_tracks", config_params.get("tracknum_padding", True)
+            "pad_tracks", config_params.get("tracknumPadding", True)
         )
-        save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
+        save_cover = task_data.get("save_cover", config_params.get("saveCover", True))
         convert_to = task_data.get("convertTo", config_params.get("convertTo"))
         bitrate = task_data.get("bitrate", config_params.get("bitrate"))
         recursive_quality = task_data.get(
-            "recursive_quality", config_params.get("recursive_quality", False)
+            "recursive_quality", config_params.get("recursiveQuality", False)
         )
         artist_separator = task_data.get(
-            "artist_separator", config_params.get("artist_separator", "; ")
+            "artist_separator", config_params.get("artistSeparator", "; ")
         )
 
         # Get retry parameters
@@ -1819,7 +1819,7 @@ def download_playlist(self, **task_data):
             "initial_retry_delay", config_params.get("retryDelaySeconds", 5)
         )
         retry_delay_increase = task_data.get(
-            "retry_delay_increase", config_params.get("retry_delay_increase", 5)
+            "retry_delay_increase", config_params.get("retryDelayIncrease", 5)
         )
         max_retries = task_data.get("max_retries", config_params.get("maxRetries", 3))
 

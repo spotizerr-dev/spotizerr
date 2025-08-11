@@ -53,15 +53,24 @@ def get_config_params():
             "realTime": config.get("realTime", False),
             "customDirFormat": config.get("customDirFormat", "%ar_album%/%album%"),
             "customTrackFormat": config.get("customTrackFormat", "%tracknum%. %music%"),
-            "tracknum_padding": config.get("tracknum_padding", True),
-            "save_cover": config.get("save_cover", True),
+            "tracknumPadding": config.get(
+                "tracknumPadding", config.get("tracknum_padding", True)
+            ),
+            "saveCover": config.get("saveCover", config.get("save_cover", True)),
             "maxRetries": config.get("maxRetries", 3),
             "retryDelaySeconds": config.get("retryDelaySeconds", 5),
-            "retry_delay_increase": config.get("retry_delay_increase", 5),
+            "retryDelayIncrease": config.get(
+                "retryDelayIncrease", config.get("retry_delay_increase", 5)
+            ),
             "convertTo": config.get("convertTo", None),
             "bitrate": config.get("bitrate", None),
-            "artist_separator": config.get("artist_separator", "; "),
-            "recursive_quality": config.get("recursive_quality", False),
+            "artistSeparator": config.get(
+                "artistSeparator", config.get("artist_separator", "; ")
+            ),
+            "recursiveQuality": config.get(
+                "recursiveQuality", config.get("recursive_quality", False)
+            ),
+            "watch": config.get("watch", {}),
         }
     except Exception as e:
         logger.error(f"Error reading config for parameters: {e}")
@@ -75,15 +84,16 @@ def get_config_params():
             "realTime": False,
             "customDirFormat": "%ar_album%/%album%",
             "customTrackFormat": "%tracknum%. %music%",
-            "tracknum_padding": True,
-            "save_cover": True,
+            "tracknumPadding": True,
+            "saveCover": True,
             "maxRetries": 3,
             "retryDelaySeconds": 5,
-            "retry_delay_increase": 5,
+            "retryDelayIncrease": 5,
             "convertTo": None,  # Default for conversion
             "bitrate": None,  # Default for bitrate
-            "artist_separator": "; ",
-            "recursive_quality": False,
+            "artistSeparator": "; ",
+            "recursiveQuality": False,
+            "watch": {},
         }
 
 
@@ -381,10 +391,10 @@ class CeleryDownloadQueueManager:
                 ),
                 "pad_tracks": self._parse_bool_param(
                     original_request.get("tracknum_padding"),
-                    config_params["tracknum_padding"],
+                    config_params["tracknumPadding"],
                 ),
                 "save_cover": self._parse_bool_param(
-                    original_request.get("save_cover"), config_params["save_cover"]
+                    original_request.get("save_cover"), config_params["saveCover"]
                 ),
                 "convertTo": original_request.get(
                     "convertTo", config_params.get("convertTo")
@@ -393,11 +403,11 @@ class CeleryDownloadQueueManager:
                     "bitrate", config_params.get("bitrate")
                 ),
                 "artist_separator": original_request.get(
-                    "artist_separator", config_params.get("artist_separator", "; ")
+                    "artist_separator", config_params.get("artistSeparator", "; ")
                 ),
                 "recursive_quality": self._parse_bool_param(
                     original_request.get("recursive_quality"),
-                    config_params.get("recursive_quality", False),
+                    config_params.get("recursiveQuality", False),
                 ),
                 "retry_count": 0,
                 "original_request": original_request,

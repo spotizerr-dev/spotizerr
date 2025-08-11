@@ -36,16 +36,40 @@ DEFAULT_MAIN_CONFIG = {
     "realTime": False,
     "customDirFormat": "%ar_album%/%album%",
     "customTrackFormat": "%tracknum%. %music%",
-    "tracknum_padding": True,
-    "save_cover": True,
+    "tracknumPadding": True,
+    "saveCover": True,
     "maxConcurrentDownloads": 3,
     "maxRetries": 3,
     "retryDelaySeconds": 5,
-    "retry_delay_increase": 5,
+    "retryDelayIncrease": 5,
     "convertTo": None,
     "bitrate": None,
-    "artist_separator": "; ",
+    "artistSeparator": "; ",
+    "recursiveQuality": False,
+    "watch": {},
 }
+
+
+def _migrate_legacy_keys(cfg: dict) -> tuple[dict, bool]:
+    """Return a new config dict with legacy snake_case keys migrated to camelCase. Also normalizes nested watch if present."""
+    migrated = False
+    out = dict(cfg)
+    legacy_map = {
+        "tracknum_padding": "tracknumPadding",
+        "save_cover": "saveCover",
+        "retry_delay_increase": "retryDelayIncrease",
+        "artist_separator": "artistSeparator",
+        "recursive_quality": "recursiveQuality",
+    }
+    for legacy, camel in legacy_map.items():
+        if legacy in out and camel not in out:
+            out[camel] = out.pop(legacy)
+            migrated = True
+    # Ensure watch exists
+    if "watch" not in out or not isinstance(out.get("watch"), dict):
+        out["watch"] = {}
+        migrated = True
+    return out, migrated
 
 
 def get_config_params():
@@ -68,7 +92,10 @@ def get_config_params():
             return DEFAULT_MAIN_CONFIG.copy()  # Return a copy of defaults
 
         with open(CONFIG_FILE_PATH, "r") as f:
-            config = json.load(f)
+            loaded = json.load(f) or {}
+
+        # Migrate legacy keys
+        config, migrated = _migrate_legacy_keys(loaded)
 
         # Ensure all default keys are present in the loaded config
         updated = False
@@ -77,9 +104,9 @@ def get_config_params():
                 config[key] = value
                 updated = True
 
-        if updated:
+        if updated or migrated:
             logger.info(
-                f"Configuration at {CONFIG_FILE_PATH} was missing some default keys. Updated with defaults."
+                f"Configuration at {CONFIG_FILE_PATH} updated (defaults{' and migration' if migrated else ''})."
             )
             with open(CONFIG_FILE_PATH, "w") as f:
                 json.dump(config, f, indent=4)
@@ -99,7 +126,7 @@ config_params_values = get_config_params()  # Renamed to avoid conflict with mod
 MAX_CONCURRENT_DL = config_params_values.get("maxConcurrentDownloads", 3)
 MAX_RETRIES = config_params_values.get("maxRetries", 3)
 RETRY_DELAY = config_params_values.get("retryDelaySeconds", 5)
-RETRY_DELAY_INCREASE = config_params_values.get("retry_delay_increase", 5)
+RETRY_DELAY_INCREASE = config_params_values.get("retryDelayIncrease", 5)
 
 # Define task queues
 task_queues = {
