@@ -31,9 +31,9 @@ const saveFormattingConfig = async (data: Partial<FormattingSettings>) => {
 const placeholders = {
   Common: {
     "%music%": "Track title",
-    "%artist%": "Track artist",
+    "%artist%": "Track artist (use %arist_1%, %artist_2%, etc. for selecting specific artists)",
     "%album%": "Album name",
-    "%ar_album%": "Album artist",
+    "%ar_album%": "Album artist (use %ar_album_1%, %ar_album_2%, etc. for selecting specific album artists)",
     "%tracknum%": "Track number",
     "%year%": "Year of release",
   },
