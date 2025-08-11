@@ -997,6 +997,10 @@ def generate_track_file_path(
         clean_main_artist = clean_name(main_artist)
         clean_title = clean_name(title)
 
+        # Prepare artist and album artist lists
+        artist_list = [clean_name(a) for a in re.split(r"\s*,\s*", artist_names or "") if a.strip()] or [clean_main_artist]
+        album_artist_list = [clean_name(a) for a in re.split(r"\s*,\s*", album_artist_names or "") if a.strip()] or [clean_album_artist]
+        
         # Prepare placeholder replacements
         replacements = {
             # Common placeholders
@@ -1016,6 +1020,21 @@ def generate_track_file_path(
             if duration_ms > 0
             else "0",  # Convert ms to seconds
         }
+
+        artist_indices = {int(i) for i in re.findall(r"%artist_(\d+)%", custom_dir_format + custom_track_format)}
+        ar_album_indices = {int(i) for i in re.findall(r"%ar_album_(\d+)%", custom_dir_format + custom_track_format)}
+
+        # Replace artist placeholders with actual values
+        for i in artist_indices:
+            idx = i - 1
+            value = artist_list[idx] if 0 <= idx < len(artist_list) else artist_list[0]
+            replacements[f"%artist_{i}%"] = value
+
+        # Replace album artist placeholders with actual values
+        for i in ar_album_indices:
+            idx = i - 1
+            value = album_artist_list[idx] if 0 <= idx < len(album_artist_list) else album_artist_list[0]
+            replacements[f"%ar_album_{i}%"] = value
 
         # Apply replacements to directory format
         dir_path = custom_dir_format
