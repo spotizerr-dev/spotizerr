@@ -60,6 +60,8 @@ def get_config_params():
             "retry_delay_increase": config.get("retry_delay_increase", 5),
             "convertTo": config.get("convertTo", None),
             "bitrate": config.get("bitrate", None),
+            "artist_separator": config.get("artist_separator", "; "),
+            "recursive_quality": config.get("recursive_quality", False),
         }
     except Exception as e:
         logger.error(f"Error reading config for parameters: {e}")
@@ -80,6 +82,8 @@ def get_config_params():
             "retry_delay_increase": 5,
             "convertTo": None,  # Default for conversion
             "bitrate": None,  # Default for bitrate
+            "artist_separator": "; ",
+            "recursive_quality": False,
         }
 
 
@@ -95,7 +99,9 @@ def get_existing_task_id(url, download_type=None):
     Returns:
         str | None: The task ID of the existing active task, or None if no active duplicate is found.
     """
-    logger.debug(f"GET_EXISTING_TASK_ID: Checking for URL='{url}', type='{download_type}'")
+    logger.debug(
+        f"GET_EXISTING_TASK_ID: Checking for URL='{url}', type='{download_type}'"
+    )
     if not url:
         logger.debug("GET_EXISTING_TASK_ID: No URL provided, returning None.")
         return None
@@ -119,64 +125,95 @@ def get_existing_task_id(url, download_type=None):
     }
     logger.debug(f"GET_EXISTING_TASK_ID: Terminal states defined as: {TERMINAL_STATES}")
 
-    all_existing_tasks_summary = get_all_tasks() # This function already filters by default based on its own TERMINAL_STATES
-    logger.debug(f"GET_EXISTING_TASK_ID: Found {len(all_existing_tasks_summary)} tasks from get_all_tasks(). Iterating...")
+    all_existing_tasks_summary = (
+        get_all_tasks()
+    )  # This function already filters by default based on its own TERMINAL_STATES
+    logger.debug(
+        f"GET_EXISTING_TASK_ID: Found {len(all_existing_tasks_summary)} tasks from get_all_tasks(). Iterating..."
+    )
 
     for task_summary in all_existing_tasks_summary:
         existing_task_id = task_summary.get("task_id")
         if not existing_task_id:
             logger.debug("GET_EXISTING_TASK_ID: Skipping summary with no task_id.")
             continue
-        
-        logger.debug(f"GET_EXISTING_TASK_ID: Processing existing task_id='{existing_task_id}' from summary.")
+
+        logger.debug(
+            f"GET_EXISTING_TASK_ID: Processing existing task_id='{existing_task_id}' from summary."
+        )
 
         # First, check the status of the task directly from its latest status record.
         # get_all_tasks() might have its own view of terminal, but we re-check here for absolute certainty.
         existing_last_status_obj = get_last_task_status(existing_task_id)
         if not existing_last_status_obj:
-            logger.debug(f"GET_EXISTING_TASK_ID: No last status object for task_id='{existing_task_id}'. Skipping.")
+            logger.debug(
+                f"GET_EXISTING_TASK_ID: No last status object for task_id='{existing_task_id}'. Skipping."
+            )
             continue
-        
+
         # Extract status from standard structure (status_info.status) or fallback to top-level status
         existing_status = None
-        if "status_info" in existing_last_status_obj and existing_last_status_obj["status_info"]:
+        if (
+            "status_info" in existing_last_status_obj
+            and existing_last_status_obj["status_info"]
+        ):
             existing_status = existing_last_status_obj["status_info"].get("status")
         if not existing_status:
             existing_status = existing_last_status_obj.get("status")
-        
-        logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', last_status_obj='{existing_last_status_obj}', extracted status='{existing_status}'.")
+
+        logger.debug(
+            f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', last_status_obj='{existing_last_status_obj}', extracted status='{existing_status}'."
+        )
 
         # If the task is in a terminal state, ignore it and move to the next one.
         if existing_status in TERMINAL_STATES:
-            logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' has terminal status='{existing_status}'. Skipping.")
+            logger.debug(
+                f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' has terminal status='{existing_status}'. Skipping."
+            )
             continue
-        
-        logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' has ACTIVE status='{existing_status}'. Proceeding to check URL/type.")
+
+        logger.debug(
+            f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' has ACTIVE status='{existing_status}'. Proceeding to check URL/type."
+        )
 
         # If the task is active, then check if its URL and type match.
         existing_task_info = get_task_info(existing_task_id)
         if not existing_task_info:
-            logger.debug(f"GET_EXISTING_TASK_ID: No task info for active task_id='{existing_task_id}'. Skipping.")
+            logger.debug(
+                f"GET_EXISTING_TASK_ID: No task info for active task_id='{existing_task_id}'. Skipping."
+            )
             continue
 
         existing_url = existing_task_info.get("url")
-        logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', info_url='{existing_url}'. Comparing with target_url='{url}'.")
+        logger.debug(
+            f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', info_url='{existing_url}'. Comparing with target_url='{url}'."
+        )
         if existing_url != url:
-            logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' URL mismatch. Skipping.")
+            logger.debug(
+                f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' URL mismatch. Skipping."
+            )
             continue
 
         if download_type:
             existing_type = existing_task_info.get("download_type")
-            logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', info_type='{existing_type}'. Comparing with target_type='{download_type}'.")
+            logger.debug(
+                f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}', info_type='{existing_type}'. Comparing with target_type='{download_type}'."
+            )
             if existing_type != download_type:
-                logger.debug(f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' type mismatch. Skipping.")
+                logger.debug(
+                    f"GET_EXISTING_TASK_ID: Task_id='{existing_task_id}' type mismatch. Skipping."
+                )
                 continue
 
         # Found an active task that matches the criteria.
-        logger.info(f"GET_EXISTING_TASK_ID: Found ACTIVE duplicate: task_id='{existing_task_id}' for URL='{url}', type='{download_type}'. Returning this ID.")
+        logger.info(
+            f"GET_EXISTING_TASK_ID: Found ACTIVE duplicate: task_id='{existing_task_id}' for URL='{url}', type='{download_type}'. Returning this ID."
+        )
         return existing_task_id
 
-    logger.debug(f"GET_EXISTING_TASK_ID: No active duplicate found for URL='{url}', type='{download_type}'. Returning None.")
+    logger.debug(
+        f"GET_EXISTING_TASK_ID: No active duplicate found for URL='{url}', type='{download_type}'. Returning None."
+    )
     return None
 
 
@@ -255,11 +292,16 @@ class CeleryDownloadQueueManager:
 
                     existing_url = existing_task_info.get("url")
                     existing_type = existing_task_info.get("download_type")
-                    
+
                     # Extract status from standard structure (status_info.status) or fallback to top-level status
                     existing_status = None
-                    if "status_info" in existing_last_status_obj and existing_last_status_obj["status_info"]:
-                        existing_status = existing_last_status_obj["status_info"].get("status")
+                    if (
+                        "status_info" in existing_last_status_obj
+                        and existing_last_status_obj["status_info"]
+                    ):
+                        existing_status = existing_last_status_obj["status_info"].get(
+                            "status"
+                        )
                     if not existing_status:
                         existing_status = existing_last_status_obj.get("status")
 
@@ -349,6 +391,13 @@ class CeleryDownloadQueueManager:
                 ),
                 "bitrate": original_request.get(
                     "bitrate", config_params.get("bitrate")
+                ),
+                "artist_separator": original_request.get(
+                    "artist_separator", config_params.get("artist_separator", "; ")
+                ),
+                "recursive_quality": self._parse_bool_param(
+                    original_request.get("recursive_quality"),
+                    config_params.get("recursive_quality", False),
                 ),
                 "retry_count": 0,
                 "original_request": original_request,

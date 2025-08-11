@@ -21,6 +21,7 @@ interface DownloadSettings {
   hlsThreads: number;
   deezerQuality: "MP3_128" | "MP3_320" | "FLAC";
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
+  recursiveQuality?: boolean; // frontend field (mapped to recursive_quality on save)
 }
 
 interface WatchConfig {
@@ -49,8 +50,14 @@ const CONVERSION_FORMATS: Record<string, string[]> = {
 };
 
 // --- API Functions ---
-const saveDownloadConfig = async (data: Partial<DownloadSettings>) => {
-  const { data: response } = await authApiClient.client.post("/config", data);
+const saveDownloadConfig = async (data: Partial<DownloadSettings> & { recursive_quality?: boolean }) => {
+  // Map camelCase to snake_case for backend compatibility
+  const payload: any = { ...data };
+  if (typeof data.recursiveQuality !== "undefined") {
+    payload.recursive_quality = data.recursiveQuality;
+    delete payload.recursiveQuality;
+  }
+  const { data: response } = await authApiClient.client.post("/config", payload);
   return response;
 };
 
@@ -188,6 +195,10 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
         <div className="flex items-center justify-between">
           <label htmlFor="fallbackToggle" className="text-content-primary dark:text-content-primary-dark">Download Fallback</label>
           <input id="fallbackToggle" type="checkbox" {...register("fallback")} className="h-6 w-6 rounded" />
+        </div>
+        <div className="flex items-center justify-between">
+          <label htmlFor="recursiveQualityToggle" className="text-content-primary dark:text-content-primary-dark">Recursive Quality</label>
+          <input id="recursiveQualityToggle" type="checkbox" {...register("recursiveQuality")} className="h-6 w-6 rounded" />
         </div>
         
         {/* Watch validation info */}

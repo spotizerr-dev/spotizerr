@@ -25,6 +25,8 @@ def download_track(
     progress_callback=None,
     convert_to=None,
     bitrate=None,
+    artist_separator="; ",
+    recursive_quality=False,
     _is_celery_task_execution=False,  # Added for consistency, not currently used for duplicate check
 ):
     try:
@@ -91,7 +93,7 @@ def download_track(
                         link_track=url,  # Spotify URL
                         output_dir="./downloads",
                         quality_download=quality,  # Deezer quality
-                        recursive_quality=False,
+                        recursive_quality=recursive_quality,
                         recursive_download=False,
                         not_interface=False,
                         custom_dir_format=custom_dir_format,
@@ -102,6 +104,7 @@ def download_track(
                         max_retries=max_retries,
                         convert_to=convert_to,
                         bitrate=bitrate,
+                        artist_separator=artist_separator,
                     )
                     print(
                         f"DEBUG: track.py - Track download via Deezer (account: {fallback}) successful for Spotify URL."
@@ -147,7 +150,7 @@ def download_track(
                             link_track=url,  # Spotify URL
                             output_dir="./downloads",
                             quality_download=fall_quality,  # Spotify quality
-                            recursive_quality=False,
+                            recursive_quality=recursive_quality,
                             recursive_download=False,
                             not_interface=False,
                             real_time_dl=real_time,
@@ -160,6 +163,7 @@ def download_track(
                             max_retries=max_retries,
                             convert_to=convert_to,
                             bitrate=bitrate,
+                            artist_separator=artist_separator,
                         )
                         print(
                             f"DEBUG: track.py - Spotify direct download (account: {main} for blob) successful."
@@ -202,7 +206,7 @@ def download_track(
                     link_track=url,
                     output_dir="./downloads",
                     quality_download=quality,
-                    recursive_quality=False,
+                    recursive_quality=recursive_quality,
                     recursive_download=False,
                     not_interface=False,
                     real_time_dl=real_time,
@@ -215,6 +219,7 @@ def download_track(
                     max_retries=max_retries,
                     convert_to=convert_to,
                     bitrate=bitrate,
+                    artist_separator=artist_separator,
                 )
                 print(
                     f"DEBUG: track.py - Direct Spotify download (account: {main} for blob) successful."
@@ -242,7 +247,7 @@ def download_track(
                 link_track=url,
                 output_dir="./downloads",
                 quality_download=quality,
-                recursive_quality=False,
+                recursive_quality=recursive_quality,
                 recursive_download=False,
                 custom_dir_format=custom_dir_format,
                 custom_track_format=custom_track_format,
@@ -253,6 +258,7 @@ def download_track(
                 max_retries=max_retries,
                 convert_to=convert_to,
                 bitrate=bitrate,
+                artist_separator=artist_separator,
             )
             print(
                 f"DEBUG: track.py - Direct Deezer download (account: {main}) successful."

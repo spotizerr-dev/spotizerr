@@ -14,6 +14,7 @@ interface FormattingSettings {
   album: string;
   playlist: string;
   compilation: string;
+  artistSeparator: string;
 }
 
 interface FormattingTabProps {
@@ -23,7 +24,12 @@ interface FormattingTabProps {
 
 // --- API Functions ---
 const saveFormattingConfig = async (data: Partial<FormattingSettings>) => {
-  const { data: response } = await authApiClient.client.post("/config", data);
+  const payload: any = { ...data };
+  if (typeof data.artistSeparator !== "undefined") {
+    payload.artist_separator = data.artistSeparator;
+    delete payload.artistSeparator;
+  }
+  const { data: response } = await authApiClient.client.post("/config", payload);
   return response;
 };
 
@@ -44,6 +50,12 @@ const placeholders = {
     "%isrc%": "ISRC",
     "%explicit%": "Explicit flag",
     "%duration%": "Track duration (s)",
+  },
+  Indexed: {
+    "%ar_album_1%": "Album artist #1 (use _2, _3, ...)",
+    "%artist_1%": "Track artist #1 (use _2, _3, ...)",
+    "%ar_album_2%": "Album artist #2",
+    "%artist_2%": "Track artist #2",
   },
 };
 
@@ -139,6 +151,12 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
           />
           <PlaceholderSelector onSelect={handlePlaceholderSelect("customTrackFormat", trackInputRef)} />
         </div>
+        <div className="text-sm text-content-muted dark:text-content-muted-dark">
+          Tip: You can select specific artists using indexed placeholders like <code>%ar_album_1%</code> or
+          <code> %artist_1%</code>. Append <code>_2</code>, <code>_3</code>, etc. to target later artists. If the index
+          exceeds available artists (e.g. <code>%artist_3%</code> but a track only has two artists), the first artist is
+          used as a fallback.
+        </div>
         <div className="flex items-center justify-between">
           <label htmlFor="tracknumPaddingToggle" className="text-content-primary dark:text-content-primary-dark">Track Number Padding</label>
           <input
@@ -146,6 +164,17 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
             type="checkbox"
             {...register("tracknumPadding")}
             className="h-6 w-6 rounded"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <label htmlFor="artistSeparator" className="text-content-primary dark:text-content-primary-dark">Artist Separator</label>
+          <input
+            id="artistSeparator"
+            type="text"
+            maxLength={8}
+            placeholder="; "
+            {...register("artistSeparator")}
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex items-center justify-between">
