@@ -57,6 +57,7 @@ export type FlatAppSettings = {
   album: string;
   playlist: string;
   compilation: string;
+  artistSeparator: string;
 };
 
 const defaultSettings: FlatAppSettings = {
@@ -89,6 +90,7 @@ const defaultSettings: FlatAppSettings = {
   album: "{artist_name}/{album_name}",
   playlist: "Playlists/{playlist_name}",
   compilation: "Compilations/{album_name}",
+  artistSeparator: "; ",
   watch: {
     enabled: false,
   },

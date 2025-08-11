@@ -24,13 +24,17 @@ def download_playlist(
     progress_callback=None,
     convert_to=None,
     bitrate=None,
+    artist_separator="; ",
+    recursive_quality=True,
     _is_celery_task_execution=False,  # Added to skip duplicate check from Celery task
 ):
     if not _is_celery_task_execution:
-        existing_task = get_existing_task_id(url)  # Check for duplicates only if not called by Celery task
+        existing_task = get_existing_task_id(
+            url
+        )  # Check for duplicates only if not called by Celery task
         if existing_task:
             raise DuplicateDownloadError(
-                f"Download for this URL is already in progress.",
+                "Download for this URL is already in progress.",
                 existing_task=existing_task,
             )
     try:
@@ -93,7 +97,7 @@ def download_playlist(
                         link_playlist=url,  # Spotify URL
                         output_dir="./downloads",
                         quality_download=quality,  # Deezer quality
-                        recursive_quality=True,
+                        recursive_quality=recursive_quality,
                         recursive_download=False,
                         not_interface=False,
                         make_zip=False,
@@ -106,6 +110,7 @@ def download_playlist(
                         max_retries=max_retries,
                         convert_to=convert_to,
                         bitrate=bitrate,
+                        artist_separator=artist_separator,
                     )
                     print(
                         f"DEBUG: playlist.py - Playlist download via Deezer (account: {fallback}) successful for Spotify URL."
@@ -153,7 +158,7 @@ def download_playlist(
                             link_playlist=url,  # Spotify URL
                             output_dir="./downloads",
                             quality_download=fall_quality,  # Spotify quality
-                            recursive_quality=True,
+                            recursive_quality=recursive_quality,
                             recursive_download=False,
                             not_interface=False,
                             make_zip=False,
@@ -167,6 +172,7 @@ def download_playlist(
                             max_retries=max_retries,
                             convert_to=convert_to,
                             bitrate=bitrate,
+                            artist_separator=artist_separator,
                         )
                         print(
                             f"DEBUG: playlist.py - Spotify direct download (account: {main} for blob) successful."
@@ -213,7 +219,7 @@ def download_playlist(
                     link_playlist=url,
                     output_dir="./downloads",
                     quality_download=quality,
-                    recursive_quality=True,
+                    recursive_quality=recursive_quality,
                     recursive_download=False,
                     not_interface=False,
                     make_zip=False,
@@ -227,6 +233,7 @@ def download_playlist(
                     max_retries=max_retries,
                     convert_to=convert_to,
                     bitrate=bitrate,
+                    artist_separator=artist_separator,
                 )
                 print(
                     f"DEBUG: playlist.py - Direct Spotify download (account: {main} for blob) successful."
@@ -254,7 +261,7 @@ def download_playlist(
                 link_playlist=url,
                 output_dir="./downloads",
                 quality_download=quality,
-                recursive_quality=False,  # Usually False for playlists to get individual track qualities
+                recursive_quality=recursive_quality,  # Usually False for playlists to get individual track qualities
                 recursive_download=False,
                 make_zip=False,
                 custom_dir_format=custom_dir_format,
@@ -266,6 +273,7 @@ def download_playlist(
                 max_retries=max_retries,
                 convert_to=convert_to,
                 bitrate=bitrate,
+                artist_separator=artist_separator,
             )
             print(
                 f"DEBUG: playlist.py - Direct Deezer download (account: {main}) successful."

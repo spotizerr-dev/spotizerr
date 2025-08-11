@@ -14,6 +14,7 @@ interface FormattingSettings {
   album: string;
   playlist: string;
   compilation: string;
+  artistSeparator: string;
 }
 
 interface FormattingTabProps {
@@ -23,7 +24,12 @@ interface FormattingTabProps {
 
 // --- API Functions ---
 const saveFormattingConfig = async (data: Partial<FormattingSettings>) => {
-  const { data: response } = await authApiClient.client.post("/config", data);
+  const payload: any = { ...data };
+  if (typeof data.artistSeparator !== "undefined") {
+    payload.artist_separator = data.artistSeparator;
+    delete payload.artistSeparator;
+  }
+  const { data: response } = await authApiClient.client.post("/config", payload);
   return response;
 };
 
@@ -158,6 +164,17 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
             type="checkbox"
             {...register("tracknumPadding")}
             className="h-6 w-6 rounded"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <label htmlFor="artistSeparator" className="text-content-primary dark:text-content-primary-dark">Artist Separator</label>
+          <input
+            id="artistSeparator"
+            type="text"
+            maxLength={8}
+            placeholder="; "
+            {...register("artistSeparator")}
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex items-center justify-between">

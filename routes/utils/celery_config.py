@@ -44,6 +44,7 @@ DEFAULT_MAIN_CONFIG = {
     "retry_delay_increase": 5,
     "convertTo": None,
     "bitrate": None,
+    "artist_separator": "; ",
 }
 
 
@@ -123,12 +124,12 @@ task_default_routing_key = "downloads"
 
 # Task routing - ensure SSE and utility tasks go to utility_tasks queue
 task_routes = {
-    'routes.utils.celery_tasks.trigger_sse_update_task': {'queue': 'utility_tasks'},
-    'routes.utils.celery_tasks.cleanup_stale_errors': {'queue': 'utility_tasks'},
-    'routes.utils.celery_tasks.delayed_delete_task_data': {'queue': 'utility_tasks'},
-    'routes.utils.celery_tasks.download_track': {'queue': 'downloads'},
-    'routes.utils.celery_tasks.download_album': {'queue': 'downloads'},
-    'routes.utils.celery_tasks.download_playlist': {'queue': 'downloads'},
+    "routes.utils.celery_tasks.trigger_sse_update_task": {"queue": "utility_tasks"},
+    "routes.utils.celery_tasks.cleanup_stale_errors": {"queue": "utility_tasks"},
+    "routes.utils.celery_tasks.delayed_delete_task_data": {"queue": "utility_tasks"},
+    "routes.utils.celery_tasks.download_track": {"queue": "downloads"},
+    "routes.utils.celery_tasks.download_album": {"queue": "downloads"},
+    "routes.utils.celery_tasks.download_playlist": {"queue": "downloads"},
 }
 
 # Celery task settings
@@ -193,8 +194,8 @@ worker_disable_rate_limits = False
 
 # Celery Beat schedule
 beat_schedule = {
-    'cleanup-old-tasks': {
-        'task': 'routes.utils.celery_tasks.cleanup_old_tasks',
-        'schedule': 3600.0,  # Run every hour
+    "cleanup-old-tasks": {
+        "task": "routes.utils.celery_tasks.cleanup_old_tasks",
+        "schedule": 3600.0,  # Run every hour
     },
 }

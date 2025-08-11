@@ -2,7 +2,6 @@ import time
 import json
 import logging
 import traceback
-import asyncio
 from celery import Celery, Task, states
 from celery.signals import (
     task_prerun,
@@ -34,6 +33,7 @@ from routes.utils.history_manager import history_manager
 
 # Create Redis connection for storing task data that's not part of the Celery result backend
 import redis
+
 
 # --- Helpers to build partial summaries from task logs ---
 def _read_task_log_json_lines(task_id: str) -> list:
@@ -69,7 +69,10 @@ def _extract_parent_initial_tracks(log_lines: list, parent_type: str) -> dict:
             if album and isinstance(album, dict) and album.get("tracks"):
                 for t in album.get("tracks", []):
                     ids = (t or {}).get("ids", {}) or {}
-                    key = ids.get("spotify") or f"{(t or {}).get('track_number', 0)}:{(t or {}).get('title', '')}"
+                    key = (
+                        ids.get("spotify")
+                        or f"{(t or {}).get('track_number', 0)}:{(t or {}).get('title', '')}"
+                    )
                     track_map[key] = t
                 break
     elif parent_type == "playlist":
@@ -79,13 +82,18 @@ def _extract_parent_initial_tracks(log_lines: list, parent_type: str) -> dict:
                 for t in playlist.get("tracks", []):
                     ids = (t or {}).get("ids", {}) or {}
                     # TrackPlaylistObject uses position
-                    key = ids.get("spotify") or f"{(t or {}).get('position', 0)}:{(t or {}).get('title', '')}"
+                    key = (
+                        ids.get("spotify")
+                        or f"{(t or {}).get('position', 0)}:{(t or {}).get('title', '')}"
+                    )
                     track_map[key] = t
                 break
     return track_map
 
 
-def _extract_completed_and_skipped_from_logs(log_lines: list) -> tuple[set, set, dict, dict]:
+def _extract_completed_and_skipped_from_logs(
+    log_lines: list,
+) -> tuple[set, set, dict, dict]:
     """
     Returns (completed_keys, skipped_keys, completed_objects_by_key, skipped_objects_by_key)
     Keys prefer ids.spotify, falling back to index+title scheme consistent with initial map.
@@ -102,7 +110,9 @@ def _extract_completed_and_skipped_from_logs(log_lines: list) -> tuple[set, set,
         status = status_info.get("status")
         ids = (track or {}).get("ids", {}) or {}
         # Fallback keys try track_number:title and position:title
-        fallback_key = f"{(track or {}).get('track_number', 0)}:{(track or {}).get('title', '')}"
+        fallback_key = (
+            f"{(track or {}).get('track_number', 0)}:{(track or {}).get('title', '')}"
+        )
         key = ids.get("spotify") or fallback_key
         if status == "done":
             completed_keys.add(key)
@@ -128,11 +138,13 @@ def _to_track_object_from_initial(initial_track: dict, parent_type: str) -> dict
     artists_conv = []
     for a in artists_src:
         if isinstance(a, dict):
-            artists_conv.append({
-                "type": "artistTrack",
-                "name": a.get("name", ""),
-                "ids": a.get("ids", {}) or {},
-            })
+            artists_conv.append(
+                {
+                    "type": "artistTrack",
+                    "name": a.get("name", ""),
+                    "ids": a.get("ids", {}) or {},
+                }
+            )
 
     # Convert album to AlbumTrackObject-like shape
     album_src = initial_track.get("album", {}) or {}
@@ -177,16 +189,23 @@ def build_partial_summary_from_task_log(task_id: str, parent_type: str) -> dict:
     """
     log_lines = _read_task_log_json_lines(task_id)
     initial_tracks_map = _extract_parent_initial_tracks(log_lines, parent_type)
-    completed_keys, skipped_keys, completed_objs, skipped_objs = _extract_completed_and_skipped_from_logs(log_lines)
+    completed_keys, skipped_keys, completed_objs, skipped_objs = (
+        _extract_completed_and_skipped_from_logs(log_lines)
+    )
 
     # Determine failed as initial - completed - skipped
     initial_keys = set(initial_tracks_map.keys())
     failed_keys = initial_keys.difference(completed_keys.union(skipped_keys))
 
-    successful_tracks = [completed_objs[k] for k in completed_keys if k in completed_objs]
+    successful_tracks = [
+        completed_objs[k] for k in completed_keys if k in completed_objs
+    ]
     skipped_tracks = [skipped_objs[k] for k in skipped_keys if k in skipped_objs]
     failed_tracks = [
-        {"track": _to_track_object_from_initial(initial_tracks_map[k], parent_type), "reason": "cancelled"}
+        {
+            "track": _to_track_object_from_initial(initial_tracks_map[k], parent_type),
+            "reason": "cancelled",
+        }
         for k in failed_keys
         if k in initial_tracks_map
     ]
@@ -224,16 +243,15 @@ def trigger_sse_event(task_id: str, reason: str = "status_change"):
         trigger_sse_update_task.apply_async(
             args=[task_id, reason],
             queue="utility_tasks",
-            priority=9  # High priority for real-time updates
+            priority=9,  # High priority for real-time updates
         )
         # Only log at debug level to reduce verbosity
         logger.debug(f"SSE: Submitted SSE update task for {task_id} (reason: {reason})")
-        
+
     except Exception as e:
-        logger.error(f"Error submitting SSE update task for task {task_id}: {e}", exc_info=True)
-
-
-
+        logger.error(
+            f"Error submitting SSE update task for task {task_id}: {e}", exc_info=True
+        )
 
 
 class ProgressState:
@@ -318,10 +336,10 @@ def store_task_status(task_id, status_data):
         redis_client.publish(
             update_channel, json.dumps({"task_id": task_id, "status_id": status_id})
         )
-        
+
         # Trigger immediate SSE event for real-time frontend updates
         trigger_sse_event(task_id, "status_update")
-        
+
     except Exception as e:
         logger.error(f"Error storing task status: {e}")
         traceback.print_exc()
@@ -421,7 +439,7 @@ def cancel_task(task_id):
                     "status": ProgressState.CANCELLED,
                     "error": "Task cancelled by user",
                     "timestamp": time.time(),
-                }
+                },
             },
         )
 
@@ -616,6 +634,7 @@ def retry_task(task_id):
         logger.error(f"Error retrying task {task_id}: {e}", exc_info=True)
         return {"status": "error", "error": str(e)}
 
+
 class ProgressTrackingTask(Task):
     """Base task class that tracks progress through callbacks"""
 
@@ -633,7 +652,7 @@ class ProgressTrackingTask(Task):
         task_id = self.request.id
 
         # Ensure ./logs/tasks directory exists
-        logs_tasks_dir = Path("./logs/tasks")  
+        logs_tasks_dir = Path("./logs/tasks")
         try:
             logs_tasks_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
@@ -650,7 +669,7 @@ class ProgressTrackingTask(Task):
                 log_entry = progress_data.copy()
                 if "timestamp" not in log_entry:
                     log_entry["timestamp"] = time.time()
-                print(json.dumps(log_entry), file=log_file)  
+                print(json.dumps(log_entry), file=log_file)
         except Exception as e:
             logger.error(
                 f"Task {task_id}: Could not write to task log file {log_file_path}: {e}"
@@ -663,7 +682,7 @@ class ProgressTrackingTask(Task):
         status_info = progress_data.get("status_info", {})
         status = status_info.get("status", progress_data.get("status", "unknown"))
         task_info = get_task_info(task_id)
-        
+
         logger.debug(f"Task {task_id}: Extracted status: '{status}' from callback")
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -704,59 +723,80 @@ class ProgressTrackingTask(Task):
     def _handle_initializing(self, task_id, data, task_info):
         """Handle initializing status from deezspot"""
         logger.info(f"Task {task_id} initializing...")
-        
+
         # Initializing object is now very basic, mainly for acknowledging the start.
         # More detailed info comes with 'progress' or 'downloading' states.
         data["status"] = ProgressState.INITIALIZING
-        
+
         # Store initial history entry for download start
         try:
             # Check for album/playlist FIRST since their callbacks contain both parent and track info
             if "album" in data:
                 # Album download - create children table and store name in task info
                 logger.info(f"Task {task_id}: Creating album children table")
-                children_table = history_manager.store_album_history(data, task_id, "in_progress")
+                children_table = history_manager.store_album_history(
+                    data, task_id, "in_progress"
+                )
                 if children_table:
                     task_info["children_table"] = children_table
                     store_task_info(task_id, task_info)
-                    logger.info(f"Task {task_id}: Created and stored children table '{children_table}' in task info")
+                    logger.info(
+                        f"Task {task_id}: Created and stored children table '{children_table}' in task info"
+                    )
                 else:
-                    logger.error(f"Task {task_id}: Failed to create album children table")
+                    logger.error(
+                        f"Task {task_id}: Failed to create album children table"
+                    )
             elif "playlist" in data:
                 # Playlist download - create children table and store name in task info
                 logger.info(f"Task {task_id}: Creating playlist children table")
-                children_table = history_manager.store_playlist_history(data, task_id, "in_progress")
+                children_table = history_manager.store_playlist_history(
+                    data, task_id, "in_progress"
+                )
                 if children_table:
                     task_info["children_table"] = children_table
                     store_task_info(task_id, task_info)
-                    logger.info(f"Task {task_id}: Created and stored children table '{children_table}' in task info")
+                    logger.info(
+                        f"Task {task_id}: Created and stored children table '{children_table}' in task info"
+                    )
                 else:
-                    logger.error(f"Task {task_id}: Failed to create playlist children table")
+                    logger.error(
+                        f"Task {task_id}: Failed to create playlist children table"
+                    )
             elif "track" in data:
                 # Individual track download - check if it's part of an album/playlist
                 children_table = task_info.get("children_table")
                 if children_table:
                     # Track is part of album/playlist - don't store in main table during initialization
-                    logger.info(f"Task {task_id}: Skipping track initialization storage (part of album/playlist, children table: {children_table})")
+                    logger.info(
+                        f"Task {task_id}: Skipping track initialization storage (part of album/playlist, children table: {children_table})"
+                    )
                 else:
                     # Individual track download - store in main table
-                    logger.info(f"Task {task_id}: Storing individual track history (initializing)")
+                    logger.info(
+                        f"Task {task_id}: Storing individual track history (initializing)"
+                    )
                     history_manager.store_track_history(data, task_id, "in_progress")
         except Exception as e:
-            logger.error(f"Failed to store initial history for task {task_id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to store initial history for task {task_id}: {e}",
+                exc_info=True,
+            )
 
     def _handle_downloading(self, task_id, data, task_info):
         """Handle downloading status from deezspot"""
         track_obj = data.get("track", {})
         track_name = track_obj.get("title", "Unknown")
-        
+
         artists = track_obj.get("artists", [])
         artist_name = artists[0].get("name", "") if artists else ""
-        
+
         album_obj = track_obj.get("album", {})
         album_name = album_obj.get("title", "")
 
-        logger.info(f"Task {task_id}: Starting download for track '{track_name}' by {artist_name}")
+        logger.info(
+            f"Task {task_id}: Starting download for track '{track_name}' by {artist_name}"
+        )
 
         data["status"] = ProgressState.DOWNLOADING
         data["song"] = track_name
@@ -767,14 +807,14 @@ class ProgressTrackingTask(Task):
         """Handle progress status for albums/playlists from deezspot"""
         item = data.get("playlist") or data.get("album", {})
         track = data.get("track", {})
-        
+
         item_name = item.get("title", "Unknown Item")
         total_tracks = item.get("total_tracks", 0)
-        
+
         track_name = track.get("title", "Unknown Track")
         artists = track.get("artists", [])
         artist_name = artists[0].get("name", "") if artists else ""
-        
+
         # The 'progress' field in the callback is the track number being processed
         current_track_num = data.get("progress", 0)
 
@@ -783,13 +823,17 @@ class ProgressTrackingTask(Task):
             task_info["completed_tracks"] = current_track_num - 1
             task_info["current_track_num"] = current_track_num
             store_task_info(task_id, task_info)
-            
-            overall_progress = min(int(((current_track_num -1) / total_tracks) * 100), 100)
+
+            overall_progress = min(
+                int(((current_track_num - 1) / total_tracks) * 100), 100
+            )
             data["overall_progress"] = overall_progress
             data["parsed_current_track"] = current_track_num
             data["parsed_total_tracks"] = total_tracks
 
-        logger.info(f"Task {task_id}: Progress on '{item_name}': Processing track {current_track_num}/{total_tracks} - '{track_name}'")
+        logger.info(
+            f"Task {task_id}: Progress on '{item_name}': Processing track {current_track_num}/{total_tracks} - '{track_name}'"
+        )
 
         data["status"] = ProgressState.PROGRESS
         data["song"] = track_name
@@ -801,9 +845,11 @@ class ProgressTrackingTask(Task):
         track_obj = data.get("track", {})
         track_name = track_obj.get("title", "Unknown Track")
         percentage = data.get("percentage", 0)
-        
-        logger.debug(f"Task {task_id}: Real-time progress for '{track_name}': {percentage}%")
-        
+
+        logger.debug(
+            f"Task {task_id}: Real-time progress for '{track_name}': {percentage}%"
+        )
+
         data["song"] = track_name
         artist = data.get("artist", "Unknown")
 
@@ -838,28 +884,38 @@ class ProgressTrackingTask(Task):
                     )
 
         # Log at debug level
-        logger.debug(f"Task {task_id} track progress: {track_name} by {artist}: {percent}%")
+        logger.debug(
+            f"Task {task_id} track progress: {track_name} by {artist}: {percent}%"
+        )
 
     def _handle_skipped(self, task_id, data, task_info):
         """Handle skipped status from deezspot"""
-        
+
         # Store skipped history for deezspot callback format
         try:
             if "track" in data:
                 # Individual track skipped - check if we should use children table
                 children_table = task_info.get("children_table")
-                logger.debug(f"Task {task_id}: Skipped track, children_table = '{children_table}'")
+                logger.debug(
+                    f"Task {task_id}: Skipped track, children_table = '{children_table}'"
+                )
                 if children_table:
                     # Part of album/playlist - store progressively in children table
-                    logger.info(f"Task {task_id}: Storing skipped track in children table '{children_table}' (progressive)")
-                    history_manager.store_track_history(data, task_id, "skipped", children_table)
+                    logger.info(
+                        f"Task {task_id}: Storing skipped track in children table '{children_table}' (progressive)"
+                    )
+                    history_manager.store_track_history(
+                        data, task_id, "skipped", children_table
+                    )
                 else:
                     # Individual track download - store in main table
-                    logger.info(f"Task {task_id}: Storing skipped track in main table (individual download)")
+                    logger.info(
+                        f"Task {task_id}: Storing skipped track in main table (individual download)"
+                    )
                     history_manager.store_track_history(data, task_id, "skipped")
         except Exception as e:
             logger.error(f"Failed to store skipped history for task {task_id}: {e}")
-        
+
         # Extract track info (legacy format support)
         title = data.get("song", "Unknown")
         artist = data.get("artist", "Unknown")
@@ -933,7 +989,7 @@ class ProgressTrackingTask(Task):
 
     def _handle_error(self, task_id, data, task_info):
         """Handle error status from deezspot"""
-        
+
         # Store error history for deezspot callback format
         try:
             # Check for album/playlist FIRST since their callbacks contain both parent and track info
@@ -948,18 +1004,26 @@ class ProgressTrackingTask(Task):
             elif "track" in data:
                 # Individual track failed - check if we should use children table
                 children_table = task_info.get("children_table")
-                logger.debug(f"Task {task_id}: Failed track, children_table = '{children_table}'")
+                logger.debug(
+                    f"Task {task_id}: Failed track, children_table = '{children_table}'"
+                )
                 if children_table:
                     # Part of album/playlist - store progressively in children table
-                    logger.info(f"Task {task_id}: Storing failed track in children table '{children_table}' (progressive)")
-                    history_manager.store_track_history(data, task_id, "failed", children_table)
+                    logger.info(
+                        f"Task {task_id}: Storing failed track in children table '{children_table}' (progressive)"
+                    )
+                    history_manager.store_track_history(
+                        data, task_id, "failed", children_table
+                    )
                 else:
                     # Individual track download - store in main table
-                    logger.info(f"Task {task_id}: Storing failed track in main table (individual download)")
+                    logger.info(
+                        f"Task {task_id}: Storing failed track in main table (individual download)"
+                    )
                     history_manager.store_track_history(data, task_id, "failed")
         except Exception as e:
             logger.error(f"Failed to store error history for task {task_id}: {e}")
-        
+
         # Extract error info (legacy format support)
         message = data.get("message", "Unknown error")
 
@@ -977,7 +1041,7 @@ class ProgressTrackingTask(Task):
 
     def _handle_done(self, task_id, data, task_info):
         """Handle done status from deezspot"""
-        
+
         # Store completion history for deezspot callback format
         try:
             # Check for album/playlist FIRST since their callbacks contain both parent and track info
@@ -992,18 +1056,29 @@ class ProgressTrackingTask(Task):
             elif "track" in data:
                 # Individual track completion - check if we should use children table
                 children_table = task_info.get("children_table")
-                logger.debug(f"Task {task_id}: Completed track, children_table = '{children_table}'")
+                logger.debug(
+                    f"Task {task_id}: Completed track, children_table = '{children_table}'"
+                )
                 if children_table:
                     # Part of album/playlist - store progressively in children table
-                    logger.info(f"Task {task_id}: Storing completed track in children table '{children_table}' (progressive)")
-                    history_manager.store_track_history(data, task_id, "completed", children_table)
+                    logger.info(
+                        f"Task {task_id}: Storing completed track in children table '{children_table}' (progressive)"
+                    )
+                    history_manager.store_track_history(
+                        data, task_id, "completed", children_table
+                    )
                 else:
                     # Individual track download - store in main table
-                    logger.info(f"Task {task_id}: Storing completed track in main table (individual download)")
+                    logger.info(
+                        f"Task {task_id}: Storing completed track in main table (individual download)"
+                    )
                     history_manager.store_track_history(data, task_id, "completed")
         except Exception as e:
-            logger.error(f"Failed to store completion history for task {task_id}: {e}", exc_info=True)
-        
+            logger.error(
+                f"Failed to store completion history for task {task_id}: {e}",
+                exc_info=True,
+            )
+
         # Extract data (legacy format support)
         content_type = data.get("type", "").lower()
         album = data.get("album", "")
@@ -1177,9 +1252,9 @@ def task_prerun_handler(task_id=None, task=None, *args, **kwargs):
     """Signal handler when a task begins running"""
     try:
         # Skip verbose logging for SSE tasks
-        if task and hasattr(task, 'name') and task.name in ['trigger_sse_update_task']:
+        if task and hasattr(task, "name") and task.name in ["trigger_sse_update_task"]:
             return
-            
+
         task_info = get_task_info(task_id)
 
         # Update task status to processing
@@ -1208,9 +1283,9 @@ def task_postrun_handler(
     """Signal handler when a task finishes"""
     try:
         # Skip verbose logging for SSE tasks
-        if task and hasattr(task, 'name') and task.name in ['trigger_sse_update_task']:
+        if task and hasattr(task, "name") and task.name in ["trigger_sse_update_task"]:
             return
-            
+
         last_status_for_history = get_last_task_status(task_id)
         if last_status_for_history and last_status_for_history.get("status") in [
             ProgressState.COMPLETE,
@@ -1223,9 +1298,7 @@ def task_postrun_handler(
                 state == states.REVOKED
                 and last_status_for_history.get("status") != ProgressState.CANCELLED
             ):
-                logger.info(
-                    f"Task {task_id} was REVOKED (likely cancelled)."
-                )
+                logger.info(f"Task {task_id} was REVOKED (likely cancelled).")
             # return # Let status update proceed if necessary
 
         task_info = get_task_info(task_id)
@@ -1235,8 +1308,13 @@ def task_postrun_handler(
 
         # If task was cancelled/revoked, finalize parent history with partial summary
         try:
-            if state == states.REVOKED or current_redis_status == ProgressState.CANCELLED:
-                parent_type = (task_info.get("download_type") or task_info.get("type") or "").lower()
+            if (
+                state == states.REVOKED
+                or current_redis_status == ProgressState.CANCELLED
+            ):
+                parent_type = (
+                    task_info.get("download_type") or task_info.get("type") or ""
+                ).lower()
                 if parent_type in ["album", "playlist"]:
                     # Build detailed summary from the task log
                     summary = build_partial_summary_from_task_log(task_id, parent_type)
@@ -1247,14 +1325,24 @@ def task_postrun_handler(
                     # Try to enrich parent payload with initial callback object (to capture artists, ids, images)
                     try:
                         log_lines = _read_task_log_json_lines(task_id)
-                        initial_parent = _extract_initial_parent_object(log_lines, parent_type)
+                        initial_parent = _extract_initial_parent_object(
+                            log_lines, parent_type
+                        )
                     except Exception:
                         initial_parent = None
 
                     if parent_type == "album":
                         album_payload = {"title": title, "total_tracks": total_tracks}
                         if isinstance(initial_parent, dict):
-                            for k in ["artists", "ids", "images", "release_date", "genres", "album_type", "tracks"]:
+                            for k in [
+                                "artists",
+                                "ids",
+                                "images",
+                                "release_date",
+                                "genres",
+                                "album_type",
+                                "tracks",
+                            ]:
                                 if k in initial_parent:
                                     album_payload[k] = initial_parent.get(k)
                         # Ensure a main history entry exists even on cancellation
@@ -1266,7 +1354,13 @@ def task_postrun_handler(
                     else:
                         playlist_payload = {"title": title}
                         if isinstance(initial_parent, dict):
-                            for k in ["owner", "ids", "images", "tracks", "description"]:
+                            for k in [
+                                "owner",
+                                "ids",
+                                "images",
+                                "tracks",
+                                "description",
+                            ]:
                                 if k in initial_parent:
                                     playlist_payload[k] = initial_parent.get(k)
                         history_manager.store_playlist_history(
@@ -1314,14 +1408,17 @@ def task_postrun_handler(
                     try:
                         # Use task_id as primary source for metadata extraction
                         add_single_track_to_playlist_db(
-                            playlist_spotify_id=playlist_id, 
+                            playlist_spotify_id=playlist_id,
                             track_item_for_db=track_item_for_db,  # Keep as fallback
-                            task_id=task_id  # Primary source for metadata
+                            task_id=task_id,  # Primary source for metadata
                         )
-                        
+
                         # Update the playlist's m3u file after successful track addition
                         try:
-                            from routes.utils.watch.manager import update_playlist_m3u_file
+                            from routes.utils.watch.manager import (
+                                update_playlist_m3u_file,
+                            )
+
                             logger.info(
                                 f"Updating m3u file for playlist {playlist_id} after successful track download."
                             )
@@ -1331,7 +1428,7 @@ def task_postrun_handler(
                                 f"Failed to update m3u file for playlist {playlist_id} after successful track download task {task_id}: {m3u_update_err}",
                                 exc_info=True,
                             )
-                        
+
                     except Exception as db_add_err:
                         logger.error(
                             f"Failed to add track to DB for playlist {playlist_id} after successful download task {task_id}: {db_add_err}",
@@ -1389,9 +1486,6 @@ def task_failure_handler(
         # Skip if Retry exception
         if isinstance(exception, Retry):
             return
-
-        # Define download task names
-        download_task_names = ["download_track", "download_album", "download_playlist"]
 
         # Get task info and status
         task_info = get_task_info(task_id)
@@ -1523,6 +1617,12 @@ def download_track(self, **task_data):
         save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
         convert_to = task_data.get("convertTo", config_params.get("convertTo"))
         bitrate = task_data.get("bitrate", config_params.get("bitrate"))
+        recursive_quality = task_data.get(
+            "recursive_quality", config_params.get("recursive_quality", False)
+        )
+        artist_separator = task_data.get(
+            "artist_separator", config_params.get("artist_separator", "; ")
+        )
 
         # Execute the download - service is now determined from URL
         download_track_func(
@@ -1539,6 +1639,8 @@ def download_track(self, **task_data):
             progress_callback=self.progress_callback,
             convert_to=convert_to,
             bitrate=bitrate,
+            recursive_quality=recursive_quality,
+            artist_separator=artist_separator,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task (consistency)
         )
 
@@ -1610,6 +1712,12 @@ def download_album(self, **task_data):
         save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
         convert_to = task_data.get("convertTo", config_params.get("convertTo"))
         bitrate = task_data.get("bitrate", config_params.get("bitrate"))
+        recursive_quality = task_data.get(
+            "recursive_quality", config_params.get("recursive_quality", False)
+        )
+        artist_separator = task_data.get(
+            "artist_separator", config_params.get("artist_separator", "; ")
+        )
 
         # Execute the download - service is now determined from URL
         download_album_func(
@@ -1626,6 +1734,8 @@ def download_album(self, **task_data):
             progress_callback=self.progress_callback,
             convert_to=convert_to,
             bitrate=bitrate,
+            recursive_quality=recursive_quality,
+            artist_separator=artist_separator,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
         )
 
@@ -1697,6 +1807,12 @@ def download_playlist(self, **task_data):
         save_cover = task_data.get("save_cover", config_params.get("save_cover", True))
         convert_to = task_data.get("convertTo", config_params.get("convertTo"))
         bitrate = task_data.get("bitrate", config_params.get("bitrate"))
+        recursive_quality = task_data.get(
+            "recursive_quality", config_params.get("recursive_quality", False)
+        )
+        artist_separator = task_data.get(
+            "artist_separator", config_params.get("artist_separator", "; ")
+        )
 
         # Get retry parameters
         initial_retry_delay = task_data.get(
@@ -1725,6 +1841,8 @@ def download_playlist(self, **task_data):
             progress_callback=self.progress_callback,
             convert_to=convert_to,
             bitrate=bitrate,
+            recursive_quality=recursive_quality,
+            artist_separator=artist_separator,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
         )
 
@@ -1868,11 +1986,7 @@ def delayed_delete_task_data(task_id, reason):
     delete_task_data_and_log(task_id, reason)
 
 
-@celery_app.task(
-    name="trigger_sse_update_task", 
-    queue="utility_tasks",
-    bind=True
-)
+@celery_app.task(name="trigger_sse_update_task", queue="utility_tasks", bind=True)
 def trigger_sse_update_task(self, task_id: str, reason: str = "status_update"):
     """
     Dedicated Celery task for triggering SSE task summary updates.
@@ -1880,35 +1994,41 @@ def trigger_sse_update_task(self, task_id: str, reason: str = "status_update"):
     """
     try:
         # Send task summary update via Redis pub/sub
-        logger.debug(f"SSE Task: Processing summary update for task {task_id} (reason: {reason})")
-        
+        logger.debug(
+            f"SSE Task: Processing summary update for task {task_id} (reason: {reason})"
+        )
+
         event_data = {
             "task_id": task_id,
             "reason": reason,
             "timestamp": time.time(),
             "change_type": "task_summary",
-            "event_type": "summary_update"
+            "event_type": "summary_update",
         }
-        
+
         # Use Redis pub/sub for cross-process communication
         redis_client.publish("sse_events", json.dumps(event_data))
         logger.debug(f"SSE Task: Published summary update for task {task_id}")
-            
+
     except Exception as e:
         # Only log errors, not success cases
-        logger.error(f"SSE Task: Failed to publish summary update for task {task_id}: {e}", exc_info=True)
+        logger.error(
+            f"SSE Task: Failed to publish summary update for task {task_id}: {e}",
+            exc_info=True,
+        )
         # Don't raise exception to avoid task retry - SSE updates are best-effort
 
 
 def _extract_initial_parent_object(log_lines: list, parent_type: str) -> dict | None:
     """Return the first album/playlist object from the log's initializing callback, if present."""
-    key = "album" if parent_type == "album" else ("playlist" if parent_type == "playlist" else None)
+    key = (
+        "album"
+        if parent_type == "album"
+        else ("playlist" if parent_type == "playlist" else None)
+    )
     if not key:
         return None
     for obj in log_lines:
         if key in obj and isinstance(obj[key], dict):
             return obj[key]
     return None
-
-
-

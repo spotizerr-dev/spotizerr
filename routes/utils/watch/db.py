@@ -166,11 +166,11 @@ def init_playlists_db():
                 "watched playlists",
             ):
                 conn.commit()
-            
+
             # Update all existing playlist track tables with new schema
             _update_all_playlist_track_tables(cursor)
             conn.commit()
-            
+
             logger.info(
                 f"Playlists database initialized/updated successfully at {PLAYLISTS_DB_PATH}"
             )
@@ -183,9 +183,11 @@ def _update_all_playlist_track_tables(cursor: sqlite3.Cursor):
     """Updates all existing playlist track tables to ensure they have the latest schema."""
     try:
         # Get all table names that start with 'playlist_'
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'playlist_%'")
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'playlist_%'"
+        )
         playlist_tables = cursor.fetchall()
-        
+
         for table_row in playlist_tables:
             table_name = table_row[0]
             if _ensure_table_schema(
@@ -194,8 +196,10 @@ def _update_all_playlist_track_tables(cursor: sqlite3.Cursor):
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({table_name})",
             ):
-                logger.info(f"Updated schema for existing playlist track table: {table_name}")
-                
+                logger.info(
+                    f"Updated schema for existing playlist track table: {table_name}"
+                )
+
     except sqlite3.Error as e:
         logger.error(f"Error updating playlist track tables schema: {e}", exc_info=True)
 
@@ -205,7 +209,7 @@ def update_all_existing_tables_schema():
     try:
         with _get_playlists_db_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Update main watched_playlists table
             if _ensure_table_schema(
                 cursor,
@@ -214,13 +218,15 @@ def update_all_existing_tables_schema():
                 "watched playlists",
             ):
                 logger.info("Updated schema for watched_playlists table")
-            
+
             # Update all playlist track tables
             _update_all_playlist_track_tables(cursor)
-            
+
             conn.commit()
-            logger.info("Successfully updated all existing tables schema in playlists database")
-            
+            logger.info(
+                "Successfully updated all existing tables schema in playlists database"
+            )
+
     except sqlite3.Error as e:
         logger.error(f"Error updating existing tables schema: {e}", exc_info=True)
         raise
@@ -232,15 +238,17 @@ def ensure_playlist_table_schema(playlist_spotify_id: str):
     try:
         with _get_playlists_db_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Check if table exists
             cursor.execute(
                 f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
             )
             if cursor.fetchone() is None:
-                logger.warning(f"Table {table_name} does not exist. Cannot update schema.")
+                logger.warning(
+                    f"Table {table_name} does not exist. Cannot update schema."
+                )
                 return False
-            
+
             # Update schema
             if _ensure_table_schema(
                 cursor,
@@ -252,11 +260,16 @@ def ensure_playlist_table_schema(playlist_spotify_id: str):
                 logger.info(f"Updated schema for playlist track table: {table_name}")
                 return True
             else:
-                logger.info(f"Schema already up-to-date for playlist track table: {table_name}")
+                logger.info(
+                    f"Schema already up-to-date for playlist track table: {table_name}"
+                )
                 return True
-                
+
     except sqlite3.Error as e:
-        logger.error(f"Error updating schema for playlist {playlist_spotify_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error updating schema for playlist {playlist_spotify_id}: {e}",
+            exc_info=True,
+        )
         return False
 
 
@@ -306,10 +319,10 @@ def add_playlist_to_watch(playlist_data: dict):
     """Adds a playlist to the watched_playlists table and creates its tracks table in playlists.db."""
     try:
         _create_playlist_tracks_table(playlist_data["id"])
-        
+
         # Construct Spotify URL manually since external_urls might not be present in metadata
         spotify_url = f"https://open.spotify.com/playlist/{playlist_data['id']}"
-        
+
         with _get_playlists_db_connection() as conn:  # Use playlists connection
             cursor = conn.cursor()
             cursor.execute(
@@ -455,10 +468,12 @@ def get_playlist_track_ids_from_db(playlist_spotify_id: str):
         return track_ids
 
 
-def get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id: str):
+def get_playlist_tracks_with_snapshot_from_db(
+    playlist_spotify_id: str,
+) -> dict[str, dict[str, str]]:
     """Retrieves all tracks with their snapshot_ids from a specific playlist's tracks table in playlists.db."""
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
-    tracks_data = {}
+    tracks_data: dict[str, dict[str, str]] = {}
     try:
         with _get_playlists_db_connection() as conn:  # Use playlists connection
             cursor = conn.cursor()
@@ -470,7 +485,7 @@ def get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id: str):
                     f"Track table {table_name} does not exist in {PLAYLISTS_DB_PATH}. Cannot fetch track data."
                 )
                 return tracks_data
-            
+
             # Ensure the table has the latest schema before querying
             _ensure_table_schema(
                 cursor,
@@ -478,7 +493,7 @@ def get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id: str):
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({playlist_spotify_id})",
             )
-            
+
             cursor.execute(
                 f"SELECT spotify_track_id, snapshot_id, title FROM {table_name} WHERE is_present_in_spotify = 1"
             )
@@ -486,7 +501,7 @@ def get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id: str):
             for row in rows:
                 tracks_data[row["spotify_track_id"]] = {
                     "snapshot_id": row["snapshot_id"],
-                    "title": row["title"]
+                    "title": row["title"],
                 }
         return tracks_data
     except sqlite3.Error as e:
@@ -508,7 +523,7 @@ def get_playlist_total_tracks_from_db(playlist_spotify_id: str) -> int:
             )
             if cursor.fetchone() is None:
                 return 0
-            
+
             # Ensure the table has the latest schema before querying
             _ensure_table_schema(
                 cursor,
@@ -516,7 +531,7 @@ def get_playlist_total_tracks_from_db(playlist_spotify_id: str) -> int:
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({playlist_spotify_id})",
             )
-            
+
             cursor.execute(
                 f"SELECT COUNT(*) as count FROM {table_name} WHERE is_present_in_spotify = 1"
             )
@@ -530,12 +545,14 @@ def get_playlist_total_tracks_from_db(playlist_spotify_id: str) -> int:
         return 0
 
 
-def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list, snapshot_id: str = None):
+def add_tracks_to_playlist_db(
+    playlist_spotify_id: str, tracks_data: list, snapshot_id: str = None
+):
     """
     Updates existing tracks in the playlist's DB table to mark them as currently present
     in Spotify and updates their last_seen timestamp and snapshot_id. Also refreshes metadata.
     Does NOT insert new tracks. New tracks are only added upon successful download.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
         tracks_data: List of track items from Spotify API
@@ -574,8 +591,10 @@ def add_tracks_to_playlist_db(playlist_spotify_id: str, tracks_data: list, snaps
         track_number = track.get("track_number")
         # Log the raw track_number value for debugging
         if track_number is None or track_number == 0:
-            logger.debug(f"Track '{track.get('name', 'Unknown')}' has track_number: {track_number} (raw API value)")
-        
+            logger.debug(
+                f"Track '{track.get('name', 'Unknown')}' has track_number: {track_number} (raw API value)"
+            )
+
         # Prepare tuple for UPDATE statement.
         # Order: title, artist_names, album_name, album_artist_names, track_number,
         # album_spotify_id, duration_ms, added_at_playlist,
@@ -790,11 +809,16 @@ def remove_specific_tracks_from_playlist_table(
         return 0
 
 
-def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db: dict, snapshot_id: str = None, task_id: str = None):
+def add_single_track_to_playlist_db(
+    playlist_spotify_id: str,
+    track_item_for_db: dict,
+    snapshot_id: str = None,
+    task_id: str = None,
+):
     """
     Adds or updates a single track in the specified playlist's tracks table in playlists.db.
     Uses deezspot callback data as the source of metadata.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
         track_item_for_db: Track item data (used only for spotify_track_id and added_at)
@@ -802,68 +826,87 @@ def add_single_track_to_playlist_db(playlist_spotify_id: str, track_item_for_db:
         task_id: Task ID to extract metadata from callback data
     """
     if not task_id:
-        logger.error(f"No task_id provided for playlist {playlist_spotify_id}. Task ID is required to extract metadata from deezspot callback.")
+        logger.error(
+            f"No task_id provided for playlist {playlist_spotify_id}. Task ID is required to extract metadata from deezspot callback."
+        )
         return
-        
+
     if not track_item_for_db or not track_item_for_db.get("track", {}).get("id"):
-        logger.error(f"No track_item_for_db or spotify track ID provided for playlist {playlist_spotify_id}")
+        logger.error(
+            f"No track_item_for_db or spotify track ID provided for playlist {playlist_spotify_id}"
+        )
         return
 
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
-    
+
     # Extract metadata ONLY from deezspot callback data
     try:
         # Import here to avoid circular imports
         from routes.utils.celery_tasks import get_last_task_status
-        
+
         last_status = get_last_task_status(task_id)
         if not last_status or "raw_callback" not in last_status:
-            logger.error(f"No raw_callback found in task status for task {task_id}. Cannot extract metadata.")
+            logger.error(
+                f"No raw_callback found in task status for task {task_id}. Cannot extract metadata."
+            )
             return
-            
+
         callback_data = last_status["raw_callback"]
-        
+
         # Extract metadata from deezspot callback using correct structure from callbacks.ts
         track_obj = callback_data.get("track", {})
         if not track_obj:
             logger.error(f"No track object found in callback data for task {task_id}")
             return
-            
+
         track_name = track_obj.get("title", "N/A")
         track_number = track_obj.get("track_number", 1)  # Default to 1 if missing
         duration_ms = track_obj.get("duration_ms", 0)
-        
+
         # Extract artist names from artists array
         artists = track_obj.get("artists", [])
-        artist_names = ", ".join([artist.get("name", "") for artist in artists if artist.get("name")])
+        artist_names = ", ".join(
+            [artist.get("name", "") for artist in artists if artist.get("name")]
+        )
         if not artist_names:
             artist_names = "N/A"
-            
+
         # Extract album information
         album_obj = track_obj.get("album", {})
         album_name = album_obj.get("title", "N/A")
-        
+
         # Extract album artist names from album artists array
         album_artists = album_obj.get("artists", [])
-        album_artist_names = ", ".join([artist.get("name", "") for artist in album_artists if artist.get("name")])
+        album_artist_names = ", ".join(
+            [artist.get("name", "") for artist in album_artists if artist.get("name")]
+        )
         if not album_artist_names:
             album_artist_names = "N/A"
-        
-        logger.debug(f"Extracted metadata from deezspot callback for '{track_name}': track_number={track_number}")
-        
+
+        logger.debug(
+            f"Extracted metadata from deezspot callback for '{track_name}': track_number={track_number}"
+        )
+
     except Exception as e:
-        logger.error(f"Error extracting metadata from task {task_id} callback: {e}", exc_info=True)
+        logger.error(
+            f"Error extracting metadata from task {task_id} callback: {e}",
+            exc_info=True,
+        )
         return
 
     current_time = int(time.time())
-    
+
     # Get spotify_track_id and added_at from original track_item_for_db
     track_id = track_item_for_db["track"]["id"]
     added_at = track_item_for_db.get("added_at")
-    album_id = track_item_for_db.get("track", {}).get("album", {}).get("id")  # Only album ID from original data
-    
-    logger.info(f"Adding track '{track_name}' (ID: {track_id}) to playlist {playlist_spotify_id} with track_number: {track_number} (from deezspot callback)")
-    
+    album_id = (
+        track_item_for_db.get("track", {}).get("album", {}).get("id")
+    )  # Only album ID from original data
+
+    logger.info(
+        f"Adding track '{track_name}' (ID: {track_id}) to playlist {playlist_spotify_id} with track_number: {track_number} (from deezspot callback)"
+    )
+
     track_data_tuple = (
         track_id,
         track_name,

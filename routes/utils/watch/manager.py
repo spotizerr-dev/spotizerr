@@ -28,7 +28,6 @@ from routes.utils.get_info import (
     get_spotify_info,
     get_playlist_metadata,
     get_playlist_tracks,
-    check_playlist_updated,
 )  # To fetch playlist, track, artist, and album details
 from routes.utils.celery_queue_manager import download_queue_manager
 
@@ -38,12 +37,12 @@ STOP_EVENT = threading.Event()
 
 # Format mapping for audio file conversions
 AUDIO_FORMAT_EXTENSIONS = {
-    'mp3': '.mp3',
-    'flac': '.flac',
-    'm4a': '.m4a',
-    'aac': '.m4a',
-    'ogg': '.ogg',
-    'wav': '.wav',
+    "mp3": ".mp3",
+    "flac": ".flac",
+    "m4a": ".m4a",
+    "aac": ".m4a",
+    "ogg": ".ogg",
+    "wav": ".wav",
 }
 
 DEFAULT_WATCH_CONFIG = {
@@ -106,11 +105,11 @@ def has_playlist_changed(playlist_spotify_id: str, current_snapshot_id: str) -> 
     """
     Check if a playlist has changed by comparing snapshot_id.
     This is much more efficient than fetching all tracks.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
         current_snapshot_id: The current snapshot_id from API
-        
+
     Returns:
         True if playlist has changed, False otherwise
     """
@@ -119,29 +118,33 @@ def has_playlist_changed(playlist_spotify_id: str, current_snapshot_id: str) -> 
         if not db_playlist:
             # Playlist not in database, consider it as "changed" to trigger initial processing
             return True
-            
+
         last_snapshot_id = db_playlist.get("snapshot_id")
         if not last_snapshot_id:
             # No previous snapshot_id, consider it as "changed" to trigger initial processing
             return True
-            
+
         return current_snapshot_id != last_snapshot_id
-        
+
     except Exception as e:
-        logger.error(f"Error checking playlist change status for {playlist_spotify_id}: {e}")
+        logger.error(
+            f"Error checking playlist change status for {playlist_spotify_id}: {e}"
+        )
         # On error, assume playlist has changed to be safe
         return True
 
 
-def needs_track_sync(playlist_spotify_id: str, current_snapshot_id: str, api_total_tracks: int) -> tuple[bool, list[str]]:
+def needs_track_sync(
+    playlist_spotify_id: str, current_snapshot_id: str, api_total_tracks: int
+) -> tuple[bool, list[str]]:
     """
     Check if tracks need to be synchronized by comparing snapshot_ids and total counts.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
         current_snapshot_id: The current snapshot_id from API
         api_total_tracks: The total number of tracks reported by API
-        
+
     Returns:
         Tuple of (needs_sync, tracks_to_find) where:
         - needs_sync: True if tracks need to be synchronized
@@ -151,7 +154,7 @@ def needs_track_sync(playlist_spotify_id: str, current_snapshot_id: str, api_tot
         # Get tracks from database with their snapshot_ids
         db_tracks = get_playlist_tracks_with_snapshot_from_db(playlist_spotify_id)
         db_total_tracks = get_playlist_total_tracks_from_db(playlist_spotify_id)
-        
+
         # Check if total count matches
         if db_total_tracks != api_total_tracks:
             logger.info(
@@ -160,39 +163,41 @@ def needs_track_sync(playlist_spotify_id: str, current_snapshot_id: str, api_tot
             # Always do full sync when counts don't match to ensure we don't miss any tracks
             # This handles cases like:
             # - Empty database (DB=0, API=1345)
-            # - Missing tracks (DB=1000, API=1345) 
+            # - Missing tracks (DB=1000, API=1345)
             # - Removed tracks (DB=1345, API=1000)
             return True, []  # Empty list indicates full sync needed
-        
+
         # Check if any tracks have different snapshot_id
         tracks_to_find = []
         for track_id, track_data in db_tracks.items():
             if track_data.get("snapshot_id") != current_snapshot_id:
                 tracks_to_find.append(track_id)
-        
+
         if tracks_to_find:
             logger.info(
                 f"Found {len(tracks_to_find)} tracks with outdated snapshot_id for playlist {playlist_spotify_id}"
             )
             return True, tracks_to_find
-        
+
         return False, []
-        
+
     except Exception as e:
         logger.error(f"Error checking track sync status for {playlist_spotify_id}: {e}")
         # On error, assume sync is needed to be safe
         return True, []
 
 
-def find_tracks_in_playlist(playlist_spotify_id: str, tracks_to_find: list[str], current_snapshot_id: str) -> tuple[list, list]:
+def find_tracks_in_playlist(
+    playlist_spotify_id: str, tracks_to_find: list[str], current_snapshot_id: str
+) -> tuple[list, list]:
     """
     Progressively fetch playlist tracks until all specified tracks are found or playlist is exhausted.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
         tracks_to_find: List of track IDs to find
         current_snapshot_id: The current snapshot_id
-        
+
     Returns:
         Tuple of (found_tracks, not_found_tracks) where:
         - found_tracks: List of track items that were found
@@ -202,24 +207,28 @@ def find_tracks_in_playlist(playlist_spotify_id: str, tracks_to_find: list[str],
     not_found_tracks = tracks_to_find.copy()
     offset = 0
     limit = 100
-    
+
     logger.info(
         f"Searching for {len(tracks_to_find)} tracks in playlist {playlist_spotify_id} starting from offset {offset}"
     )
-    
+
     while not_found_tracks and offset < 10000:  # Safety limit
         try:
-            tracks_batch = get_playlist_tracks(playlist_spotify_id, limit=limit, offset=offset)
-            
+            tracks_batch = get_playlist_tracks(
+                playlist_spotify_id, limit=limit, offset=offset
+            )
+
             if not tracks_batch or "items" not in tracks_batch:
-                logger.warning(f"No tracks returned for playlist {playlist_spotify_id} at offset {offset}")
+                logger.warning(
+                    f"No tracks returned for playlist {playlist_spotify_id} at offset {offset}"
+                )
                 break
-            
+
             batch_items = tracks_batch.get("items", [])
             if not batch_items:
                 logger.info(f"No more tracks found at offset {offset}")
                 break
-            
+
             # Check each track in this batch
             for track_item in batch_items:
                 track = track_item.get("track")
@@ -229,22 +238,24 @@ def find_tracks_in_playlist(playlist_spotify_id: str, tracks_to_find: list[str],
                         found_tracks.append(track_item)
                         not_found_tracks.remove(track_id)
                         logger.debug(f"Found track {track_id} at offset {offset}")
-            
+
             offset += len(batch_items)
-            
+
             # Add small delay between batches
             time.sleep(0.1)
-            
+
         except Exception as e:
-            logger.error(f"Error fetching tracks batch for playlist {playlist_spotify_id} at offset {offset}: {e}")
+            logger.error(
+                f"Error fetching tracks batch for playlist {playlist_spotify_id} at offset {offset}: {e}"
+            )
             break
-    
+
     logger.info(
         f"Track search complete for playlist {playlist_spotify_id}: "
         f"Found {len(found_tracks)}/{len(tracks_to_find)} tracks, "
         f"Not found: {len(not_found_tracks)}"
     )
-    
+
     return found_tracks, not_found_tracks
 
 
@@ -283,7 +294,7 @@ def check_watched_playlists(specific_playlist_id: str = None):
         try:
             # Ensure the playlist's track table has the latest schema before processing
             ensure_playlist_table_schema(playlist_spotify_id)
-            
+
             # First, get playlist metadata to check if it has changed
             current_playlist_metadata = get_playlist_metadata(playlist_spotify_id)
             if not current_playlist_metadata:
@@ -293,17 +304,23 @@ def check_watched_playlists(specific_playlist_id: str = None):
                 continue
 
             api_snapshot_id = current_playlist_metadata.get("snapshot_id")
-            api_total_tracks = current_playlist_metadata.get("tracks", {}).get("total", 0)
-            
+            api_total_tracks = current_playlist_metadata.get("tracks", {}).get(
+                "total", 0
+            )
+
             # Enhanced snapshot_id checking with track-level tracking
             if use_snapshot_checking:
                 # First check if playlist snapshot_id has changed
-                playlist_changed = has_playlist_changed(playlist_spotify_id, api_snapshot_id)
-                
+                playlist_changed = has_playlist_changed(
+                    playlist_spotify_id, api_snapshot_id
+                )
+
                 if not playlist_changed:
                     # Even if playlist snapshot_id hasn't changed, check if individual tracks need sync
-                    needs_sync, tracks_to_find = needs_track_sync(playlist_spotify_id, api_snapshot_id, api_total_tracks)
-                    
+                    needs_sync, tracks_to_find = needs_track_sync(
+                        playlist_spotify_id, api_snapshot_id, api_total_tracks
+                    )
+
                     if not needs_sync:
                         logger.info(
                             f"Playlist Watch Manager: Playlist '{playlist_name}' ({playlist_spotify_id}) has not changed since last check (snapshot_id: {api_snapshot_id}). Skipping detailed check."
@@ -321,19 +338,25 @@ def check_watched_playlists(specific_playlist_id: str = None):
                                 f"Playlist Watch Manager: Playlist '{playlist_name}' snapshot_id unchanged, but {len(tracks_to_find)} tracks need sync. Proceeding with targeted check."
                             )
                             # Use targeted track search instead of full fetch
-                            found_tracks, not_found_tracks = find_tracks_in_playlist(playlist_spotify_id, tracks_to_find, api_snapshot_id)
-                            
+                            found_tracks, not_found_tracks = find_tracks_in_playlist(
+                                playlist_spotify_id, tracks_to_find, api_snapshot_id
+                            )
+
                             # Update found tracks with new snapshot_id
                             if found_tracks:
-                                add_tracks_to_playlist_db(playlist_spotify_id, found_tracks, api_snapshot_id)
-                            
+                                add_tracks_to_playlist_db(
+                                    playlist_spotify_id, found_tracks, api_snapshot_id
+                                )
+
                             # Mark not found tracks as removed
                             if not_found_tracks:
                                 logger.info(
                                     f"Playlist Watch Manager: {len(not_found_tracks)} tracks not found in playlist '{playlist_name}'. Marking as removed."
                                 )
-                                mark_tracks_as_not_present_in_spotify(playlist_spotify_id, not_found_tracks)
-                                
+                                mark_tracks_as_not_present_in_spotify(
+                                    playlist_spotify_id, not_found_tracks
+                                )
+
                                 # Update the playlist's m3u file after tracks are removed
                                 try:
                                     logger.info(
@@ -347,7 +370,9 @@ def check_watched_playlists(specific_playlist_id: str = None):
                                     )
 
                             # Update playlist snapshot and continue to next playlist
-                            update_playlist_snapshot(playlist_spotify_id, api_snapshot_id, api_total_tracks)
+                            update_playlist_snapshot(
+                                playlist_spotify_id, api_snapshot_id, api_total_tracks
+                            )
                             logger.info(
                                 f"Playlist Watch Manager: Finished targeted sync for playlist '{playlist_name}'. Snapshot ID updated to {api_snapshot_id}."
                             )
@@ -369,18 +394,18 @@ def check_watched_playlists(specific_playlist_id: str = None):
             logger.info(
                 f"Playlist Watch Manager: Fetching all tracks for playlist '{playlist_name}' ({playlist_spotify_id}) with {api_total_tracks} total tracks."
             )
-            
+
             all_api_track_items = []
             offset = 0
             limit = 100  # Use maximum batch size for efficiency
-            
+
             while offset < api_total_tracks:
                 try:
                     # Use the optimized get_playlist_tracks function
                     tracks_batch = get_playlist_tracks(
                         playlist_spotify_id, limit=limit, offset=offset
                     )
-                    
+
                     if not tracks_batch or "items" not in tracks_batch:
                         logger.warning(
                             f"Playlist Watch Manager: No tracks returned for playlist {playlist_spotify_id} at offset {offset}"
@@ -390,14 +415,14 @@ def check_watched_playlists(specific_playlist_id: str = None):
                     batch_items = tracks_batch.get("items", [])
                     if not batch_items:
                         break
-                    
+
                     all_api_track_items.extend(batch_items)
                     offset += len(batch_items)
-                    
+
                     # Add small delay between batches to be respectful to API
                     if offset < api_total_tracks:
                         time.sleep(0.1)
-                        
+
                 except Exception as e:
                     logger.error(
                         f"Playlist Watch Manager: Error fetching tracks batch for playlist {playlist_spotify_id} at offset {offset}: {e}"
@@ -482,7 +507,9 @@ def check_watched_playlists(specific_playlist_id: str = None):
                 logger.info(
                     f"Playlist Watch Manager: Refreshing {len(all_api_track_items)} tracks from API in local DB for playlist '{playlist_name}'."
                 )
-                add_tracks_to_playlist_db(playlist_spotify_id, all_api_track_items, api_snapshot_id)
+                add_tracks_to_playlist_db(
+                    playlist_spotify_id, all_api_track_items, api_snapshot_id
+                )
 
             removed_db_ids = db_track_ids - current_api_track_ids
             if removed_db_ids:
@@ -504,7 +531,7 @@ def check_watched_playlists(specific_playlist_id: str = None):
                     logger.error(
                         f"Failed to update m3u file for playlist '{playlist_name}' after playlist changes: {m3u_update_err}",
                         exc_info=True,
-                )
+                    )
 
             update_playlist_snapshot(
                 playlist_spotify_id, api_snapshot_id, api_total_tracks
@@ -564,11 +591,11 @@ def check_watched_artists(specific_artist_id: str = None):
             all_artist_albums_from_api: List[Dict[str, Any]] = []
             offset = 0
             limit = 50  # Spotify API limit for artist albums
-            
+
             logger.info(
                 f"Artist Watch Manager: Fetching albums for artist '{artist_name}' ({artist_spotify_id})"
             )
-            
+
             while True:
                 logger.debug(
                     f"Artist Watch Manager: Fetching albums for {artist_spotify_id}. Limit: {limit}, Offset: {offset}"
@@ -810,13 +837,18 @@ def start_watch_manager():  # Renamed from start_playlist_watch_manager
 
         init_playlists_db()  # For playlists
         init_artists_db()  # For artists
-        
+
         # Update all existing tables to ensure they have the latest schema
         try:
             update_all_existing_tables_schema()
-            logger.info("Watch Manager: Successfully updated all existing tables schema")
+            logger.info(
+                "Watch Manager: Successfully updated all existing tables schema"
+            )
         except Exception as e:
-            logger.error(f"Watch Manager: Error updating existing tables schema: {e}", exc_info=True)
+            logger.error(
+                f"Watch Manager: Error updating existing tables schema: {e}",
+                exc_info=True,
+            )
 
         _watch_scheduler_thread = threading.Thread(
             target=playlist_watch_scheduler, daemon=True
@@ -847,22 +879,26 @@ def stop_watch_manager():  # Renamed from stop_playlist_watch_manager
 def get_playlist_tracks_for_m3u(playlist_spotify_id: str) -> List[Dict[str, Any]]:
     """
     Get all tracks for a playlist from the database with complete metadata needed for m3u generation.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
-        
+
     Returns:
         List of track dictionaries with metadata
     """
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
-    tracks = []
-    
+    tracks: List[Dict[str, Any]] = []
+
     try:
-        from routes.utils.watch.db import _get_playlists_db_connection, _ensure_table_schema, EXPECTED_PLAYLIST_TRACKS_COLUMNS
-        
+        from routes.utils.watch.db import (
+            _get_playlists_db_connection,
+            _ensure_table_schema,
+            EXPECTED_PLAYLIST_TRACKS_COLUMNS,
+        )
+
         with _get_playlists_db_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Check if table exists
             cursor.execute(
                 f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';"
@@ -872,7 +908,7 @@ def get_playlist_tracks_for_m3u(playlist_spotify_id: str) -> List[Dict[str, Any]
                     f"Track table {table_name} does not exist. Cannot generate m3u file."
                 )
                 return tracks
-            
+
             # Ensure the table has the latest schema before querying
             _ensure_table_schema(
                 cursor,
@@ -880,30 +916,33 @@ def get_playlist_tracks_for_m3u(playlist_spotify_id: str) -> List[Dict[str, Any]
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({playlist_spotify_id})",
             )
-            
+
             # Get all tracks that are present in Spotify
             cursor.execute(f"""
-                SELECT spotify_track_id, title, artist_names, album_name, 
+                SELECT spotify_track_id, title, artist_names, album_name,
                        album_artist_names, track_number, duration_ms
-                FROM {table_name} 
+                FROM {table_name}
                 WHERE is_present_in_spotify = 1
                 ORDER BY track_number, title
             """)
-            
+
             rows = cursor.fetchall()
             for row in rows:
-                tracks.append({
-                    "spotify_track_id": row["spotify_track_id"],
-                    "title": row["title"] or "Unknown Track",
-                    "artist_names": row["artist_names"] or "Unknown Artist",
-                    "album_name": row["album_name"] or "Unknown Album",
-                    "album_artist_names": row["album_artist_names"] or "Unknown Artist",
-                    "track_number": row["track_number"] or 0,
-                    "duration_ms": row["duration_ms"] or 0,
-                })
-                
+                tracks.append(
+                    {
+                        "spotify_track_id": row["spotify_track_id"],
+                        "title": row["title"] or "Unknown Track",
+                        "artist_names": row["artist_names"] or "Unknown Artist",
+                        "album_name": row["album_name"] or "Unknown Album",
+                        "album_artist_names": row["album_artist_names"]
+                        or "Unknown Artist",
+                        "track_number": row["track_number"] or 0,
+                        "duration_ms": row["duration_ms"] or 0,
+                    }
+                )
+
         return tracks
-        
+
     except Exception as e:
         logger.error(
             f"Error retrieving tracks for m3u generation for playlist {playlist_spotify_id}: {e}",
@@ -912,17 +951,22 @@ def get_playlist_tracks_for_m3u(playlist_spotify_id: str) -> List[Dict[str, Any]
         return tracks
 
 
-def generate_track_file_path(track: Dict[str, Any], custom_dir_format: str, custom_track_format: str, convert_to: str = None) -> str:
+def generate_track_file_path(
+    track: Dict[str, Any],
+    custom_dir_format: str,
+    custom_track_format: str,
+    convert_to: str = None,
+) -> str:
     """
     Generate the file path for a track based on custom format strings.
     This mimics the path generation logic used by the deezspot library.
-    
+
     Args:
         track: Track metadata dictionary
         custom_dir_format: Directory format string (e.g., "%ar_album%/%album%")
         custom_track_format: Track format string (e.g., "%tracknum%. %music% - %artist%")
         convert_to: Target conversion format (e.g., "mp3", "flac", "m4a")
-        
+
     Returns:
         Generated file path relative to output directory
     """
@@ -934,23 +978,25 @@ def generate_track_file_path(track: Dict[str, Any], custom_dir_format: str, cust
         title = track.get("title", "Unknown Track")
         track_number = track.get("track_number", 0)
         duration_ms = track.get("duration_ms", 0)
-        
+
         # Use album artist for directory structure, main artist for track name
         main_artist = artist_names.split(", ")[0] if artist_names else "Unknown Artist"
-        album_artist = album_artist_names.split(", ")[0] if album_artist_names else main_artist
-        
+        album_artist = (
+            album_artist_names.split(", ")[0] if album_artist_names else main_artist
+        )
+
         # Clean names for filesystem
         def clean_name(name):
             # Remove or replace characters that are problematic in filenames
-            name = re.sub(r'[<>:"/\\|?*]', '_', str(name))
-            name = re.sub(r'[\x00-\x1f]', '', name)  # Remove control characters
+            name = re.sub(r'[<>:"/\\|?*]', "_", str(name))
+            name = re.sub(r"[\x00-\x1f]", "", name)  # Remove control characters
             return name.strip()
-        
+
         clean_album_artist = clean_name(album_artist)
         clean_album = clean_name(album_name)
         clean_main_artist = clean_name(main_artist)
         clean_title = clean_name(title)
-        
+
         # Prepare placeholder replacements
         replacements = {
             # Common placeholders
@@ -960,58 +1006,66 @@ def generate_track_file_path(track: Dict[str, Any], custom_dir_format: str, cust
             "%ar_album%": clean_album_artist,
             "%tracknum%": f"{track_number:02d}" if track_number > 0 else "00",
             "%year%": "",  # Not available in current DB schema
-            
             # Additional placeholders (not available in current DB schema, using defaults)
             "%discnum%": "01",  # Default to disc 1
             "%date%": "",  # Not available
             "%genre%": "",  # Not available
             "%isrc%": "",  # Not available
             "%explicit%": "",  # Not available
-            "%duration%": str(duration_ms // 1000) if duration_ms > 0 else "0",  # Convert ms to seconds
+            "%duration%": str(duration_ms // 1000)
+            if duration_ms > 0
+            else "0",  # Convert ms to seconds
         }
-        
+
         # Apply replacements to directory format
         dir_path = custom_dir_format
         for placeholder, value in replacements.items():
             dir_path = dir_path.replace(placeholder, value)
-        
+
         # Apply replacements to track format
         track_filename = custom_track_format
         for placeholder, value in replacements.items():
             track_filename = track_filename.replace(placeholder, value)
-        
+
         # Combine and clean up path
         full_path = os.path.join(dir_path, track_filename)
         full_path = os.path.normpath(full_path)
-        
+
         # Determine file extension based on convert_to setting or default to mp3
-        if not any(full_path.lower().endswith(ext) for ext in ['.mp3', '.flac', '.m4a', '.ogg', '.wav']):
+        if not any(
+            full_path.lower().endswith(ext)
+            for ext in [".mp3", ".flac", ".m4a", ".ogg", ".wav"]
+        ):
             if convert_to:
-                extension = AUDIO_FORMAT_EXTENSIONS.get(convert_to.lower(), '.mp3')
+                extension = AUDIO_FORMAT_EXTENSIONS.get(convert_to.lower(), ".mp3")
                 full_path += extension
             else:
-                full_path += '.mp3'  # Default fallback
-        
+                full_path += ".mp3"  # Default fallback
+
         return full_path
-        
+
     except Exception as e:
-        logger.error(f"Error generating file path for track {track.get('title', 'Unknown')}: {e}")
+        logger.error(
+            f"Error generating file path for track {track.get('title', 'Unknown')}: {e}"
+        )
         # Return a fallback path with appropriate extension
-        safe_title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', str(track.get('title', 'Unknown Track')))
-        
+        safe_title = re.sub(
+            r'[<>:"/\\|?*\x00-\x1f]', "_", str(track.get("title", "Unknown Track"))
+        )
+
         # Determine extension for fallback
         if convert_to:
-            extension = AUDIO_FORMAT_EXTENSIONS.get(convert_to.lower(), '.mp3')
+            extension = AUDIO_FORMAT_EXTENSIONS.get(convert_to.lower(), ".mp3")
         else:
-            extension = '.mp3'
-            
+            extension = ".mp3"
+
         return f"Unknown Artist/Unknown Album/{safe_title}{extension}"
 
 
 def update_playlist_m3u_file(playlist_spotify_id: str):
     """
     Generate/update the m3u file for a watched playlist based on tracks in the database.
-    
+
     Args:
         playlist_spotify_id: The Spotify playlist ID
     """
@@ -1019,62 +1073,79 @@ def update_playlist_m3u_file(playlist_spotify_id: str):
         # Get playlist metadata
         playlist_info = get_watched_playlist(playlist_spotify_id)
         if not playlist_info:
-            logger.warning(f"Playlist {playlist_spotify_id} not found in watched playlists. Cannot update m3u file.")
+            logger.warning(
+                f"Playlist {playlist_spotify_id} not found in watched playlists. Cannot update m3u file."
+            )
             return
-        
+
         playlist_name = playlist_info.get("name", "Unknown Playlist")
-        
+
         # Get configuration settings
         from routes.utils.celery_config import get_config_params
+
         config = get_config_params()
-        
+
         custom_dir_format = config.get("customDirFormat", "%ar_album%/%album%")
         custom_track_format = config.get("customTrackFormat", "%tracknum%. %music%")
         convert_to = config.get("convertTo")  # Get conversion format setting
-        output_dir = "./downloads"  # This matches the output_dir used in download functions
-        
+        output_dir = (
+            "./downloads"  # This matches the output_dir used in download functions
+        )
+
         # Get all tracks for the playlist
         tracks = get_playlist_tracks_for_m3u(playlist_spotify_id)
-        
+
         if not tracks:
-            logger.info(f"No tracks found for playlist '{playlist_name}'. M3U file will be empty or removed.")
-        
+            logger.info(
+                f"No tracks found for playlist '{playlist_name}'. M3U file will be empty or removed."
+            )
+
         # Clean playlist name for filename
-        safe_playlist_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', playlist_name).strip()
-        
+        safe_playlist_name = re.sub(
+            r'[<>:"/\\|?*\x00-\x1f]', "_", playlist_name
+        ).strip()
+
         # Create m3u file path
         playlists_dir = Path(output_dir) / "playlists"
         playlists_dir.mkdir(parents=True, exist_ok=True)
         m3u_file_path = playlists_dir / f"{safe_playlist_name}.m3u"
-        
+
         # Generate m3u content
         m3u_lines = ["#EXTM3U"]
-        
+
         for track in tracks:
             # Generate file path for this track
-            track_file_path = generate_track_file_path(track, custom_dir_format, custom_track_format, convert_to)
-            
+            track_file_path = generate_track_file_path(
+                track, custom_dir_format, custom_track_format, convert_to
+            )
+
             # Create relative path from m3u file location to track file
             # M3U file is in ./downloads/playlists/
             # Track files are in ./downloads/{custom_dir_format}/
             relative_path = os.path.join("..", track_file_path)
-            relative_path = relative_path.replace("\\", "/")  # Use forward slashes for m3u compatibility
-            
+            relative_path = relative_path.replace(
+                "\\", "/"
+            )  # Use forward slashes for m3u compatibility
+
             # Add EXTINF line with track duration and title
-            duration_seconds = (track.get("duration_ms", 0) // 1000) if track.get("duration_ms") else -1
+            duration_seconds = (
+                (track.get("duration_ms", 0) // 1000)
+                if track.get("duration_ms")
+                else -1
+            )
             artist_and_title = f"{track.get('artist_names', 'Unknown Artist')} - {track.get('title', 'Unknown Track')}"
-            
+
             m3u_lines.append(f"#EXTINF:{duration_seconds},{artist_and_title}")
             m3u_lines.append(relative_path)
-        
+
         # Write m3u file
-        with open(m3u_file_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(m3u_lines))
-        
+        with open(m3u_file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(m3u_lines))
+
         logger.info(
             f"Updated m3u file for playlist '{playlist_name}' at {m3u_file_path} with {len(tracks)} tracks{f' (format: {convert_to})' if convert_to else ''}."
         )
-        
+
     except Exception as e:
         logger.error(
             f"Error updating m3u file for playlist {playlist_spotify_id}: {e}",
