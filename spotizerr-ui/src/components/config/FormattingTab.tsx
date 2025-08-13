@@ -25,10 +25,6 @@ interface FormattingTabProps {
 // --- API Functions ---
 const saveFormattingConfig = async (data: Partial<FormattingSettings>) => {
   const payload: any = { ...data };
-  if (typeof data.artistSeparator !== "undefined") {
-    payload.artist_separator = data.artistSeparator;
-    delete payload.artistSeparator;
-  }
   const { data: response } = await authApiClient.client.post("/config", payload);
   return response;
 };

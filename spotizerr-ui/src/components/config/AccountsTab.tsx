@@ -40,11 +40,33 @@ const deleteCredential = async ({ service, name }: { service: Service; name: str
   return response;
 };
 
+// --- Error helpers ---
+function extractApiErrorMessage(error: unknown): string {
+  const fallback = "Failed to add account.";
+  try {
+    // Axios-style error
+    const anyErr: any = error as any;
+    const resp = anyErr?.response;
+    if (resp?.data) {
+      const data = resp.data;
+      if (typeof data === "string") return data;
+      if (typeof data?.detail === "string") return data.detail;
+      if (typeof data?.message === "string") return data.message;
+      if (typeof data?.error === "string") return data.error;
+    }
+    if (typeof anyErr?.message === "string") return anyErr.message;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 // --- Component ---
 export function AccountsTab() {
   const queryClient = useQueryClient();
   const [activeService, setActiveService] = useState<Service>("spotify");
   const [isAdding, setIsAdding] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { data: credentials, isLoading } = useQuery({
     queryKey: ["credentials", activeService],
@@ -64,10 +86,13 @@ export function AccountsTab() {
       toast.success("Account added successfully!");
       queryClient.invalidateQueries({ queryKey: ["credentials", activeService] });
       setIsAdding(false);
+      setSubmitError(null);
       reset();
     },
     onError: (error) => {
-      toast.error(`Failed to add account: ${error.message}`);
+      const msg = extractApiErrorMessage(error);
+      setSubmitError(msg);
+      toast.error(msg);
     },
   });
 
@@ -78,17 +103,26 @@ export function AccountsTab() {
       queryClient.invalidateQueries({ queryKey: ["credentials", activeService] });
     },
     onError: (error) => {
-      toast.error(`Failed to delete account: ${error.message}`);
+      const msg = extractApiErrorMessage(error);
+      toast.error(msg);
     },
   });
 
   const onSubmit: SubmitHandler<AccountFormData> = (data) => {
+    setSubmitError(null);
     addMutation.mutate({ service: activeService, data });
   };
 
   const renderAddForm = () => (
     <form onSubmit={handleSubmit(onSubmit)} className="p-4 border border-line dark:border-border-dark rounded-lg mt-4 space-y-4">
       <h4 className="font-semibold text-content-primary dark:text-content-primary-dark">Add New {activeService === "spotify" ? "Spotify" : "Deezer"} Account</h4>
+
+      {submitError && (
+        <div className="text-error-text bg-error-muted border border-error rounded p-2 text-sm">
+          {submitError}
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         <label htmlFor="accountName" className="text-content-primary dark:text-content-primary-dark">Account Name</label>
         <input

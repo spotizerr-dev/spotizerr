@@ -21,7 +21,7 @@ interface DownloadSettings {
   hlsThreads: number;
   deezerQuality: "MP3_128" | "MP3_320" | "FLAC";
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
-  recursiveQuality?: boolean; // frontend field (mapped to recursive_quality on save)
+  recursiveQuality: boolean; // frontend field (sent as camelCase to backend)
 }
 
 interface WatchConfig {
@@ -50,13 +50,8 @@ const CONVERSION_FORMATS: Record<string, string[]> = {
 };
 
 // --- API Functions ---
-const saveDownloadConfig = async (data: Partial<DownloadSettings> & { recursive_quality?: boolean }) => {
-  // Map camelCase to snake_case for backend compatibility
+const saveDownloadConfig = async (data: Partial<DownloadSettings>) => {
   const payload: any = { ...data };
-  if (typeof data.recursiveQuality !== "undefined") {
-    payload.recursive_quality = data.recursiveQuality;
-    delete payload.recursiveQuality;
-  }
   const { data: response } = await authApiClient.client.post("/config", payload);
   return response;
 };
