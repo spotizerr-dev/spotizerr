@@ -26,6 +26,7 @@ export interface AppSettings {
   skipExisting: boolean;
   m3u: boolean;
   hlsThreads: number;
+  recursiveQuality: boolean;
   // Properties from the old 'formatting' object
   track: string;
   album: string;

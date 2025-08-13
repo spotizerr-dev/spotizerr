@@ -52,6 +52,8 @@ export type FlatAppSettings = {
   skipExisting: boolean;
   m3u: boolean;
   hlsThreads: number;
+  // Frontend-only flag used in DownloadsTab
+  recursiveQuality: boolean;
   // Add defaults for the new formatting properties
   track: string;
   album: string;
@@ -85,6 +87,8 @@ const defaultSettings: FlatAppSettings = {
   skipExisting: true,
   m3u: false,
   hlsThreads: 8,
+  // Frontend-only default
+  recursiveQuality: false,
   // Add defaults for the new formatting properties
   track: "{artist_name}/{album_name}/{track_number} - {track_name}",
   album: "{artist_name}/{album_name}",
@@ -117,7 +121,13 @@ const fetchSettings = async (): Promise<FlatAppSettings> => {
     // Transform the keys before returning the data
     const camelData = convertKeysToCamelCase(combinedConfig) as FetchedCamelCaseSettings;
 
-    return camelData as unknown as FlatAppSettings;
+    const withDefaults: FlatAppSettings = {
+      ...(camelData as unknown as FlatAppSettings),
+      // Ensure required frontend-only fields exist
+      recursiveQuality: Boolean((camelData as any).recursiveQuality ?? false),
+    };
+
+    return withDefaults;
   } catch (error: any) {
     // If we get authentication errors, return default settings
     if (error.response?.status === 401 || error.response?.status === 403) {

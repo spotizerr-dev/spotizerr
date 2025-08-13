@@ -3,6 +3,7 @@ import { useSearch } from "@tanstack/react-router";
 import { useSettings } from "../contexts/settings-context";
 import { useAuth } from "../contexts/auth-context";
 import { LoginScreen } from "../components/auth/LoginScreen";
+import pkgJson from "../../package.json";
 
 // Lazy load config tab components for better code splitting
 const GeneralTab = lazy(() => import("../components/config/GeneralTab").then(m => ({ default: m.GeneralTab })));
@@ -27,6 +28,8 @@ const ConfigComponent = () => {
   
   // Get settings from the context instead of fetching here
   const { settings: config, isLoading } = useSettings();
+  
+  const appVersion = (pkgJson as any)?.version as string;
   
   // Determine initial tab based on URL parameter, user role, and auth state
   const getInitialTab = () => {
@@ -174,9 +177,12 @@ const ConfigComponent = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8 space-y-8">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">
-          {authEnabled && !isAdmin ? "Profile Settings" : "Configuration"}
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-content-primary dark:text-content-primary-dark">
+            {authEnabled && !isAdmin ? "Profile Settings" : "Configuration"}
+          </h1>
+          <span className="px-2 py-1 text-xs rounded bg-surface-muted dark:bg-surface-muted-dark text-content-secondary dark:text-content-secondary-dark border border-border dark:border-border-dark">v{appVersion}</span>
+        </div>
         <p className="text-content-muted dark:text-content-muted-dark">
           {authEnabled && !isAdmin 
             ? "Manage your profile and account settings." 
@@ -219,7 +225,7 @@ const ConfigComponent = () => {
                 </button>
                 <button
                   onClick={() => handleTabChange("formatting")}
-                  className={`px-4 py-3 rounded-lg text-left transition-all whitespace-nowrap ${activeTab === "formatting" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark shadow-sm" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark hover:text-content-primary dark:hover:text-content-primary-dark"}`}
+                  className={`px-4 py-3 rounded-lg text-left transition-all whitespace-nowrap ${activeTab === "formatting" ? "bg-surface-accent dark:bg-surface-accent-dark font-semibold text-content-primary dark:text-content-primary-dark shadowsm" : "text-content-secondary dark:text-content-secondary-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark hover:text-content-primary dark:hover:text-content-primary-dark"}`}
                 >
                   Formatting
                 </button>
