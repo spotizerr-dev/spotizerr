@@ -168,6 +168,7 @@ def _migrate_legacy_keys_inplace(cfg: dict) -> bool:
         "retry_delay_increase": "retryDelayIncrease",
         "artist_separator": "artistSeparator",
         "recursive_quality": "recursiveQuality",
+        "spotify_metadata": "spotifyMetadata",
     }
     modified = False
     for legacy, camel in legacy_map.items():
