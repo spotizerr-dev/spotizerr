@@ -26,6 +26,7 @@ def download_playlist(
     bitrate=None,
     artist_separator="; ",
     recursive_quality=True,
+    spotify_metadata=True,
     _is_celery_task_execution=False,  # Added to skip duplicate check from Celery task
 ):
     if not _is_celery_task_execution:
@@ -111,6 +112,7 @@ def download_playlist(
                         convert_to=convert_to,
                         bitrate=bitrate,
                         artist_separator=artist_separator,
+                        spotify_metadata=spotify_metadata,
                     )
                     print(
                         f"DEBUG: playlist.py - Playlist download via Deezer (account: {fallback}) successful for Spotify URL."

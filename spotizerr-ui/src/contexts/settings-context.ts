@@ -33,6 +33,7 @@ export interface AppSettings {
   playlist: string;
   compilation: string;
   artistSeparator: string;
+  spotifyMetadata: boolean;
   watch: {
     enabled: boolean;
     // Add other watch properties from the old type if they still exist in the API response

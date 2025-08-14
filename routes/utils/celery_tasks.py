@@ -1623,6 +1623,9 @@ def download_track(self, **task_data):
         artist_separator = task_data.get(
             "artist_separator", config_params.get("artistSeparator", "; ")
         )
+        spotify_metadata = task_data.get(
+            "spotify_metadata", config_params.get("spotifyMetadata", True)
+        )
 
         # Execute the download - service is now determined from URL
         download_track_func(
@@ -1641,6 +1644,7 @@ def download_track(self, **task_data):
             bitrate=bitrate,
             recursive_quality=recursive_quality,
             artist_separator=artist_separator,
+            spotify_metadata=spotify_metadata,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task (consistency)
         )
 
@@ -1718,6 +1722,9 @@ def download_album(self, **task_data):
         artist_separator = task_data.get(
             "artist_separator", config_params.get("artistSeparator", "; ")
         )
+        spotify_metadata = task_data.get(
+            "spotify_metadata", config_params.get("spotifyMetadata", True)
+        )
 
         # Execute the download - service is now determined from URL
         download_album_func(
@@ -1736,6 +1743,7 @@ def download_album(self, **task_data):
             bitrate=bitrate,
             recursive_quality=recursive_quality,
             artist_separator=artist_separator,
+            spotify_metadata=spotify_metadata,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
         )
 
@@ -1813,6 +1821,9 @@ def download_playlist(self, **task_data):
         artist_separator = task_data.get(
             "artist_separator", config_params.get("artistSeparator", "; ")
         )
+        spotify_metadata = task_data.get(
+            "spotify_metadata", config_params.get("spotifyMetadata", True)
+        )
 
         # Get retry parameters
         initial_retry_delay = task_data.get(
@@ -1843,6 +1854,7 @@ def download_playlist(self, **task_data):
             bitrate=bitrate,
             recursive_quality=recursive_quality,
             artist_separator=artist_separator,
+            spotify_metadata=spotify_metadata,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
         )
 

@@ -27,6 +27,7 @@ def download_track(
     bitrate=None,
     artist_separator="; ",
     recursive_quality=False,
+    spotify_metadata=True,
     _is_celery_task_execution=False,  # Added for consistency, not currently used for duplicate check
 ):
     try:
@@ -105,6 +106,7 @@ def download_track(
                         convert_to=convert_to,
                         bitrate=bitrate,
                         artist_separator=artist_separator,
+                        spotify_metadata=spotify_metadata,
                     )
                     print(
                         f"DEBUG: track.py - Track download via Deezer (account: {fallback}) successful for Spotify URL."

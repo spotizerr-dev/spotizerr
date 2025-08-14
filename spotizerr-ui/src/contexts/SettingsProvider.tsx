@@ -60,6 +60,7 @@ export type FlatAppSettings = {
   playlist: string;
   compilation: string;
   artistSeparator: string;
+  spotifyMetadata: boolean;
 };
 
 const defaultSettings: FlatAppSettings = {
@@ -95,6 +96,7 @@ const defaultSettings: FlatAppSettings = {
   playlist: "Playlists/{playlist_name}",
   compilation: "Compilations/{album_name}",
   artistSeparator: "; ",
+  spotifyMetadata: true,
   watch: {
     enabled: false,
   },

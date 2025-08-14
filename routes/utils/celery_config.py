@@ -46,6 +46,7 @@ DEFAULT_MAIN_CONFIG = {
     "bitrate": None,
     "artistSeparator": "; ",
     "recursiveQuality": False,
+    "spotifyMetadata": True,
     "watch": {},
 }
 
@@ -60,6 +61,7 @@ def _migrate_legacy_keys(cfg: dict) -> tuple[dict, bool]:
         "retry_delay_increase": "retryDelayIncrease",
         "artist_separator": "artistSeparator",
         "recursive_quality": "recursiveQuality",
+        "spotify_metadata": "spotifyMetadata",
     }
     for legacy, camel in legacy_map.items():
         if legacy in out and camel not in out:

@@ -15,6 +15,7 @@ interface FormattingSettings {
   playlist: string;
   compilation: string;
   artistSeparator: string;
+  spotifyMetadata: boolean;
 }
 
 interface FormattingTabProps {
@@ -176,6 +177,10 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
         <div className="flex items-center justify-between">
           <label htmlFor="saveCoverToggle" className="text-content-primary dark:text-content-primary-dark">Save Album Cover</label>
           <input id="saveCoverToggle" type="checkbox" {...register("saveCover")} className="h-6 w-6 rounded" />
+        </div>
+        <div className="flex items-center justify-between">
+          <label htmlFor="spotifyMetadataToggle" className="text-content-primary dark:text-content-primary-dark">Use Spotify metadata in Deezer fallback</label>
+          <input id="spotifyMetadataToggle" type="checkbox" {...register("spotifyMetadata")} className="h-6 w-6 rounded" />
         </div>
       </div>
 
