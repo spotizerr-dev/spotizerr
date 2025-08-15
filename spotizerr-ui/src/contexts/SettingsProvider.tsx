@@ -54,6 +54,7 @@ export type FlatAppSettings = {
   hlsThreads: number;
   // Frontend-only flag used in DownloadsTab
   recursiveQuality: boolean;
+  separateTracksByUser: boolean;
   // Add defaults for the new formatting properties
   track: string;
   album: string;
@@ -90,6 +91,7 @@ const defaultSettings: FlatAppSettings = {
   hlsThreads: 8,
   // Frontend-only default
   recursiveQuality: false,
+  separateTracksByUser: false,
   // Add defaults for the new formatting properties
   track: "{artist_name}/{album_name}/{track_number} - {track_name}",
   album: "{artist_name}/{album_name}",
