@@ -22,6 +22,7 @@ interface DownloadSettings {
   deezerQuality: "MP3_128" | "MP3_320" | "FLAC";
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
   recursiveQuality: boolean; // frontend field (sent as camelCase to backend)
+  separateTracksByUser: boolean;
 }
 
 interface WatchConfig {
@@ -195,6 +196,13 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           <label htmlFor="recursiveQualityToggle" className="text-content-primary dark:text-content-primary-dark">Recursive Quality</label>
           <input id="recursiveQualityToggle" type="checkbox" {...register("recursiveQuality")} className="h-6 w-6 rounded" />
         </div>
+        <div className="flex items-center justify-between">
+          <label htmlFor="separateTracksByUserToggle" className="text-content-primary dark:text-content-primary-dark">Separate tracks by user</label>
+          <input id="separateTracksByUserToggle" type="checkbox" {...register("separateTracksByUser")} className="h-6 w-6 rounded" />
+        </div>
+        <p className="text-sm text-content-muted dark:text-content-muted-dark">
+          When enabled, downloads will be organized in user-specific subdirectories (downloads/username/...)
+        </p>
         
         {/* Watch validation info */}
         {watchConfig?.enabled && (
