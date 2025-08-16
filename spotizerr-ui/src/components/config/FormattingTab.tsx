@@ -47,6 +47,8 @@ const placeholders = {
     "%isrc%": "ISRC",
     "%explicit%": "Explicit flag",
     "%duration%": "Track duration (s)",
+    "%playlist%": "Playlist name",
+    "%playlistnum%": "Track number within its playlist",
   },
   Indexed: {
     "%ar_album_1%": "Album artist #1 (use _2, _3, ...)",
