@@ -40,12 +40,11 @@ jobs:
             # Keep dev tag for main/master branch
             type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
 
-      - name: Set version in config.html
+      - name: Set version in spotizerr-ui/package.json
         run: |
           TAG_VERSION="${{ github.ref_name }}"
-          # Remove 'v' prefix if it exists
           VERSION="${TAG_VERSION#v}"
-          sed -i "s|Set on build|Version: $VERSION|g" static/html/config.html
+          sed -i -E 's/"version": "[^"]+"/"version": "'"$VERSION"'"/' spotizerr-ui/package.json
 
       # Build and push Docker image with multiarch support
       - name: Build and push

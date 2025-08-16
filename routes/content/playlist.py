@@ -96,6 +96,7 @@ async def handle_download(playlist_id: str, request: Request, current_user: User
                 "url": url,
                 "name": name_from_spotify,  # Use fetched name
                 "artist": artist_from_spotify,  # Use fetched owner name as artist
+                "username": current_user.username,
                 "orig_request": orig_params,
             }
         )

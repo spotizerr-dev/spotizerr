@@ -70,6 +70,7 @@ def get_config_params():
             "recursiveQuality": config.get(
                 "recursiveQuality", config.get("recursive_quality", False)
             ),
+            "separateTracksByUser": config.get("separateTracksByUser", False),
             "watch": config.get("watch", {}),
         }
     except Exception as e:
@@ -93,6 +94,7 @@ def get_config_params():
             "bitrate": None,  # Default for bitrate
             "artistSeparator": "; ",
             "recursiveQuality": False,
+            "separateTracksByUser": False,
             "watch": {},
         }
 
@@ -361,6 +363,9 @@ class CeleryDownloadQueueManager:
             original_request = task.get(
                 "orig_request", task.get("original_request", {})
             )
+            
+            # Get username for user-specific paths
+            username = task.get("username", "")
 
             complete_task = {
                 "download_type": incoming_type,
@@ -383,8 +388,10 @@ class CeleryDownloadQueueManager:
                 "real_time": self._parse_bool_param(
                     original_request.get("real_time"), config_params["realTime"]
                 ),
-                "custom_dir_format": original_request.get(
-                    "custom_dir_format", config_params["customDirFormat"]
+                "custom_dir_format": self._get_user_specific_dir_format(
+                    original_request.get("custom_dir_format", config_params["customDirFormat"]),
+                    config_params.get("separateTracksByUser", False),
+                    username
                 ),
                 "custom_track_format": original_request.get(
                     "custom_track_format", config_params["customTrackFormat"]
@@ -486,6 +493,23 @@ class CeleryDownloadQueueManager:
         if isinstance(param_value, str):
             return param_value.lower() in ["true", "1", "yes", "y", "on"]
         return bool(param_value)
+
+    def _get_user_specific_dir_format(self, base_format, separate_by_user, username):
+        """
+        Modify the directory format to include username if separateTracksByUser is enabled
+        
+        Args:
+            base_format (str): The base directory format from config
+            separate_by_user (bool): Whether to separate tracks by user
+            username (str): The username to include in path
+            
+        Returns:
+            str: The modified directory format
+        """
+        if separate_by_user and username:
+            # Add username as a subdirectory at the beginning
+            return f"{username}/{base_format}"
+        return base_format
 
     def cancel_task(self, task_id):
         """

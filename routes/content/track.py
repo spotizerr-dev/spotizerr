@@ -74,6 +74,7 @@ async def handle_download(track_id: str, request: Request, current_user: User = 
                 "url": url,
                 "name": name_from_spotify,
                 "artist": artist_from_spotify,
+                "username": current_user.username,
                 "orig_request": orig_params,
             }
         )

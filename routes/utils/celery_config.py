@@ -47,6 +47,7 @@ DEFAULT_MAIN_CONFIG = {
     "artistSeparator": "; ",
     "recursiveQuality": False,
     "spotifyMetadata": True,
+    "separateTracksByUser": False,
     "watch": {},
 }
 
