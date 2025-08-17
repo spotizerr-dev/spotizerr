@@ -3,16 +3,8 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from .v3_0_6 import (
-	check_history_3_0_6,
-	check_watch_playlists_3_0_6,
-	check_watch_artists_3_0_6,
-	update_history_3_0_6,
-	update_watch_playlists_3_0_6,
-	update_watch_artists_3_0_6,
-	check_accounts_3_0_6,
-	update_accounts_3_0_6,
-)
+from .v3_0_6 import MigrationV3_0_6
+from .v3_1_0 import MigrationV3_1_0
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +39,9 @@ CHILDREN_EXPECTED_COLUMNS: dict[str, str] = {
 	"metadata": "TEXT",
 }
 
+m306 = MigrationV3_0_6()
+m310 = MigrationV3_1_0()
+
 
 def _safe_connect(path: Path) -> Optional[sqlite3.Connection]:
 	try:
@@ -59,21 +54,12 @@ def _safe_connect(path: Path) -> Optional[sqlite3.Connection]:
 		return None
 
 
-def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
-	try:
-		cur = conn.execute(f"PRAGMA table_info({table})")
-		return {row[1] for row in cur.fetchall()}
-	except Exception:
-		return set()
-
-
 def _ensure_table_schema(
 	conn: sqlite3.Connection,
 	table_name: str,
 	expected_columns: dict[str, str],
 	table_description: str,
 ) -> None:
-	"""Ensure the given table has all expected columns, adding any missing columns safely."""
 	try:
 		cur = conn.execute(f"PRAGMA table_info({table_name})")
 		existing_info = cur.fetchall()
@@ -81,7 +67,6 @@ def _ensure_table_schema(
 		for col_name, col_type in expected_columns.items():
 			if col_name in existing_names:
 				continue
-			# Strip PK/NOT NULL when altering existing table to avoid errors
 			col_type_for_add = (
 				col_type.replace("PRIMARY KEY", "").replace("AUTOINCREMENT", "").replace("NOT NULL", "").strip()
 			)
@@ -104,7 +89,6 @@ def _ensure_table_schema(
 
 
 def _create_or_update_children_table(conn: sqlite3.Connection, table_name: str) -> None:
-	"""Create children table if missing and ensure it has all expected columns."""
 	conn.execute(
 		f"""
 	CREATE TABLE IF NOT EXISTS {table_name} (
@@ -130,9 +114,7 @@ def _create_or_update_children_table(conn: sqlite3.Connection, table_name: str) 
 
 
 def _update_children_tables_for_history(conn: sqlite3.Connection) -> None:
-	"""Ensure all existing children tables and referenced children tables conform to expected schema."""
 	try:
-		# Create or update any tables referenced by download_history.children_table
 		try:
 			cur = conn.execute(
 				"SELECT DISTINCT children_table FROM download_history WHERE children_table IS NOT NULL AND TRIM(children_table) != ''"
@@ -145,7 +127,6 @@ def _update_children_tables_for_history(conn: sqlite3.Connection) -> None:
 		except sqlite3.Error as e:
 			logger.warning(f"Failed to scan referenced children tables from main history: {e}")
 
-		# Find any legacy children tables by name pattern album_% or playlist_%
 		try:
 			cur = conn.execute(
 				"SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'album_%' OR name LIKE 'playlist_%') AND name != 'download_history'"
@@ -161,7 +142,6 @@ def _update_children_tables_for_history(conn: sqlite3.Connection) -> None:
 
 
 def _ensure_creds_filesystem() -> None:
-	"""Ensure blobs directory and search.json exist."""
 	try:
 		BLOBS_DIR.mkdir(parents=True, exist_ok=True)
 		if not SEARCH_JSON.exists():
@@ -171,48 +151,74 @@ def _ensure_creds_filesystem() -> None:
 		logger.error("Failed to ensure credentials filesystem (blobs/search.json)", exc_info=True)
 
 
+def _apply_versioned_updates(conn: sqlite3.Connection, c306, u306, c310, u310, post_update=None) -> None:
+	if not c306(conn):
+		u306(conn)
+	if not c310(conn):
+		u310(conn)
+	if post_update:
+		post_update(conn)
+
+
 def run_migrations_if_needed() -> None:
-	"""Detect and apply necessary migrations by version for each DB.
-	Idempotent by design.
-	"""
 	try:
 		# History DB
 		h_conn = _safe_connect(HISTORY_DB)
 		if h_conn:
 			try:
-				if not check_history_3_0_6(h_conn):
-					update_history_3_0_6(h_conn)
-				# Ensure children tables regardless
-				_update_children_tables_for_history(h_conn)
+				_apply_versioned_updates(
+					h_conn,
+					m306.check_history,
+					m306.update_history,
+					m310.check_history,
+					m310.update_history,
+					post_update=_update_children_tables_for_history,
+				)
 				h_conn.commit()
 			finally:
 				h_conn.close()
 
-		# Watch DBs
+		# Watch playlists DB
 		p_conn = _safe_connect(PLAYLISTS_DB)
 		if p_conn:
 			try:
-				if not check_watch_playlists_3_0_6(p_conn):
-					update_watch_playlists_3_0_6(p_conn)
+				_apply_versioned_updates(
+					p_conn,
+					m306.check_watch_playlists,
+					m306.update_watch_playlists,
+					m310.check_watch_playlists,
+					m310.update_watch_playlists,
+				)
 				p_conn.commit()
 			finally:
 				p_conn.close()
 
+		# Watch artists DB
 		a_conn = _safe_connect(ARTISTS_DB)
 		if a_conn:
 			try:
-				if not check_watch_artists_3_0_6(a_conn):
-					update_watch_artists_3_0_6(a_conn)
+				_apply_versioned_updates(
+					a_conn,
+					m306.check_watch_artists,
+					m306.update_watch_artists,
+					m310.check_watch_artists,
+					m310.update_watch_artists,
+				)
 				a_conn.commit()
 			finally:
 				a_conn.close()
 
-		# Credentials accounts DB and files
+		# Accounts DB
 		c_conn = _safe_connect(ACCOUNTS_DB)
 		if c_conn:
 			try:
-				if not check_accounts_3_0_6(c_conn):
-					update_accounts_3_0_6(c_conn)
+				_apply_versioned_updates(
+					c_conn,
+					m306.check_accounts,
+					m306.update_accounts,
+					m310.check_accounts,
+					m310.update_accounts,
+				)
 				c_conn.commit()
 			finally:
 				c_conn.close()

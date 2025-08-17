@@ -996,7 +996,7 @@ def init_artists_db():
 
 def _create_artist_albums_table(artist_spotify_id: str):
     """Creates or updates a table for a specific artist to store their albums in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_').replace(' ', '_')}"  # Sanitize table name
+    table_name = f"artist_{artist_spotify_id.replace('-', '_').replace(' ', '_')}_albums"  # Sanitize table name
     try:
         with _get_artists_db_connection() as conn:  # Use artists connection
             cursor = conn.cursor()
