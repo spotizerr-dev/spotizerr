@@ -9,6 +9,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Run DB migrations early so other modules see expected schemas
+try:
+    from routes.migrations import run_migrations_if_needed
+    run_migrations_if_needed()
+    logger.info("Database migrations executed (if needed).")
+except Exception as e:
+    logger.error(f"Database migration step failed: {e}", exc_info=True)
+
 try:
     from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
 

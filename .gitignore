@@ -41,3 +41,9 @@ logs/
 Test.py
 spotizerr-ui/dev-dist
 celerybeat-schedule
+data.*/
+3.1.0.md
+3.0.6.md
+3.1.2.md
+sqltree.sh
+3.1.1.md
