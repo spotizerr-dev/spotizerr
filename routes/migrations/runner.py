@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from .v3_0_6 import MigrationV3_0_6
+from .v3_1_0 import MigrationV3_1_0
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ EXPECTED_ARTIST_ALBUMS_COLUMNS: dict[str, str] = {
 }
 
 m306 = MigrationV3_0_6()
+m310 = MigrationV3_1_0()
 
 
 def _safe_connect(path: Path) -> Optional[sqlite3.Connection]:
@@ -354,18 +356,17 @@ def run_migrations_if_needed() -> None:
 				p_conn.close()
 
 		# Watch artists DB
-		a_conn = _safe_connect(ARTISTS_DB)
-		if a_conn:
-			try:
-				_apply_versioned_updates(
-					a_conn,
-					m306.check_watch_artists,
-					m306.update_watch_artists,
-				)
-				_update_watch_artists_db(a_conn)
-				a_conn.commit()
-			finally:
-				a_conn.close()
+		if ARTISTS_DB.exists():
+			with _safe_connect(ARTISTS_DB) as conn:
+				if conn:
+					_apply_versioned_updates(
+						conn, m306.check_watch_artists, m306.update_watch_artists
+					)
+					_apply_versioned_updates(
+						conn, m310.check_watch_artists, m310.update_watch_artists
+					)
+					_update_watch_artists_db(conn)
+					conn.commit()
 
 		# Accounts DB
 		c_conn = _safe_connect(ACCOUNTS_DB)
