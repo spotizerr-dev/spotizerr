@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Optional
 
 from .v3_0_6 import MigrationV3_0_6
-from .v3_1_0 import MigrationV3_1_0
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +38,69 @@ CHILDREN_EXPECTED_COLUMNS: dict[str, str] = {
 	"metadata": "TEXT",
 }
 
+# 3.1.2 expected schemas for Watch DBs (kept here to avoid importing modules with side-effects)
+EXPECTED_WATCHED_PLAYLISTS_COLUMNS: dict[str, str] = {
+	"spotify_id": "TEXT PRIMARY KEY",
+	"name": "TEXT",
+	"owner_id": "TEXT",
+	"owner_name": "TEXT",
+	"total_tracks": "INTEGER",
+	"link": "TEXT",
+	"snapshot_id": "TEXT",
+	"last_checked": "INTEGER",
+	"added_at": "INTEGER",
+	"is_active": "INTEGER DEFAULT 1",
+}
+
+EXPECTED_PLAYLIST_TRACKS_COLUMNS: dict[str, str] = {
+	"spotify_track_id": "TEXT PRIMARY KEY",
+	"title": "TEXT",
+	"artist_names": "TEXT",
+	"album_name": "TEXT",
+	"album_artist_names": "TEXT",
+	"track_number": "INTEGER",
+	"album_spotify_id": "TEXT",
+	"duration_ms": "INTEGER",
+	"added_at_playlist": "TEXT",
+	"added_to_db": "INTEGER",
+	"is_present_in_spotify": "INTEGER DEFAULT 1",
+	"last_seen_in_spotify": "INTEGER",
+	"snapshot_id": "TEXT",
+	"final_path": "TEXT",
+}
+
+EXPECTED_WATCHED_ARTISTS_COLUMNS: dict[str, str] = {
+	"spotify_id": "TEXT PRIMARY KEY",
+	"name": "TEXT",
+	"link": "TEXT",
+	"total_albums_on_spotify": "INTEGER",
+	"last_checked": "INTEGER",
+	"added_at": "INTEGER",
+	"is_active": "INTEGER DEFAULT 1",
+	"genres": "TEXT",
+	"popularity": "INTEGER",
+	"image_url": "TEXT",
+}
+
+EXPECTED_ARTIST_ALBUMS_COLUMNS: dict[str, str] = {
+	"album_spotify_id": "TEXT PRIMARY KEY",
+	"artist_spotify_id": "TEXT",
+	"name": "TEXT",
+	"album_group": "TEXT",
+	"album_type": "TEXT",
+	"release_date": "TEXT",
+	"release_date_precision": "TEXT",
+	"total_tracks": "INTEGER",
+	"link": "TEXT",
+	"image_url": "TEXT",
+	"added_to_db": "INTEGER",
+	"last_seen_on_spotify": "INTEGER",
+	"download_task_id": "TEXT",
+	"download_status": "INTEGER DEFAULT 0",
+	"is_fully_downloaded_managed_by_app": "INTEGER DEFAULT 0",
+}
+
 m306 = MigrationV3_0_6()
-m310 = MigrationV3_1_0()
 
 
 def _safe_connect(path: Path) -> Optional[sqlite3.Connection]:
@@ -151,13 +211,116 @@ def _ensure_creds_filesystem() -> None:
 		logger.error("Failed to ensure credentials filesystem (blobs/search.json)", exc_info=True)
 
 
-def _apply_versioned_updates(conn: sqlite3.Connection, c306, u306, c310, u310, post_update=None) -> None:
-	if not c306(conn):
-		u306(conn)
-	if not c310(conn):
-		u310(conn)
+def _apply_versioned_updates(conn: sqlite3.Connection, c_base, u_base, post_update=None) -> None:
+	if not c_base(conn):
+		u_base(conn)
 	if post_update:
 		post_update(conn)
+
+
+# --- 3.1.2 upgrade helpers for Watch DBs ---
+
+def _update_watch_playlists_db(conn: sqlite3.Connection) -> None:
+	try:
+		# Ensure core watched_playlists table exists and has expected schema
+		conn.execute(
+			"""
+			CREATE TABLE IF NOT EXISTS watched_playlists (
+				spotify_id TEXT PRIMARY KEY,
+				name TEXT,
+				owner_id TEXT,
+				owner_name TEXT,
+				total_tracks INTEGER,
+				link TEXT,
+				snapshot_id TEXT,
+				last_checked INTEGER,
+				added_at INTEGER,
+				is_active INTEGER DEFAULT 1
+			)
+			"""
+		)
+		_ensure_table_schema(conn, "watched_playlists", EXPECTED_WATCHED_PLAYLISTS_COLUMNS, "watched playlists")
+
+		# Upgrade all dynamic playlist_ tables
+		cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'playlist_%'")
+		for row in cur.fetchall():
+			table_name = row[0]
+			conn.execute(
+				f"""
+				CREATE TABLE IF NOT EXISTS {table_name} (
+					spotify_track_id TEXT PRIMARY KEY,
+					title TEXT,
+					artist_names TEXT,
+					album_name TEXT,
+					album_artist_names TEXT,
+					track_number INTEGER,
+					album_spotify_id TEXT,
+					duration_ms INTEGER,
+					added_at_playlist TEXT,
+					added_to_db INTEGER,
+					is_present_in_spotify INTEGER DEFAULT 1,
+					last_seen_in_spotify INTEGER,
+					snapshot_id TEXT,
+					final_path TEXT
+				)
+				"""
+			)
+			_ensure_table_schema(conn, table_name, EXPECTED_PLAYLIST_TRACKS_COLUMNS, f"playlist tracks ({table_name})")
+		logger.info("Upgraded watch playlists DB to 3.1.2 schema")
+	except Exception:
+		logger.error("Failed to upgrade watch playlists DB to 3.1.2 schema", exc_info=True)
+
+
+def _update_watch_artists_db(conn: sqlite3.Connection) -> None:
+	try:
+		# Ensure core watched_artists table exists and has expected schema
+		conn.execute(
+			"""
+			CREATE TABLE IF NOT EXISTS watched_artists (
+				spotify_id TEXT PRIMARY KEY,
+				name TEXT,
+				link TEXT,
+				total_albums_on_spotify INTEGER,
+				last_checked INTEGER,
+				added_at INTEGER,
+				is_active INTEGER DEFAULT 1,
+				genres TEXT,
+				popularity INTEGER,
+				image_url TEXT
+			)
+			"""
+		)
+		_ensure_table_schema(conn, "watched_artists", EXPECTED_WATCHED_ARTISTS_COLUMNS, "watched artists")
+
+		# Upgrade all dynamic artist_ tables
+		cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'artist_%'")
+		for row in cur.fetchall():
+			table_name = row[0]
+			conn.execute(
+				f"""
+				CREATE TABLE IF NOT EXISTS {table_name} (
+					album_spotify_id TEXT PRIMARY KEY,
+					artist_spotify_id TEXT,
+					name TEXT,
+					album_group TEXT,
+					album_type TEXT,
+					release_date TEXT,
+					release_date_precision TEXT,
+					total_tracks INTEGER,
+					link TEXT,
+					image_url TEXT,
+					added_to_db INTEGER,
+					last_seen_on_spotify INTEGER,
+					download_task_id TEXT,
+					download_status INTEGER DEFAULT 0,
+					is_fully_downloaded_managed_by_app INTEGER DEFAULT 0
+				)
+				"""
+			)
+			_ensure_table_schema(conn, table_name, EXPECTED_ARTIST_ALBUMS_COLUMNS, f"artist albums ({table_name})")
+		logger.info("Upgraded watch artists DB to 3.1.2 schema")
+	except Exception:
+		logger.error("Failed to upgrade watch artists DB to 3.1.2 schema", exc_info=True)
 
 
 def run_migrations_if_needed() -> None:
@@ -170,8 +333,6 @@ def run_migrations_if_needed() -> None:
 					h_conn,
 					m306.check_history,
 					m306.update_history,
-					m310.check_history,
-					m310.update_history,
 					post_update=_update_children_tables_for_history,
 				)
 				h_conn.commit()
@@ -186,9 +347,8 @@ def run_migrations_if_needed() -> None:
 					p_conn,
 					m306.check_watch_playlists,
 					m306.update_watch_playlists,
-					m310.check_watch_playlists,
-					m310.update_watch_playlists,
 				)
+				_update_watch_playlists_db(p_conn)
 				p_conn.commit()
 			finally:
 				p_conn.close()
@@ -201,9 +361,8 @@ def run_migrations_if_needed() -> None:
 					a_conn,
 					m306.check_watch_artists,
 					m306.update_watch_artists,
-					m310.check_watch_artists,
-					m310.update_watch_artists,
 				)
+				_update_watch_artists_db(a_conn)
 				a_conn.commit()
 			finally:
 				a_conn.close()
@@ -216,8 +375,6 @@ def run_migrations_if_needed() -> None:
 					c_conn,
 					m306.check_accounts,
 					m306.update_accounts,
-					m310.check_accounts,
-					m310.update_accounts,
 				)
 				c_conn.commit()
 			finally:
