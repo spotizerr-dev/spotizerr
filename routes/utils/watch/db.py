@@ -996,7 +996,7 @@ def init_artists_db():
 
 def _create_artist_albums_table(artist_spotify_id: str):
     """Creates or updates a table for a specific artist to store their albums in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_').replace(' ', '_')}_albums"  # Sanitize table name
+    table_name = f"artist_{artist_spotify_id.replace('-', '_').replace(' ', '_')}"  # Sanitize table name
     try:
         with _get_artists_db_connection() as conn:  # Use artists connection
             cursor = conn.cursor()
@@ -1086,7 +1086,7 @@ def add_artist_to_watch(artist_data: dict):
 
 def remove_artist_from_watch(artist_spotify_id: str):
     """Removes an artist from watched_artists and drops its albums table in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
     try:
         with _get_artists_db_connection() as conn:
             cursor = conn.cursor()
@@ -1166,7 +1166,7 @@ def update_artist_metadata_after_check(
 
 def get_artist_album_ids_from_db(artist_spotify_id: str):
     """Retrieves all album Spotify IDs from a specific artist's albums table in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
     album_ids: set[str] = set()
     try:
         with _get_artists_db_connection() as conn:
@@ -1198,8 +1198,14 @@ def add_or_update_album_for_artist(
     task_id: str = None,
     is_download_complete: bool = False,
 ):
-    """Adds or updates an album in the specified artist's albums table in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    """Adds or updates an album in the specified artist's albums table in artists.db.
+
+    This function aligns with the schema defined by EXPECTED_ARTIST_ALBUMS_COLUMNS:
+      - download_task_id: TEXT
+      - download_status: INTEGER (0: Not Queued, 1: Queued/In Progress, 2: Downloaded, 3: Error)
+      - is_fully_downloaded_managed_by_app: INTEGER (0/1)
+    """
+    table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
     album_id = album_data.get("id")
     if not album_id:
         logger.warning(
@@ -1207,69 +1213,112 @@ def add_or_update_album_for_artist(
         )
         return
 
-    download_status = 0
-    if task_id and not is_download_complete:
-        download_status = 1
-    elif is_download_complete:
-        download_status = 2
+    # Map status according to provided flags
+    download_status = 2 if is_download_complete else (1 if task_id else 0)
 
     current_time = int(time.time())
-    album_tuple = (
-        album_id,
-        album_data.get("name", "N/A"),
-        album_data.get("album_group", "N/A"),
-        album_data.get("album_type", "N/A"),
-        album_data.get("release_date"),
-        album_data.get("total_tracks"),
-        current_time,
-        download_status,
-        task_id,
-    )
+
+    # Build derived fields from Spotify album data
+    album_name = album_data.get("name", "N/A")
+    album_group = album_data.get("album_group", "N/A")
+    album_type = album_data.get("album_type", "N/A")
+    release_date = album_data.get("release_date")
+    release_date_precision = album_data.get("release_date_precision")
+    total_tracks = album_data.get("total_tracks")
+    link = f"https://open.spotify.com/album/{album_id}"
+    images = album_data.get("images") or []
+    image_url = images[0].get("url") if images and images[0].get("url") else None
+
     try:
         with _get_artists_db_connection() as conn:
             cursor = conn.cursor()
             _create_artist_albums_table(artist_spotify_id)
 
+            # Determine if row exists (and keep original added_to_db on update)
             cursor.execute(
-                f"SELECT added_to_db_at FROM {table_name} WHERE album_spotify_id = ?",
+                f"SELECT added_to_db FROM {table_name} WHERE album_spotify_id = ?",
                 (album_id,),
             )
             existing_row = cursor.fetchone()
 
             if existing_row:
                 update_tuple = (
-                    album_data.get("name", "N/A"),
-                    album_data.get("album_group", "N/A"),
-                    album_data.get("album_type", "N/A"),
-                    album_data.get("release_date"),
-                    album_data.get("total_tracks"),
+                    album_name,
+                    album_group,
+                    album_type,
+                    release_date,
+                    release_date_precision,
+                    total_tracks,
+                    link,
+                    image_url,
+                    current_time,  # last_seen_on_spotify
                     download_status,
-                    task_id,
+                    task_id,  # download_task_id
                     album_id,
                 )
                 cursor.execute(
                     f"""
                     UPDATE {table_name} SET
-                    name = ?, album_group = ?, album_type = ?, release_date = ?, total_tracks = ?,
-                    is_download_initiated = ?, task_id = ?
+                        name = ?,
+                        album_group = ?,
+                        album_type = ?,
+                        release_date = ?,
+                        release_date_precision = ?,
+                        total_tracks = ?,
+                        link = ?,
+                        image_url = ?,
+                        last_seen_on_spotify = ?,
+                        download_status = ?,
+                        download_task_id = ?
                     WHERE album_spotify_id = ?
                 """,
                     update_tuple,
                 )
                 logger.info(
-                    f"Updated album '{album_data.get('name')}' in DB for artist {artist_spotify_id} in {ARTISTS_DB_PATH}."
+                    f"Updated album '{album_name}' in DB for artist {artist_spotify_id} in {ARTISTS_DB_PATH}."
                 )
             else:
+                insert_tuple = (
+                    album_id,
+                    artist_spotify_id,
+                    album_name,
+                    album_group,
+                    album_type,
+                    release_date,
+                    release_date_precision,
+                    total_tracks,
+                    link,
+                    image_url,
+                    current_time,            # added_to_db
+                    current_time,            # last_seen_on_spotify
+                    task_id,                 # download_task_id
+                    download_status,         # download_status
+                    0,                       # is_fully_downloaded_managed_by_app
+                )
                 cursor.execute(
                     f"""
-                    INSERT INTO {table_name}
-                    (album_spotify_id, name, album_group, album_type, release_date, total_tracks, added_to_db_at, is_download_initiated, task_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO {table_name} (
+                        album_spotify_id,
+                        artist_spotify_id,
+                        name,
+                        album_group,
+                        album_type,
+                        release_date,
+                        release_date_precision,
+                        total_tracks,
+                        link,
+                        image_url,
+                        added_to_db,
+                        last_seen_on_spotify,
+                        download_task_id,
+                        download_status,
+                        is_fully_downloaded_managed_by_app
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                    album_tuple,
+                    insert_tuple,
                 )
                 logger.info(
-                    f"Added album '{album_data.get('name')}' to DB for artist {artist_spotify_id} in {ARTISTS_DB_PATH}."
+                    f"Added album '{album_name}' to DB for artist {artist_spotify_id} in {ARTISTS_DB_PATH}."
                 )
             conn.commit()
     except sqlite3.Error as e:
@@ -1282,18 +1331,18 @@ def add_or_update_album_for_artist(
 def update_album_download_status_for_artist(
     artist_spotify_id: str, album_spotify_id: str, task_id: str, status: int
 ):
-    """Updates the download status (is_download_initiated) and task_id for a specific album of an artist in artists.db."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    """Updates the download_status and download_task_id for a specific album of an artist in artists.db."""
+    table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
     try:
         with _get_artists_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 f"""
                 UPDATE {table_name}
-                SET is_download_initiated = ?, task_id = ?
+                SET download_status = ?, download_task_id = ?, last_seen_on_spotify = ?
                 WHERE album_spotify_id = ?
             """,
-                (status, task_id, album_spotify_id),
+                (status, task_id, int(time.time()), album_spotify_id),
             )
             if cursor.rowcount == 0:
                 logger.warning(
@@ -1371,7 +1420,7 @@ def remove_specific_albums_from_artist_table(
     artist_spotify_id: str, album_spotify_ids: list
 ):
     """Removes specific albums from the artist's local album table."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
     if not album_spotify_ids:
         return 0
 
@@ -1435,7 +1484,7 @@ def is_track_in_playlist_db(playlist_spotify_id: str, track_spotify_id: str) -> 
 
 def is_album_in_artist_db(artist_spotify_id: str, album_spotify_id: str) -> bool:
     """Checks if a specific album Spotify ID exists in the given artist's albums table."""
-    table_name = f"artist_{artist_spotify_id.replace('-', '_')}_albums"
+    table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
     try:
         with _get_artists_db_connection() as conn:
             cursor = conn.cursor()
