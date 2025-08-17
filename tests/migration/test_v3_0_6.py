@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 import pytest
+import json
 
 # Override the autouse credentials fixture from conftest for this module
 @pytest.fixture(scope="session", autouse=True)
@@ -173,6 +174,10 @@ def test_migration_children_tables_created_and_upgraded(tmp_path: Path, monkeypa
 	history_db = data_dir / "history" / "download_history.db"
 	playlists_db = data_dir / "watch" / "playlists.db"
 	artists_db = data_dir / "watch" / "artists.db"
+	creds_dir = data_dir / "creds"
+	accounts_db = creds_dir / "accounts.db"
+	blobs_dir = creds_dir / "blobs"
+	search_json = creds_dir / "search.json"
 
 	# Create 3.0.6 base schemas and sample data
 	_create_306_history_db(history_db)
@@ -185,6 +190,10 @@ def test_migration_children_tables_created_and_upgraded(tmp_path: Path, monkeypa
 	monkeypatch.setattr(runner, "WATCH_DIR", data_dir / "watch")
 	monkeypatch.setattr(runner, "PLAYLISTS_DB", playlists_db)
 	monkeypatch.setattr(runner, "ARTISTS_DB", artists_db)
+	monkeypatch.setattr(runner, "CREDS_DIR", creds_dir)
+	monkeypatch.setattr(runner, "ACCOUNTS_DB", accounts_db)
+	monkeypatch.setattr(runner, "BLOBS_DIR", blobs_dir)
+	monkeypatch.setattr(runner, "SEARCH_JSON", search_json)
 
 	# Act: run migrations
 	runner.run_migrations_if_needed()
@@ -212,4 +221,17 @@ def test_migration_children_tables_created_and_upgraded(tmp_path: Path, monkeypa
 	assert _get_columns(history_db, "album_test1").issuperset(expected_children_cols)
 	assert _get_columns(history_db, "playlist_test2").issuperset(expected_children_cols)
 	# Legacy table upgraded
-	assert _get_columns(history_db, "album_legacy").issuperset(expected_children_cols) 
+	assert _get_columns(history_db, "album_legacy").issuperset(expected_children_cols)
+
+	# Assert: accounts DB created with expected tables and columns
+	assert accounts_db.exists()
+	spotify_cols = _get_columns(accounts_db, "spotify")
+	deezer_cols = _get_columns(accounts_db, "deezer")
+	assert {"name", "region", "created_at", "updated_at"}.issubset(spotify_cols)
+	assert {"name", "arl", "region", "created_at", "updated_at"}.issubset(deezer_cols)
+
+	# Assert: creds filesystem
+	assert blobs_dir.exists() and blobs_dir.is_dir()
+	assert search_json.exists()
+	data = json.loads(search_json.read_text())
+	assert set(data.keys()) == {"client_id", "client_secret"} 

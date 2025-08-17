@@ -63,6 +63,25 @@ CREATE TABLE IF NOT EXISTS watched_artists (
 );
 """
 
+ACCOUNTS_SPOTIFY_SQL = """
+CREATE TABLE IF NOT EXISTS spotify (
+  name TEXT PRIMARY KEY,
+  region TEXT,
+  created_at REAL,
+  updated_at REAL
+);
+"""
+
+ACCOUNTS_DEEZER_SQL = """
+CREATE TABLE IF NOT EXISTS deezer (
+  name TEXT PRIMARY KEY,
+  arl TEXT,
+  region TEXT,
+  created_at REAL,
+  updated_at REAL
+);
+"""
+
 
 # --- Check functions ---
 
@@ -152,6 +171,27 @@ def check_watch_artists_3_0_6(conn: sqlite3.Connection) -> bool:
 	return required.issubset(_table_columns(conn, "watched_artists"))
 
 
+def check_accounts_3_0_6(conn: sqlite3.Connection) -> bool:
+	"""Return True if accounts DB has both spotify and deezer tables with expected columns."""
+	# Spotify table
+	cur = conn.execute(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='spotify'"
+	)
+	if not cur.fetchone():
+		return False
+	spotify_required = {"name", "region", "created_at", "updated_at"}
+	if not spotify_required.issubset(_table_columns(conn, "spotify")):
+		return False
+	# Deezer table
+	cur = conn.execute(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='deezer'"
+	)
+	if not cur.fetchone():
+		return False
+	deezer_required = {"name", "arl", "region", "created_at", "updated_at"}
+	return deezer_required.issubset(_table_columns(conn, "deezer"))
+
+
 # --- Update functions ---
 
 def update_history_3_0_6(conn: sqlite3.Connection) -> None:
@@ -163,4 +203,9 @@ def update_watch_playlists_3_0_6(conn: sqlite3.Connection) -> None:
 
 
 def update_watch_artists_3_0_6(conn: sqlite3.Connection) -> None:
-	conn.executescript(WATCH_ARTISTS_SQL) 
+	conn.executescript(WATCH_ARTISTS_SQL)
+
+
+def update_accounts_3_0_6(conn: sqlite3.Connection) -> None:
+	conn.executescript(ACCOUNTS_SPOTIFY_SQL)
+	conn.executescript(ACCOUNTS_DEEZER_SQL) 

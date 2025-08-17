@@ -10,6 +10,8 @@ from .v3_0_6 import (
 	update_history_3_0_6,
 	update_watch_playlists_3_0_6,
 	update_watch_artists_3_0_6,
+	check_accounts_3_0_6,
+	update_accounts_3_0_6,
 )
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,12 @@ HISTORY_DB = DATA_DIR / "history" / "download_history.db"
 WATCH_DIR = DATA_DIR / "watch"
 PLAYLISTS_DB = WATCH_DIR / "playlists.db"
 ARTISTS_DB = WATCH_DIR / "artists.db"
+
+# Credentials
+CREDS_DIR = DATA_DIR / "creds"
+ACCOUNTS_DB = CREDS_DIR / "accounts.db"
+BLOBS_DIR = CREDS_DIR / "blobs"
+SEARCH_JSON = CREDS_DIR / "search.json"
 
 # Expected children table columns for history (album_/playlist_)
 CHILDREN_EXPECTED_COLUMNS: dict[str, str] = {
@@ -152,6 +160,17 @@ def _update_children_tables_for_history(conn: sqlite3.Connection) -> None:
 		logger.error("Failed migrating children history tables", exc_info=True)
 
 
+def _ensure_creds_filesystem() -> None:
+	"""Ensure blobs directory and search.json exist."""
+	try:
+		BLOBS_DIR.mkdir(parents=True, exist_ok=True)
+		if not SEARCH_JSON.exists():
+			SEARCH_JSON.write_text('{ "client_id": "", "client_secret": "" }\n', encoding="utf-8")
+			logger.info(f"Created default global Spotify creds file at {SEARCH_JSON}")
+	except Exception:
+		logger.error("Failed to ensure credentials filesystem (blobs/search.json)", exc_info=True)
+
+
 def run_migrations_if_needed() -> None:
 	"""Detect and apply necessary migrations by version for each DB.
 	Idempotent by design.
@@ -187,6 +206,18 @@ def run_migrations_if_needed() -> None:
 				a_conn.commit()
 			finally:
 				a_conn.close()
+
+		# Credentials accounts DB and files
+		c_conn = _safe_connect(ACCOUNTS_DB)
+		if c_conn:
+			try:
+				if not check_accounts_3_0_6(c_conn):
+					update_accounts_3_0_6(c_conn)
+				c_conn.commit()
+			finally:
+				c_conn.close()
+		_ensure_creds_filesystem()
+
 		logger.info("Database migrations check completed")
 	except Exception:
 		logger.error("Database migration failed", exc_info=True) 
