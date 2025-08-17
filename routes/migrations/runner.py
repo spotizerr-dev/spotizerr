@@ -5,6 +5,7 @@ from typing import Optional
 
 from .v3_0_6 import MigrationV3_0_6
 from .v3_1_0 import MigrationV3_1_0
+from .v3_1_1 import MigrationV3_1_1
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ EXPECTED_ARTIST_ALBUMS_COLUMNS: dict[str, str] = {
 
 m306 = MigrationV3_0_6()
 m310 = MigrationV3_1_0()
+m311 = MigrationV3_1_1()
 
 
 def _safe_connect(path: Path) -> Optional[sqlite3.Connection]:
@@ -325,63 +327,65 @@ def _update_watch_artists_db(conn: sqlite3.Connection) -> None:
 		logger.error("Failed to upgrade watch artists DB to 3.1.2 schema", exc_info=True)
 
 
-def run_migrations_if_needed() -> None:
-	try:
-		# History DB
-		h_conn = _safe_connect(HISTORY_DB)
-		if h_conn:
-			try:
-				_apply_versioned_updates(
-					h_conn,
-					m306.check_history,
-					m306.update_history,
-					post_update=_update_children_tables_for_history,
-				)
-				h_conn.commit()
-			finally:
-				h_conn.close()
+def run_migrations_if_needed():
+    # Check if data directory exists
+    if not DATA_DIR.exists():
+        return
 
-		# Watch playlists DB
-		p_conn = _safe_connect(PLAYLISTS_DB)
-		if p_conn:
-			try:
-				_apply_versioned_updates(
-					p_conn,
-					m306.check_watch_playlists,
-					m306.update_watch_playlists,
-				)
-				_update_watch_playlists_db(p_conn)
-				p_conn.commit()
-			finally:
-				p_conn.close()
+    try:
+        # History DB
+        with _safe_connect(HISTORY_DB) as conn:
+            if conn:
+                _apply_versioned_updates(
+                    conn,
+                    m306.check_history,
+                    m306.update_history,
+                    post_update=_update_children_tables_for_history,
+                )
+                _apply_versioned_updates(conn, m311.check_history, m311.update_history)
+                conn.commit()
 
-		# Watch artists DB
-		if ARTISTS_DB.exists():
-			with _safe_connect(ARTISTS_DB) as conn:
-				if conn:
-					_apply_versioned_updates(
-						conn, m306.check_watch_artists, m306.update_watch_artists
-					)
-					_apply_versioned_updates(
-						conn, m310.check_watch_artists, m310.update_watch_artists
-					)
-					_update_watch_artists_db(conn)
-					conn.commit()
+        # Watch playlists DB
+        with _safe_connect(PLAYLISTS_DB) as conn:
+            if conn:
+                _apply_versioned_updates(
+                    conn,
+                    m306.check_watch_playlists,
+                    m306.update_watch_playlists,
+                )
+                _apply_versioned_updates(
+                    conn,
+                    m311.check_watch_playlists,
+                    m311.update_watch_playlists,
+                )
+                _update_watch_playlists_db(conn)
+                conn.commit()
 
-		# Accounts DB
-		c_conn = _safe_connect(ACCOUNTS_DB)
-		if c_conn:
-			try:
-				_apply_versioned_updates(
-					c_conn,
-					m306.check_accounts,
-					m306.update_accounts,
-				)
-				c_conn.commit()
-			finally:
-				c_conn.close()
-		_ensure_creds_filesystem()
+        # Watch artists DB
+        if ARTISTS_DB.exists():
+            with _safe_connect(ARTISTS_DB) as conn:
+                if conn:
+                    _apply_versioned_updates(
+                        conn, m306.check_watch_artists, m306.update_watch_artists
+                    )
+                    _apply_versioned_updates(
+                        conn, m310.check_watch_artists, m310.update_watch_artists
+                    )
+                    _apply_versioned_updates(
+                        conn, m311.check_watch_artists, m311.update_watch_artists
+                    )
+                    _update_watch_artists_db(conn)
+                    conn.commit()
 
-		logger.info("Database migrations check completed")
-	except Exception:
-		logger.error("Database migration failed", exc_info=True) 
+        # Accounts DB
+        with _safe_connect(ACCOUNTS_DB) as conn:
+            if conn:
+                _apply_versioned_updates(conn, m306.check_accounts, m306.update_accounts)
+                _apply_versioned_updates(conn, m311.check_accounts, m311.update_accounts)
+                conn.commit()
+
+    except Exception as e:
+        logger.error("Error during migration: %s", e, exc_info=True)
+    else:
+        _ensure_creds_filesystem()
+        logger.info("Database migrations check completed")

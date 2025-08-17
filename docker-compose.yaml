@@ -1,7 +1,7 @@
 name: spotizerr
 services:
   spotizerr:
-    image: cooldockerizer93/spotizerr:3.1.0
+    image: cooldockerizer93/spotizerr:3.1.1
     volumes:
     - ./data:/app/data
     - ./downloads:/app/downloads
