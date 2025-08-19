@@ -24,7 +24,7 @@ from routes.utils.watch.manager import check_watched_artists, get_watch_config
 from routes.utils.get_info import get_spotify_info
 
 # Import authentication dependencies
-from routes.auth.middleware import require_auth_from_state, require_admin_from_state, User
+from routes.auth.middleware import require_auth_from_state, User
 
 router = APIRouter()
 
@@ -43,7 +43,11 @@ def log_json(message_dict):
 
 
 @router.get("/download/{artist_id}")
-async def handle_artist_download(artist_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
+async def handle_artist_download(
+    artist_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth_from_state),
+):
     """
     Enqueues album download tasks for the given artist.
     Expected query parameters:
@@ -58,8 +62,7 @@ async def handle_artist_download(artist_id: str, request: Request, current_user:
     # Validate required parameters
     if not url:  # This check is mostly for safety, as url is constructed
         return JSONResponse(
-            content={"error": "Missing required parameter: url"},
-            status_code=400
+            content={"error": "Missing required parameter: url"}, status_code=400
         )
 
     try:
@@ -68,7 +71,10 @@ async def handle_artist_download(artist_id: str, request: Request, current_user:
 
         # Delegate to the download_artist_albums function which will handle album filtering
         successfully_queued_albums, duplicate_albums = download_artist_albums(
-            url=url, album_type=album_type, request_args=dict(request.query_params)
+            url=url,
+            album_type=album_type,
+            request_args=dict(request.query_params),
+            username=current_user.username,
         )
 
         # Return the list of album task IDs.
@@ -85,7 +91,7 @@ async def handle_artist_download(artist_id: str, request: Request, current_user:
 
         return JSONResponse(
             content=response_data,
-            status_code=202  # Still 202 Accepted as some operations may have succeeded
+            status_code=202,  # Still 202 Accepted as some operations may have succeeded
         )
     except Exception as e:
         return JSONResponse(
@@ -94,7 +100,7 @@ async def handle_artist_download(artist_id: str, request: Request, current_user:
                 "message": str(e),
                 "traceback": traceback.format_exc(),
             },
-            status_code=500
+            status_code=500,
         )
 
 
@@ -106,12 +112,14 @@ async def cancel_artist_download():
     """
     return JSONResponse(
         content={"error": "Artist download cancellation is not supported."},
-        status_code=400
+        status_code=400,
     )
 
 
 @router.get("/info")
-async def get_artist_info(request: Request, current_user: User = Depends(require_auth_from_state)):
+async def get_artist_info(
+    request: Request, current_user: User = Depends(require_auth_from_state)
+):
     """
     Retrieves Spotify artist metadata given a Spotify artist ID.
     Expects a query parameter 'id' with the Spotify artist ID.
@@ -119,27 +127,25 @@ async def get_artist_info(request: Request, current_user: User = Depends(require
     spotify_id = request.query_params.get("id")
 
     if not spotify_id:
-        return JSONResponse(
-            content={"error": "Missing parameter: id"},
-            status_code=400
-        )
+        return JSONResponse(content={"error": "Missing parameter: id"}, status_code=400)
 
     try:
         # Get artist metadata first
         artist_metadata = get_spotify_info(spotify_id, "artist")
-        
+
         # Get artist discography for albums
         artist_discography = get_spotify_info(spotify_id, "artist_discography")
-        
+
         # Combine metadata with discography
-        artist_info = {
-            **artist_metadata,
-            "albums": artist_discography
-        }
+        artist_info = {**artist_metadata, "albums": artist_discography}
 
         # If artist_info is successfully fetched and has albums,
         # check if the artist is watched and augment album items with is_locally_known status
-        if artist_info and artist_info.get("albums") and artist_info["albums"].get("items"):
+        if (
+            artist_info
+            and artist_info.get("albums")
+            and artist_info["albums"].get("items")
+        ):
             watched_artist_details = get_watched_artist(
                 spotify_id
             )  # spotify_id is the artist ID
@@ -155,13 +161,11 @@ async def get_artist_info(request: Request, current_user: User = Depends(require
             # If not watched, or no albums, is_locally_known will not be added.
             # Frontend should handle absence of this key as false.
 
-        return JSONResponse(
-            content=artist_info, status_code=200
-        )
+        return JSONResponse(content=artist_info, status_code=200)
     except Exception as e:
         return JSONResponse(
             content={"error": str(e), "traceback": traceback.format_exc()},
-            status_code=500
+            status_code=500,
         )
 
 
@@ -169,11 +173,16 @@ async def get_artist_info(request: Request, current_user: User = Depends(require
 
 
 @router.put("/watch/{artist_spotify_id}")
-async def add_artist_to_watchlist(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
+async def add_artist_to_watchlist(
+    artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)
+):
     """Adds an artist to the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        raise HTTPException(status_code=403, detail={"error": "Watch feature is currently disabled globally."})
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "Watch feature is currently disabled globally."},
+        )
 
     logger.info(f"Attempting to add artist {artist_spotify_id} to watchlist.")
     try:
@@ -182,7 +191,7 @@ async def add_artist_to_watchlist(artist_spotify_id: str, current_user: User = D
 
         # Get artist metadata directly for name and basic info
         artist_metadata = get_spotify_info(artist_spotify_id, "artist")
-        
+
         # Get artist discography for album count
         artist_album_list_data = get_spotify_info(
             artist_spotify_id, "artist_discography"
@@ -197,7 +206,7 @@ async def add_artist_to_watchlist(artist_spotify_id: str, current_user: User = D
                 status_code=404,
                 detail={
                     "error": f"Could not fetch artist metadata for {artist_spotify_id} to initiate watch."
-                }
+                },
             )
 
         # Check if we got album data
@@ -213,7 +222,9 @@ async def add_artist_to_watchlist(artist_spotify_id: str, current_user: User = D
             "id": artist_spotify_id,
             "name": artist_metadata.get("name", "Unknown Artist"),
             "albums": {  # Mimic structure if add_artist_db expects it for total_albums
-                "total": artist_album_list_data.get("total", 0) if artist_album_list_data else 0
+                "total": artist_album_list_data.get("total", 0)
+                if artist_album_list_data
+                else 0
             },
             # Add any other fields add_artist_db might expect from a true artist object if necessary
         }
@@ -232,11 +243,16 @@ async def add_artist_to_watchlist(artist_spotify_id: str, current_user: User = D
         logger.error(
             f"Error adding artist {artist_spotify_id} to watchlist: {e}", exc_info=True
         )
-        raise HTTPException(status_code=500, detail={"error": f"Could not add artist to watchlist: {str(e)}"})
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Could not add artist to watchlist: {str(e)}"},
+        )
 
 
 @router.get("/watch/{artist_spotify_id}/status")
-async def get_artist_watch_status(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
+async def get_artist_watch_status(
+    artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)
+):
     """Checks if a specific artist is being watched."""
     logger.info(f"Checking watch status for artist {artist_spotify_id}.")
     try:
@@ -250,22 +266,29 @@ async def get_artist_watch_status(artist_spotify_id: str, current_user: User = D
             f"Error checking watch status for artist {artist_spotify_id}: {e}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail={"error": f"Could not check watch status: {str(e)}"})
+        raise HTTPException(
+            status_code=500, detail={"error": f"Could not check watch status: {str(e)}"}
+        )
 
 
 @router.delete("/watch/{artist_spotify_id}")
-async def remove_artist_from_watchlist(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
+async def remove_artist_from_watchlist(
+    artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)
+):
     """Removes an artist from the watchlist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
-        raise HTTPException(status_code=403, detail={"error": "Watch feature is currently disabled globally."})
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "Watch feature is currently disabled globally."},
+        )
 
     logger.info(f"Attempting to remove artist {artist_spotify_id} from watchlist.")
     try:
         if not get_watched_artist(artist_spotify_id):
             raise HTTPException(
                 status_code=404,
-                detail={"error": f"Artist {artist_spotify_id} not found in watchlist."}
+                detail={"error": f"Artist {artist_spotify_id} not found in watchlist."},
             )
 
         remove_artist_db(artist_spotify_id)
@@ -280,23 +303,30 @@ async def remove_artist_from_watchlist(artist_spotify_id: str, current_user: Use
         )
         raise HTTPException(
             status_code=500,
-            detail={"error": f"Could not remove artist from watchlist: {str(e)}"}
+            detail={"error": f"Could not remove artist from watchlist: {str(e)}"},
         )
 
 
 @router.get("/watch/list")
-async def list_watched_artists_endpoint(current_user: User = Depends(require_auth_from_state)):
+async def list_watched_artists_endpoint(
+    current_user: User = Depends(require_auth_from_state),
+):
     """Lists all artists currently in the watchlist."""
     try:
         artists = get_watched_artists()
         return [dict(artist) for artist in artists]
     except Exception as e:
         logger.error(f"Error listing watched artists: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail={"error": f"Could not list watched artists: {str(e)}"})
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Could not list watched artists: {str(e)}"},
+        )
 
 
 @router.post("/watch/trigger_check")
-async def trigger_artist_check_endpoint(current_user: User = Depends(require_auth_from_state)):
+async def trigger_artist_check_endpoint(
+    current_user: User = Depends(require_auth_from_state),
+):
     """Manually triggers the artist checking mechanism for all watched artists."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -304,7 +334,7 @@ async def trigger_artist_check_endpoint(current_user: User = Depends(require_aut
             status_code=403,
             detail={
                 "error": "Watch feature is currently disabled globally. Cannot trigger check."
-            }
+            },
         )
 
     logger.info("Manual trigger for artist check received for all artists.")
@@ -320,12 +350,14 @@ async def trigger_artist_check_endpoint(current_user: User = Depends(require_aut
         )
         raise HTTPException(
             status_code=500,
-            detail={"error": f"Could not trigger artist check for all: {str(e)}"}
+            detail={"error": f"Could not trigger artist check for all: {str(e)}"},
         )
 
 
 @router.post("/watch/trigger_check/{artist_spotify_id}")
-async def trigger_specific_artist_check_endpoint(artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)):
+async def trigger_specific_artist_check_endpoint(
+    artist_spotify_id: str, current_user: User = Depends(require_auth_from_state)
+):
     """Manually triggers the artist checking mechanism for a specific artist."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -333,7 +365,7 @@ async def trigger_specific_artist_check_endpoint(artist_spotify_id: str, current
             status_code=403,
             detail={
                 "error": "Watch feature is currently disabled globally. Cannot trigger check."
-            }
+            },
         )
 
     logger.info(
@@ -349,7 +381,7 @@ async def trigger_specific_artist_check_endpoint(artist_spotify_id: str, current
                 status_code=404,
                 detail={
                     "error": f"Artist {artist_spotify_id} is not in the watchlist. Add it first."
-                }
+                },
             )
 
         thread = threading.Thread(
@@ -373,12 +405,16 @@ async def trigger_specific_artist_check_endpoint(artist_spotify_id: str, current
             status_code=500,
             detail={
                 "error": f"Could not trigger artist check for {artist_spotify_id}: {str(e)}"
-            }
+            },
         )
 
 
 @router.post("/watch/{artist_spotify_id}/albums")
-async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
+async def mark_albums_as_known_for_artist(
+    artist_spotify_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth_from_state),
+):
     """Fetches details for given album IDs and adds/updates them in the artist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -386,7 +422,7 @@ async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Reque
             status_code=403,
             detail={
                 "error": "Watch feature is currently disabled globally. Cannot mark albums."
-            }
+            },
         )
 
     logger.info(f"Attempting to mark albums as known for artist {artist_spotify_id}.")
@@ -399,13 +435,13 @@ async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Reque
                 status_code=400,
                 detail={
                     "error": "Invalid request body. Expecting a JSON array of album Spotify IDs."
-                }
+                },
             )
 
         if not get_watched_artist(artist_spotify_id):
             raise HTTPException(
                 status_code=404,
-                detail={"error": f"Artist {artist_spotify_id} is not being watched."}
+                detail={"error": f"Artist {artist_spotify_id} is not being watched."},
             )
 
         fetched_albums_details = []
@@ -446,11 +482,18 @@ async def mark_albums_as_known_for_artist(artist_spotify_id: str, request: Reque
             f"Error marking albums as known for artist {artist_spotify_id}: {e}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail={"error": f"Could not mark albums as known: {str(e)}"})
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Could not mark albums as known: {str(e)}"},
+        )
 
 
 @router.delete("/watch/{artist_spotify_id}/albums")
-async def mark_albums_as_missing_locally_for_artist(artist_spotify_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
+async def mark_albums_as_missing_locally_for_artist(
+    artist_spotify_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth_from_state),
+):
     """Removes specified albums from the artist's local DB table."""
     watch_config = get_watch_config()
     if not watch_config.get("enabled", False):
@@ -458,7 +501,7 @@ async def mark_albums_as_missing_locally_for_artist(artist_spotify_id: str, requ
             status_code=403,
             detail={
                 "error": "Watch feature is currently disabled globally. Cannot mark albums."
-            }
+            },
         )
 
     logger.info(
@@ -473,13 +516,13 @@ async def mark_albums_as_missing_locally_for_artist(artist_spotify_id: str, requ
                 status_code=400,
                 detail={
                     "error": "Invalid request body. Expecting a JSON array of album Spotify IDs."
-                }
+                },
             )
 
         if not get_watched_artist(artist_spotify_id):
             raise HTTPException(
                 status_code=404,
-                detail={"error": f"Artist {artist_spotify_id} is not being watched."}
+                detail={"error": f"Artist {artist_spotify_id} is not being watched."},
             )
 
         deleted_count = remove_specific_albums_from_artist_table(
@@ -498,4 +541,7 @@ async def mark_albums_as_missing_locally_for_artist(artist_spotify_id: str, requ
             f"Error marking albums as missing (deleting locally) for artist {artist_spotify_id}: {e}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail={"error": f"Could not mark albums as missing: {str(e)}"})
+        raise HTTPException(
+            status_code=500,
+            detail={"error": f"Could not mark albums as missing: {str(e)}"},
+        )
