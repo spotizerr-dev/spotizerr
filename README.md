@@ -180,7 +180,6 @@ Configure how files and folders are named:
 - **Automatic Cleanup** - Files are automatically moved to the final download folder when downloads complete
 - **Prevents Incomplete Files** - Keeps your music library clean by avoiding partial downloads
 - **Reliable Detection** - Files are moved only when download functions return successfully
-- **Environment Variable** - Set `INCOMPLETE_DOWNLOAD_FOLDER` in your `.env` file
 - **Docker Support** - Volume mount `./incomplete-downloads:/app/incomplete-downloads` in docker-compose.yaml
 
 ### Real-time Mode
