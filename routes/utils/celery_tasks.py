@@ -446,6 +446,13 @@ def cancel_task(task_id):
         # Try to revoke the Celery task if it hasn't started yet
         celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
 
+        # Clean up incomplete folder for cancelled task
+        try:
+            from routes.utils.download_utils import cleanup_incomplete_folder_for_task
+            cleanup_incomplete_folder_for_task(task_id)
+        except Exception as cleanup_error:
+            logger.error(f"Failed to clean up incomplete folder for cancelled task {task_id}: {cleanup_error}")
+
         # Schedule deletion of task data after 3 seconds
         delayed_delete_task_data.apply_async(
             args=[task_id, "Task cancelled by user and auto-cleaned."], countdown=3
@@ -1374,6 +1381,17 @@ def task_postrun_handler(
                 exc_info=True,
             )
 
+        # Clean up incomplete folder for revoked/cancelled tasks
+        if (
+            state == states.REVOKED
+            or current_redis_status == ProgressState.CANCELLED
+        ):
+            try:
+                from routes.utils.download_utils import cleanup_incomplete_folder_for_task
+                cleanup_incomplete_folder_for_task(task_id)
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up incomplete folder for revoked/cancelled task {task_id}: {cleanup_error}")
+
         if state == states.SUCCESS:
             if current_redis_status not in [ProgressState.COMPLETE, "done"]:
                 # The final status is now set by the 'done' callback from deezspot.
@@ -1526,10 +1544,18 @@ def task_failure_handler(
         if can_retry:
             logger.info(f"Task {task_id} can be retried ({retry_count}/{max_retries})")
         else:
-            # If task cannot be retried, schedule its data for deletion
+            # If task cannot be retried, clean up incomplete folder and schedule data deletion
             logger.info(
-                f"Task {task_id} failed and cannot be retried. Data scheduled for deletion in 3s."
+                f"Task {task_id} failed and cannot be retried. Cleaning up and scheduling data deletion in 3s."
             )
+            
+            # Clean up incomplete folder for failed task
+            try:
+                from routes.utils.download_utils import cleanup_incomplete_folder_for_task
+                cleanup_incomplete_folder_for_task(task_id)
+            except Exception as cleanup_error:
+                logger.error(f"Failed to clean up incomplete folder for failed task {task_id}: {cleanup_error}")
+            
             delayed_delete_task_data.apply_async(
                 args=[
                     task_id,

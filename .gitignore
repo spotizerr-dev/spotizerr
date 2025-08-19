@@ -2,6 +2,7 @@
 /test.py
 /venv
 /downloads/
+/incomplete-downloads/
 /creds/
 /Test.py
 /prgs/
@@ -9,6 +10,7 @@
 /routes/__pycache__/
 routes/utils/__pycache__/
 test.sh
+/.pytest_cache
 __pycache__/
 routes/__pycache__/__init__.cpython-312.pyc
 routes/__pycache__/credentials.cpython-312.pyc

@@ -1,10 +1,21 @@
 import traceback
+import logging
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 from pathlib import Path
-from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
+
+from routes.utils.credentials import (
+    _get_global_spotify_api_creds,
+    get_credential,
+)
+
+from routes.utils.celery_config import get_config_params
+from routes.utils.download_utils import get_download_output_dir, move_all_downloads_from_incomplete_folder
+
 from routes.utils.celery_queue_manager import get_existing_task_id
 from routes.utils.errors import DuplicateDownloadError
+
+logger = logging.getLogger(__name__)
 
 
 def download_playlist(
@@ -39,6 +50,10 @@ def download_playlist(
                 existing_task=existing_task,
             )
     try:
+        # Get configuration for output directory
+        config_params = get_config_params()
+        output_dir = get_download_output_dir(config_params)
+
         # Detect URL source (Spotify or Deezer) from URL
         is_spotify_url = "open.spotify.com" in url.lower()
         is_deezer_url = "deezer.com" in url.lower()
@@ -57,6 +72,7 @@ def download_playlist(
         print(
             f"DEBUG: playlist.py - Credentials provided: main_account_name='{main}', fallback_account_name='{fallback}'"
         )
+        print(f"DEBUG: playlist.py - Using output directory: {output_dir}")
 
         # Get global Spotify API credentials
         global_spotify_client_id, global_spotify_client_secret = (
@@ -96,7 +112,7 @@ def download_playlist(
                     )
                     dl.download_playlistspo(
                         link_playlist=url,  # Spotify URL
-                        output_dir="./downloads",
+                        output_dir=output_dir,
                         quality_download=quality,  # Deezer quality
                         recursive_quality=recursive_quality,
                         recursive_download=False,
@@ -117,6 +133,9 @@ def download_playlist(
                     print(
                         f"DEBUG: playlist.py - Playlist download via Deezer (account: {fallback}) successful for Spotify URL."
                     )
+
+                    
+                    move_all_downloads_from_incomplete_folder(output_dir)
                 except Exception as e:
                     deezer_error = e
                     print(
@@ -158,13 +177,13 @@ def download_playlist(
                         )
                         spo.download_playlist(
                             link_playlist=url,  # Spotify URL
-                            output_dir="./downloads",
+                            output_dir=output_dir,
                             quality_download=fall_quality,  # Spotify quality
                             recursive_quality=recursive_quality,
                             recursive_download=False,
                             not_interface=False,
                             make_zip=False,
-                            real_time_dl=real_time,
+                            real_time_dl=False,  # Changed to False as per new_code
                             custom_dir_format=custom_dir_format,
                             custom_track_format=custom_track_format,
                             pad_tracks=pad_tracks,
@@ -179,6 +198,9 @@ def download_playlist(
                         print(
                             f"DEBUG: playlist.py - Spotify direct download (account: {main} for blob) successful."
                         )
+
+                        
+                        move_all_downloads_from_incomplete_folder(output_dir)
                     except Exception as e2:
                         print(
                             f"ERROR: playlist.py - Spotify direct download (account: {main} for blob) also failed: {e2}"
@@ -219,13 +241,13 @@ def download_playlist(
                 )
                 spo.download_playlist(
                     link_playlist=url,
-                    output_dir="./downloads",
+                    output_dir=output_dir,
                     quality_download=quality,
                     recursive_quality=recursive_quality,
                     recursive_download=False,
                     not_interface=False,
                     make_zip=False,
-                    real_time_dl=real_time,
+                    real_time_dl=False,  # Changed to False as per new_code
                     custom_dir_format=custom_dir_format,
                     custom_track_format=custom_track_format,
                     pad_tracks=pad_tracks,
@@ -240,6 +262,9 @@ def download_playlist(
                 print(
                     f"DEBUG: playlist.py - Direct Spotify download (account: {main} for blob) successful."
                 )
+
+                
+                move_all_downloads_from_incomplete_folder(output_dir)
 
         elif service == "deezer":
             # Deezer URL. Direct Deezer download using 'main' (Deezer account name for ARL)
@@ -261,7 +286,7 @@ def download_playlist(
             )
             dl.download_playlistdee(  # Deezer URL, download via Deezer
                 link_playlist=url,
-                output_dir="./downloads",
+                output_dir=output_dir,
                 quality_download=quality,
                 recursive_quality=recursive_quality,  # Usually False for playlists to get individual track qualities
                 recursive_download=False,
@@ -280,6 +305,9 @@ def download_playlist(
             print(
                 f"DEBUG: playlist.py - Direct Deezer download (account: {main}) successful."
             )
+
+            
+            move_all_downloads_from_incomplete_folder(output_dir)
         else:
             # Should be caught by initial service check, but as a safeguard
             raise ValueError(f"Unsupported service determined: {service}")

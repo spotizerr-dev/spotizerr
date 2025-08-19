@@ -40,8 +40,8 @@ COPY --from=frontend-builder /app/spotizerr-ui/dist ./spotizerr-ui/dist
 RUN mkdir -p downloads data/config data/creds data/watch data/history logs/tasks && \
     chmod -R 777 downloads data logs
 
-# Make entrypoint script executable
-RUN chmod +x entrypoint.sh
+# Make entrypoint script executable and fix line endings for Windows
+RUN sed -i 's/\r$//' entrypoint.sh && chmod +x entrypoint.sh
 
 # Set entrypoint to our script
 ENTRYPOINT ["/app/entrypoint.sh"]

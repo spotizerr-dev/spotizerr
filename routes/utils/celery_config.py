@@ -48,6 +48,7 @@ DEFAULT_MAIN_CONFIG = {
     "recursiveQuality": False,
     "spotifyMetadata": True,
     "separateTracksByUser": False,
+    "incompleteDownloadFolder": "",
     "watch": {},
 }
 
@@ -229,3 +230,6 @@ beat_schedule = {
         "schedule": 3600.0,  # Run every hour
     },
 }
+
+
+

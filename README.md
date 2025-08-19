@@ -59,6 +59,7 @@ If you self-host a music server with other users than yourself, you almost certa
 - **Format Options** - Convert to MP3, FLAC, AAC, OGG, OPUS, WAV, ALAC in various bitrates
 - **Custom Naming** - Flexible file and folder naming patterns
 - **Content Filtering** - Hide explicit content if desired
+- **Incomplete Download Folder** - Optional temporary folder for downloads in progress
 
 ### 📊 **Comprehensive History**
 - **Download Tracking** - Complete history of all downloads with metadata
@@ -123,6 +124,7 @@ If you self-host a music server with other users than yourself, you almost certa
    - Set audio quality preferences
    - Configure output format and naming
    - Adjust concurrent download limits
+   - Set up incomplete download folder (optional)
 
 ### Watch System Setup
 
@@ -172,6 +174,14 @@ Configure how files and folders are named:
 - Configure primary and fallback services
 - Automatically switches if primary service fails
 - Useful for geographic restrictions or account limits
+
+### Incomplete Download Folder
+- **Optional Feature** - Configure a temporary folder for downloads in progress
+- **Automatic Cleanup** - Files are automatically moved to the final download folder when downloads complete
+- **Prevents Incomplete Files** - Keeps your music library clean by avoiding partial downloads
+- **Reliable Detection** - Files are moved only when download functions return successfully
+- **Environment Variable** - Set `INCOMPLETE_DOWNLOAD_FOLDER` in your `.env` file
+- **Docker Support** - Volume mount `./incomplete-downloads:/app/incomplete-downloads` in docker-compose.yaml
 
 ### Real-time Mode
 - **Spotify only**: Matches track length with download time for optimal timing

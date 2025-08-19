@@ -5,6 +5,7 @@ services:
     volumes:
     - ./data:/app/data
     - ./downloads:/app/downloads
+    - ./incomplete-downloads:/app/incomplete-downloads
     - ./logs:/app/logs
     ports:
     - 7171:7171
