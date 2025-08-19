@@ -269,7 +269,7 @@ def get_spotify_info(
         elif spotify_type == "artist_discography":
             # Get artist's albums with pagination
             albums = client.artist_albums(
-                spotify_id, limit=limit or 20, offset=offset or 0
+                spotify_id, limit=limit or 20, offset=offset or 0, include_groups="single,album,appears_on"
             )
             return albums
 

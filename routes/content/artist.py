@@ -2,7 +2,7 @@
 Artist endpoint router.
 """
 
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from fastapi.responses import JSONResponse
 import json
 import traceback
@@ -118,7 +118,9 @@ async def cancel_artist_download():
 
 @router.get("/info")
 async def get_artist_info(
-    request: Request, current_user: User = Depends(require_auth_from_state)
+    request: Request, current_user: User = Depends(require_auth_from_state),
+    limit: int = Query(10, ge=1),   # default=10, must be >=1
+    offset: int = Query(0, ge=0)    # default=0, must be >=0
 ):
     """
     Retrieves Spotify artist metadata given a Spotify artist ID.
@@ -134,7 +136,7 @@ async def get_artist_info(
         artist_metadata = get_spotify_info(spotify_id, "artist")
 
         # Get artist discography for albums
-        artist_discography = get_spotify_info(spotify_id, "artist_discography")
+        artist_discography = get_spotify_info(spotify_id, "artist_discography", limit=limit, offset=offset)
 
         # Combine metadata with discography
         artist_info = {**artist_metadata, "albums": artist_discography}

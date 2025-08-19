@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import apiClient from "../lib/api-client";
 import type { AlbumType, ArtistType, TrackType } from "../types/spotify";
@@ -18,58 +18,170 @@ export const Artist = () => {
   const context = useContext(QueueContext);
   const { settings } = useSettings();
 
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Pagination state
+  const LIMIT = 20; // tune as you like
+  const [offset, setOffset] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [hasMore, setHasMore] = useState<boolean>(true); // assume more until we learn otherwise
+
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
   const { addItem } = context;
 
+  const applyFilters = useCallback(
+    (items: AlbumType[]) => {
+      return items.filter((item) => (settings?.explicitFilter ? !item.explicit : true));
+    },
+    [settings?.explicitFilter]
+  );
+
+  // Helper to dedupe albums by id
+  const dedupeAppendAlbums = (current: AlbumType[], incoming: AlbumType[]) => {
+    const seen = new Set(current.map((a) => a.id));
+    const filtered = incoming.filter((a) => !seen.has(a.id));
+    return current.concat(filtered);
+  };
+
+  // Fetch artist info & first page of albums
   useEffect(() => {
-    const fetchArtistData = async () => {
-      if (!artistId) return;
+    if (!artistId) return;
+
+    let cancelled = false;
+
+    const fetchInitial = async () => {
+      setLoading(true);
+      setError(null);
+      setAlbums([]);
+      setOffset(0);
+      setHasMore(true);
+
       try {
-        const response = await apiClient.get(`/artist/info?id=${artistId}`);
-        const artistData = response.data;
+        const resp = await apiClient.get(`/artist/info?id=${artistId}&limit=${LIMIT}&offset=0`);
+        const data = resp.data;
 
-                 // Check if we have artist data in the response
-         if (artistData?.id && artistData?.name) {
-           // Set artist info directly from the response
-           setArtist({
-             id: artistData.id,
-             name: artistData.name,
-             images: artistData.images || [],
-             external_urls: artistData.external_urls || { spotify: "" },
-             followers: artistData.followers || { total: 0 },
-             genres: artistData.genres || [],
-             popularity: artistData.popularity || 0,
-             type: artistData.type || 'artist',
-             uri: artistData.uri || ''
-           });
+        if (cancelled) return;
 
-          // Check if we have albums data
-          if (artistData?.albums?.items && artistData.albums.items.length > 0) {
-            setAlbums(artistData.albums.items);
+        if (data?.id && data?.name) {
+          // set artist meta
+          setArtist({
+            id: data.id,
+            name: data.name,
+            images: data.images || [],
+            external_urls: data.external_urls || { spotify: "" },
+            followers: data.followers || { total: 0 },
+            genres: data.genres || [],
+            popularity: data.popularity || 0,
+            type: data.type || "artist",
+            uri: data.uri || "",
+          });
+
+          // top tracks (if provided)
+          if (Array.isArray(data.top_tracks)) {
+            setTopTracks(data.top_tracks);
           } else {
-            setError("No albums found for this artist.");
-            return;
+            setTopTracks([]);
+          }
+
+          // albums pagination info
+          const items: AlbumType[] = (data?.albums?.items as AlbumType[]) || [];
+          const total: number | undefined = data?.albums?.total;
+
+          setAlbums(items);
+          setOffset(items.length);
+          if (typeof total === "number") {
+            setHasMore(items.length < total);
+          } else {
+            // If server didn't return total, default behavior: stop when an empty page arrives.
+            setHasMore(items.length > 0);
           }
         } else {
           setError("Could not load artist data.");
-          return;
         }
 
-        setTopTracks([]);
-
-        const watchStatusResponse = await apiClient.get<{ is_watched: boolean }>(`/artist/watch/${artistId}/status`);
-        setIsWatched(watchStatusResponse.data.is_watched);
+        // fetch watch status
+        try {
+          const watchStatusResponse = await apiClient.get<{ is_watched: boolean }>(`/artist/watch/${artistId}/status`);
+          if (!cancelled) setIsWatched(watchStatusResponse.data.is_watched);
+        } catch (e) {
+          // ignore watch status errors
+          console.warn("Failed to load watch status", e);
+        }
       } catch (err) {
-        setError("Failed to load artist page");
-        console.error(err);
+        if (!cancelled) {
+          console.error(err);
+          setError("Failed to load artist page");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
-    fetchArtistData();
-  }, [artistId]);
+    fetchInitial();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [artistId, LIMIT]);
+
+  // Fetch more albums (next page)
+  const fetchMoreAlbums = useCallback(async () => {
+    if (!artistId || loadingMore || loading || !hasMore) return;
+    setLoadingMore(true);
+
+    try {
+      const resp = await apiClient.get(`/artist/info?id=${artistId}&limit=${LIMIT}&offset=${offset}`);
+      const data = resp.data;
+      const items: AlbumType[] = (data?.albums?.items as AlbumType[]) || [];
+      const total: number | undefined = data?.albums?.total;
+
+      setAlbums((cur) => dedupeAppendAlbums(cur, items));
+      setOffset((cur) => cur + items.length);
+
+      if (typeof total === "number") {
+        setHasMore((prev) => prev && offset + items.length < total);
+      } else {
+        // if server doesn't expose total, stop when we get fewer than LIMIT items
+        setHasMore(items.length === LIMIT);
+      }
+    } catch (err) {
+      console.error("Failed to load more albums", err);
+      toast.error("Failed to load more albums");
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [artistId, offset, LIMIT, loadingMore, loading, hasMore]);
+
+  // IntersectionObserver to trigger fetchMoreAlbums when sentinel is visible
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    if (!hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            fetchMoreAlbums();
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: "400px", // start loading a bit before the sentinel enters viewport
+        threshold: 0.1,
+      }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchMoreAlbums, hasMore]);
+
+  // --- existing handlers (unchanged) ---
   const handleDownloadTrack = (track: TrackType) => {
     if (!track.id) return;
     toast.info(`Adding ${track.name} to queue...`);
@@ -83,31 +195,25 @@ export const Artist = () => {
 
   const handleDownloadArtist = async () => {
     if (!artistId || !artist) return;
-    
+
     try {
       toast.info(`Downloading ${artist.name} discography...`);
-      
+
       // Call the artist download endpoint which returns album task IDs
       const response = await apiClient.get(`/artist/download/${artistId}`);
-      
+
       if (response.data.queued_albums?.length > 0) {
-        toast.success(
-          `${artist.name} discography queued successfully!`,
-          {
-            description: `${response.data.queued_albums.length} albums added to queue.`,
-          }
-        );
+        toast.success(`${artist.name} discography queued successfully!`, {
+          description: `${response.data.queued_albums.length} albums added to queue.`,
+        });
       } else {
         toast.info("No new albums to download for this artist.");
       }
     } catch (error: any) {
       console.error("Artist download failed:", error);
-      toast.error(
-        "Failed to download artist",
-        {
-          description: error.response?.data?.error || "An unexpected error occurred.",
-        }
-      );
+      toast.error("Failed to download artist", {
+        description: error.response?.data?.error || "An unexpected error occurred.",
+      });
     }
   };
 
@@ -132,17 +238,13 @@ export const Artist = () => {
     return <div className="text-red-500">{error}</div>;
   }
 
-  if (!artist) {
+  if (loading && !artist) {
     return <div>Loading...</div>;
   }
 
-  if (!artist.name) {
+  if (!artist) {
     return <div>Artist data could not be fully loaded. Please try again later.</div>;
   }
-
-  const applyFilters = (items: AlbumType[]) => {
-    return items.filter((item) => (settings?.explicitFilter ? !item.explicit : true));
-  };
 
   const artistAlbums = applyFilters(albums.filter((album) => album.album_type === "album"));
   const artistSingles = applyFilters(albums.filter((album) => album.album_type === "single"));
@@ -178,11 +280,10 @@ export const Artist = () => {
           </button>
           <button
             onClick={handleToggleWatch}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors border ${
-              isWatched
+            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors border ${isWatched
                 ? "bg-button-primary text-button-primary-text border-primary"
                 : "bg-surface dark:bg-surface-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark border-border dark:border-border-dark text-content-primary dark:text-content-primary-dark"
-            }`}
+              }`}
           >
             {isWatched ? (
               <>
@@ -208,11 +309,15 @@ export const Artist = () => {
                 key={track.id}
                 className="track-item flex items-center justify-between p-2 rounded-md hover:bg-surface-muted dark:hover:bg-surface-muted-dark transition-colors"
               >
-                <Link to="/track/$trackId" params={{ trackId: track.id }} className="font-semibold text-content-primary dark:text-content-primary-dark">
+                <Link
+                  to="/track/$trackId"
+                  params={{ trackId: track.id }}
+                  className="font-semibold text-content-primary dark:text-content-primary-dark"
+                >
                   {track.name}
                 </Link>
-                <button 
-                  onClick={() => handleDownloadTrack(track)} 
+                <button
+                  onClick={() => handleDownloadTrack(track)}
                   className="px-3 py-1 bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded"
                 >
                   Download
@@ -223,6 +328,7 @@ export const Artist = () => {
         </div>
       )}
 
+      {/* Albums */}
       {artistAlbums.length > 0 && (
         <div className="mb-12">
           <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Albums</h2>
@@ -234,6 +340,7 @@ export const Artist = () => {
         </div>
       )}
 
+      {/* Singles */}
       {artistSingles.length > 0 && (
         <div className="mb-12">
           <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Singles</h2>
@@ -245,6 +352,7 @@ export const Artist = () => {
         </div>
       )}
 
+      {/* Compilations */}
       {artistCompilations.length > 0 && (
         <div className="mb-12">
           <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Compilations</h2>
@@ -255,6 +363,22 @@ export const Artist = () => {
           </div>
         </div>
       )}
+
+      {/* sentinel + loading */}
+      <div className="flex flex-col items-center gap-2">
+        {loadingMore && <div className="py-4">Loading more...</div>}
+        {!hasMore && !loading && <div className="py-4 text-sm text-content-secondary">End of discography</div>}
+        {/* fallback load more button for browsers that block IntersectionObserver or for manual control */}
+        {hasMore && !loadingMore && (
+          <button
+            onClick={() => fetchMoreAlbums()}
+            className="px-4 py-2 mb-6 rounded bg-surface-muted hover:bg-surface-muted-dark"
+          >
+            Load more
+          </button>
+        )}
+        <div ref={sentinelRef} style={{ height: 1, width: "100%" }} />
+      </div>
     </div>
   );
 };
