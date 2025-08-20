@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import apiClient from "../lib/api-client";
 import { QueueContext } from "../contexts/queue-context";
 import { useSettings } from "../contexts/settings-context";
@@ -10,30 +10,90 @@ import { FaArrowLeft } from "react-icons/fa";
 export const Album = () => {
   const { albumId } = useParams({ from: "/album/$albumId" });
   const [album, setAlbum] = useState<AlbumType | null>(null);
+  const [tracks, setTracks] = useState<TrackType[]>([]);
+  const [offset, setOffset] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const context = useContext(QueueContext);
   const { settings } = useSettings();
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const PAGE_SIZE = 50;
 
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
   const { addItem } = context;
 
+  const totalTracks = album?.total_tracks ?? 0;
+  const hasMore = tracks.length < totalTracks;
+
+  // Initial load
   useEffect(() => {
     const fetchAlbum = async () => {
+      if (!albumId) return;
+      setIsLoading(true);
+      setError(null);
       try {
-        const response = await apiClient.get(`/album/info?id=${albumId}`);
-        setAlbum(response.data);
+        const response = await apiClient.get(`/album/info?id=${albumId}&limit=${PAGE_SIZE}&offset=0`);
+        const data: AlbumType & { tracks: { items: TrackType[]; total?: number; limit?: number; offset?: number } } = response.data;
+        setAlbum(data);
+        setTracks(data.tracks.items || []);
+        setOffset((data.tracks.items || []).length);
       } catch (err) {
         setError("Failed to load album");
         console.error("Error fetching album:", err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
+    // reset state when albumId changes
+    setAlbum(null);
+    setTracks([]);
+    setOffset(0);
     if (albumId) {
       fetchAlbum();
     }
   }, [albumId]);
+
+  const loadMore = useCallback(async () => {
+    if (!albumId || isLoadingMore || !hasMore) return;
+    setIsLoadingMore(true);
+    try {
+      const response = await apiClient.get(`/album/info?id=${albumId}&limit=${PAGE_SIZE}&offset=${offset}`);
+      const data: AlbumType & { tracks: { items: TrackType[]; total?: number; limit?: number; offset?: number } } = response.data;
+      const newItems = data.tracks.items || [];
+      setTracks((prev) => [...prev, ...newItems]);
+      setOffset((prev) => prev + newItems.length);
+    } catch (err) {
+      console.error("Error fetching more tracks:", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [albumId, offset, isLoadingMore, hasMore]);
+
+  // IntersectionObserver to trigger loadMore
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+    const sentinel = loadMoreRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          loadMore();
+        }
+      },
+      { root: null, rootMargin: "200px", threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.unobserve(sentinel);
+      observer.disconnect();
+    };
+  }, [loadMore]);
 
   const handleDownloadTrack = (track: TrackType) => {
     if (!track.id) return;
@@ -51,7 +111,7 @@ export const Album = () => {
     return <div className="text-red-500">{error}</div>;
   }
 
-  if (!album) {
+  if (!album || isLoading) {
     return <div>Loading...</div>;
   }
 
@@ -67,7 +127,7 @@ export const Album = () => {
     );
   }
 
-  const hasExplicitTrack = album.tracks.items.some((track) => track.explicit);
+  const hasExplicitTrack = tracks.some((track) => track.explicit);
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -130,11 +190,11 @@ export const Album = () => {
         <h2 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark px-1">Tracks</h2>
         <div className="bg-surface-muted dark:bg-surface-muted-dark rounded-xl p-2 md:p-4 shadow-sm">
           <div className="space-y-1 md:space-y-2">
-            {album.tracks.items.map((track, index) => {
+            {tracks.map((track, index) => {
               if (isExplicitFilterEnabled && track.explicit) {
                 return (
                   <div
-                    key={index}
+                    key={`${track.id || "explicit"}-${index}`}
                     className="flex items-center justify-between p-3 md:p-4 bg-surface-muted dark:bg-surface-muted-dark rounded-lg opacity-50"
                   >
                     <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
@@ -147,7 +207,7 @@ export const Album = () => {
               }
               return (
                 <div
-                  key={track.id}
+                  key={track.id || `${index}`}
                   className="flex items-center justify-between p-3 md:p-4 hover:bg-surface-secondary dark:hover:bg-surface-secondary-dark rounded-lg transition-colors duration-200 group"
                 >
                   <div className="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
@@ -188,6 +248,13 @@ export const Album = () => {
                 </div>
               );
             })}
+            <div ref={loadMoreRef} />
+            {isLoadingMore && (
+              <div className="p-3 text-center text-content-muted dark:text-content-muted-dark text-sm">Loading more...</div>
+            )}
+            {!hasMore && tracks.length > 0 && (
+              <div className="p-3 text-center text-content-muted dark:text-content-muted-dark text-sm">End of album</div>
+            )}
           </div>
         </div>
       </div>

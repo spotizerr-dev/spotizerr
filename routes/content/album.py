@@ -1,6 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
-import json
 import traceback
 import uuid
 import time
@@ -21,7 +20,11 @@ def construct_spotify_url(item_id: str, item_type: str = "track") -> str:
 
 
 @router.get("/download/{album_id}")
-async def handle_download(album_id: str, request: Request, current_user: User = Depends(require_auth_from_state)):
+async def handle_download(
+    album_id: str,
+    request: Request,
+    current_user: User = Depends(require_auth_from_state),
+):
     # Retrieve essential parameters from the request.
     # name = request.args.get('name')
     # artist = request.args.get('artist')
@@ -38,8 +41,10 @@ async def handle_download(album_id: str, request: Request, current_user: User = 
             or not album_info.get("artists")
         ):
             return JSONResponse(
-                content={"error": f"Could not retrieve metadata for album ID: {album_id}"},
-                status_code=404
+                content={
+                    "error": f"Could not retrieve metadata for album ID: {album_id}"
+                },
+                status_code=404,
             )
 
         name_from_spotify = album_info.get("name")
@@ -51,15 +56,16 @@ async def handle_download(album_id: str, request: Request, current_user: User = 
 
     except Exception as e:
         return JSONResponse(
-            content={"error": f"Failed to fetch metadata for album {album_id}: {str(e)}"},
-            status_code=500
+            content={
+                "error": f"Failed to fetch metadata for album {album_id}: {str(e)}"
+            },
+            status_code=500,
         )
 
     # Validate required parameters
     if not url:
         return JSONResponse(
-            content={"error": "Missing required parameter: url"},
-            status_code=400
+            content={"error": "Missing required parameter: url"}, status_code=400
         )
 
     # Add the task to the queue with only essential parameters
@@ -84,7 +90,7 @@ async def handle_download(album_id: str, request: Request, current_user: User = 
                 "error": "Duplicate download detected.",
                 "existing_task": e.existing_task,
             },
-            status_code=409
+            status_code=409,
         )
     except Exception as e:
         # Generic error handling for other issues during task submission
@@ -116,25 +122,23 @@ async def handle_download(album_id: str, request: Request, current_user: User = 
                 "error": f"Failed to queue album download: {str(e)}",
                 "task_id": error_task_id,
             },
-            status_code=500
+            status_code=500,
         )
 
-    return JSONResponse(
-        content={"task_id": task_id}, 
-        status_code=202
-    )
+    return JSONResponse(content={"task_id": task_id}, status_code=202)
 
 
 @router.get("/download/cancel")
-async def cancel_download(request: Request, current_user: User = Depends(require_auth_from_state)):
+async def cancel_download(
+    request: Request, current_user: User = Depends(require_auth_from_state)
+):
     """
     Cancel a running download process by its task id.
     """
     task_id = request.query_params.get("task_id")
     if not task_id:
         return JSONResponse(
-            content={"error": "Missing process id (task_id) parameter"},
-            status_code=400
+            content={"error": "Missing process id (task_id) parameter"}, status_code=400
         )
 
     # Use the queue manager's cancellation method.
@@ -145,7 +149,9 @@ async def cancel_download(request: Request, current_user: User = Depends(require
 
 
 @router.get("/info")
-async def get_album_info(request: Request, current_user: User = Depends(require_auth_from_state)):
+async def get_album_info(
+    request: Request, current_user: User = Depends(require_auth_from_state)
+):
     """
     Retrieve Spotify album metadata given a Spotify album ID.
     Expects a query parameter 'id' that contains the Spotify album ID.
@@ -153,15 +159,30 @@ async def get_album_info(request: Request, current_user: User = Depends(require_
     spotify_id = request.query_params.get("id")
 
     if not spotify_id:
-        return JSONResponse(
-            content={"error": "Missing parameter: id"},
-            status_code=400
-        )
+        return JSONResponse(content={"error": "Missing parameter: id"}, status_code=400)
 
     try:
-        # Use the get_spotify_info function (already imported at top)
+        # Optional pagination params for tracks
+        limit_param = request.query_params.get("limit")
+        offset_param = request.query_params.get("offset")
+        limit = int(limit_param) if limit_param is not None else None
+        offset = int(offset_param) if offset_param is not None else None
+
+        # Fetch album metadata
         album_info = get_spotify_info(spotify_id, "album")
+        # Fetch album tracks with pagination
+        album_tracks = get_spotify_info(
+            spotify_id, "album_tracks", limit=limit, offset=offset
+        )
+
+        # Merge tracks into album payload in the same shape Spotify returns on album
+        album_info["tracks"] = album_tracks
+
         return JSONResponse(content=album_info, status_code=200)
+    except ValueError as ve:
+        return JSONResponse(
+            content={"error": f"Invalid limit/offset: {str(ve)}"}, status_code=400
+        )
     except Exception as e:
         error_data = {"error": str(e), "traceback": traceback.format_exc()}
         return JSONResponse(content=error_data, status_code=500)
