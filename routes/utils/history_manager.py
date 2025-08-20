@@ -265,6 +265,56 @@ class HistoryManager:
                 f"Error ensuring schema for {table_description} table '{table_name}': {e}"
             )
 
+    def _create_children_table_with_cursor(
+        self, cursor: sqlite3.Cursor, table_name: str
+    ) -> None:
+        """Create or upgrade a children table using an existing cursor/connection to avoid nested write locks."""
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                artists TEXT,
+                album_title TEXT,
+                duration_ms INTEGER,
+                track_number INTEGER,
+                disc_number INTEGER,
+                explicit BOOLEAN,
+                status TEXT NOT NULL,
+                external_ids TEXT,
+                genres TEXT,
+                isrc TEXT,
+                timestamp REAL NOT NULL,
+                position INTEGER,
+                metadata TEXT,
+                service TEXT,
+                quality_format TEXT,
+                quality_bitrate TEXT
+            )
+        """)
+        expected_children_columns = {
+            "id": "INTEGER PRIMARY KEY AUTOINCREMENT",
+            "title": "TEXT NOT NULL",
+            "artists": "TEXT",
+            "album_title": "TEXT",
+            "duration_ms": "INTEGER",
+            "track_number": "INTEGER",
+            "disc_number": "INTEGER",
+            "explicit": "BOOLEAN",
+            "status": "TEXT NOT NULL",
+            "external_ids": "TEXT",
+            "genres": "TEXT",
+            "isrc": "TEXT",
+            "timestamp": "REAL NOT NULL",
+            "position": "INTEGER",
+            "metadata": "TEXT",
+            "service": "TEXT",
+            "quality_format": "TEXT",
+            "quality_bitrate": "TEXT",
+        }
+        self._ensure_table_schema(
+            cursor, table_name, expected_children_columns, "children history"
+        )
+
     def _create_children_table(self, table_name: str):
         """
         Create a children table for storing individual tracks of an album/playlist.
@@ -291,7 +341,10 @@ class HistoryManager:
 					isrc TEXT,
 					timestamp REAL NOT NULL,
 					position INTEGER,
-					metadata TEXT
+					metadata TEXT,
+					service TEXT,
+					quality_format TEXT,
+					quality_bitrate TEXT
 				)
 			""")
             expected_children_columns = {
@@ -310,6 +363,9 @@ class HistoryManager:
                 "timestamp": "REAL NOT NULL",
                 "position": "INTEGER",
                 "metadata": "TEXT",
+                "service": "TEXT",
+                "quality_format": "TEXT",
+                "quality_bitrate": "TEXT",
             }
             self._ensure_table_schema(
                 cursor, table_name, expected_children_columns, "children history"
@@ -327,7 +383,7 @@ class HistoryManager:
                 cursor.execute(
                     f"CREATE TABLE IF NOT EXISTS {t} (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL)"
                 )
-                self._create_children_table(t)
+                self._create_children_table_with_cursor(cursor, t)
             except Exception as e:
                 logger.warning(f"Non-fatal: failed to migrate children table {t}: {e}")
 
@@ -525,13 +581,19 @@ class HistoryManager:
                         "status_info": status_info,
                     }
 
+                    # Inherit service/quality directly from parent summary when available
+                    parent_summary = status_info.get("summary") or {}
+                    parent_service = parent_summary.get("service")
+                    parent_quality_format = parent_summary.get("quality")
+                    parent_quality_bitrate = parent_summary.get("bitrate")
+
                     conn.execute(
                         f"""
 						INSERT INTO {table} (
 							title, artists, album_title, duration_ms, track_number,
 							disc_number, explicit, status, external_ids, genres,
-							isrc, timestamp, position, metadata
-						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+							isrc, timestamp, position, metadata, service, quality_format, quality_bitrate
+						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						""",
                         (
                             track.get("title", "Unknown"),
@@ -548,6 +610,9 @@ class HistoryManager:
                             callback_data.get("timestamp", time.time()),
                             track.get("position", 0),  # For playlist tracks
                             json.dumps(children_metadata),
+                            parent_service,
+                            parent_quality_format,
+                            parent_quality_bitrate,
                         ),
                     )
 
@@ -714,7 +779,12 @@ class HistoryManager:
             try:
                 if summary:
                     self._populate_album_children_table(
-                        children_table, summary, album.get("title", "")
+                        children_table,
+                        summary,
+                        album.get("title", ""),
+                        service_to_store,
+                        quality_format_to_store,
+                        quality_bitrate_to_store,
                     )
             except Exception as e:
                 logger.warning(
@@ -907,7 +977,13 @@ class HistoryManager:
             # If we have a summary (e.g., on cancellation), populate children from it including failed ones
             try:
                 if summary:
-                    self._populate_playlist_children_table(children_table, summary)
+                    self._populate_playlist_children_table(
+                        children_table,
+                        summary,
+                        service_to_store,
+                        quality_format_to_store,
+                        quality_bitrate_to_store,
+                    )
             except Exception as e:
                 logger.warning(
                     f"Failed to populate children from summary for playlist {children_table}: {e}"
@@ -923,8 +999,14 @@ class HistoryManager:
             return None
 
     def _populate_album_children_table(
-        self, table_name: str, summary: Dict, album_title: str
-    ):
+        self,
+        table_name: str,
+        summary: Dict,
+        album_title: str,
+        service: str,
+        quality_format: Optional[str],
+        quality_bitrate: Optional[str],
+    ) -> None:
         """Populate children table with individual track records from album summary."""
         try:
             # Ensure table exists before population
@@ -934,7 +1016,12 @@ class HistoryManager:
             # Add successful tracks
             for track in summary.get("successful_tracks", []):
                 track_data = self._prepare_child_track_data(
-                    track, album_title, "completed"
+                    track,
+                    album_title,
+                    "completed",
+                    service,
+                    quality_format,
+                    quality_bitrate,
                 )
                 all_rows.append(self._map_values_to_row(track_data["values"]))
 
@@ -942,7 +1029,12 @@ class HistoryManager:
             for failed_item in summary.get("failed_tracks", []):
                 track = failed_item.get("track", {})
                 track_data = self._prepare_child_track_data(
-                    track, album_title, "failed"
+                    track,
+                    album_title,
+                    "failed",
+                    service,
+                    quality_format,
+                    quality_bitrate,
                 )
                 track_data["metadata"]["failure_reason"] = failed_item.get(
                     "reason", "Unknown error"
@@ -952,7 +1044,12 @@ class HistoryManager:
             # Add skipped tracks
             for track in summary.get("skipped_tracks", []):
                 track_data = self._prepare_child_track_data(
-                    track, album_title, "skipped"
+                    track,
+                    album_title,
+                    "skipped",
+                    service,
+                    quality_format,
+                    quality_bitrate,
                 )
                 all_rows.append(self._map_values_to_row(track_data["values"]))
 
@@ -968,7 +1065,14 @@ class HistoryManager:
         except Exception as e:
             logger.error(f"Failed to populate album children table {table_name}: {e}")
 
-    def _populate_playlist_children_table(self, table_name: str, summary: Dict):
+    def _populate_playlist_children_table(
+        self,
+        table_name: str,
+        summary: Dict,
+        service: str,
+        quality_format: Optional[str],
+        quality_bitrate: Optional[str],
+    ):
         """Populate children table with individual track records from playlist summary."""
         try:
             # Ensure table exists before population
@@ -977,13 +1081,17 @@ class HistoryManager:
 
             # Add successful tracks
             for track in summary.get("successful_tracks", []):
-                track_data = self._prepare_child_track_data(track, "", "completed")
+                track_data = self._prepare_child_track_data(
+                    track, "", "completed", service, quality_format, quality_bitrate
+                )
                 all_rows.append(self._map_values_to_row(track_data["values"]))
 
             # Add failed tracks
             for failed_item in summary.get("failed_tracks", []):
                 track = failed_item.get("track", {})
-                track_data = self._prepare_child_track_data(track, "", "failed")
+                track_data = self._prepare_child_track_data(
+                    track, "", "failed", service, quality_format, quality_bitrate
+                )
                 track_data["metadata"]["failure_reason"] = failed_item.get(
                     "reason", "Unknown error"
                 )
@@ -991,7 +1099,9 @@ class HistoryManager:
 
             # Add skipped tracks
             for track in summary.get("skipped_tracks", []):
-                track_data = self._prepare_child_track_data(track, "", "skipped")
+                track_data = self._prepare_child_track_data(
+                    track, "", "skipped", service, quality_format, quality_bitrate
+                )
                 all_rows.append(self._map_values_to_row(track_data["values"]))
 
             with self._get_connection() as conn:
@@ -1008,7 +1118,13 @@ class HistoryManager:
             )
 
     def _prepare_child_track_data(
-        self, track: Dict, default_album: str, status: str
+        self,
+        track: Dict,
+        default_album: str,
+        status: str,
+        service: str,
+        quality_format: Optional[str],
+        quality_bitrate: Optional[str],
     ) -> Dict:
         """Prepare track data for insertion into children table."""
         artists = self._extract_artists(track)
@@ -1039,6 +1155,9 @@ class HistoryManager:
             time.time(),
             track.get("position", 0),  # For playlist tracks
             json.dumps(metadata),
+            service,
+            quality_format,
+            quality_bitrate,
         )
 
         return {"values": values, "metadata": metadata}
@@ -1391,7 +1510,13 @@ class HistoryManager:
 
     # --- New helpers for failed children insertion and metadata enrichment ---
     def _populate_failed_children_for_album(
-        self, table_name: str, summary: Dict, album_title: str
+        self,
+        table_name: str,
+        summary: Dict,
+        album_title: str,
+        service: str,
+        quality_format: Optional[str],
+        quality_bitrate: Optional[str],
     ) -> None:
         try:
             self._create_children_table(table_name)
@@ -1399,7 +1524,12 @@ class HistoryManager:
                 for failed_item in summary.get("failed_tracks", []):
                     track = failed_item.get("track", {})
                     track_data = self._prepare_child_track_data(
-                        track, album_title, "failed"
+                        track,
+                        album_title,
+                        "failed",
+                        service,
+                        quality_format,
+                        quality_bitrate,
                     )
                     track_data["metadata"]["failure_reason"] = failed_item.get(
                         "reason", "cancelled"
@@ -1409,8 +1539,8 @@ class HistoryManager:
 						INSERT INTO {table_name} (
 							title, artists, album_title, duration_ms, track_number,
 							disc_number, explicit, status, external_ids, genres,
-							isrc, timestamp, position, metadata
-						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+							isrc, timestamp, position, metadata, service, quality_format, quality_bitrate
+						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						""",
                         track_data["values"],
                     )
@@ -1420,14 +1550,21 @@ class HistoryManager:
             )
 
     def _populate_failed_children_for_playlist(
-        self, table_name: str, summary: Dict
+        self,
+        table_name: str,
+        summary: Dict,
+        service: str,
+        quality_format: Optional[str],
+        quality_bitrate: Optional[str],
     ) -> None:
         try:
             self._create_children_table(table_name)
             with self._get_connection() as conn:
                 for failed_item in summary.get("failed_tracks", []):
                     track = failed_item.get("track", {})
-                    track_data = self._prepare_child_track_data(track, "", "failed")
+                    track_data = self._prepare_child_track_data(
+                        track, "", "failed", service, quality_format, quality_bitrate
+                    )
                     track_data["metadata"]["failure_reason"] = failed_item.get(
                         "reason", "cancelled"
                     )
@@ -1436,8 +1573,8 @@ class HistoryManager:
 						INSERT INTO {table_name} (
 							title, artists, album_title, duration_ms, track_number,
 							disc_number, explicit, status, external_ids, genres,
-							isrc, timestamp, position, metadata
-						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+							isrc, timestamp, position, metadata, service, quality_format, quality_bitrate
+						) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 						""",
                         track_data["values"],
                     )
@@ -1487,6 +1624,9 @@ class HistoryManager:
             timestamp,
             position,
             metadata_json,
+            service,
+            quality_format,
+            quality_bitrate,
         ) = values
         return {
             "title": title,
@@ -1503,6 +1643,9 @@ class HistoryManager:
             "timestamp": timestamp,
             "position": position,
             "metadata": metadata_json,
+            "service": service,
+            "quality_format": quality_format,
+            "quality_bitrate": quality_bitrate,
         }
 
     def _status_priority(self, status: str) -> int:
@@ -1523,6 +1666,9 @@ class HistoryManager:
             "genres",
             "isrc",
             "metadata",
+            "service",
+            "quality_format",
+            "quality_bitrate",
         ]:
             old_val = merged.get(key)
             new_val = new.get(key)
@@ -1590,7 +1736,8 @@ class HistoryManager:
 				UPDATE {table_name}
 				SET artists = ?, album_title = ?, duration_ms = ?, track_number = ?,
 					disc_number = ?, explicit = ?, status = ?, external_ids = ?,
-					genres = ?, isrc = ?, timestamp = ?, position = ?, metadata = ?
+					genres = ?, isrc = ?, timestamp = ?, position = ?, metadata = ?,
+					service = ?, quality_format = ?, quality_bitrate = ?
 				WHERE id = ?
 				""",
                 (
@@ -1607,6 +1754,9 @@ class HistoryManager:
                     merged.get("timestamp"),
                     merged.get("position"),
                     merged.get("metadata"),
+                    merged.get("service"),
+                    merged.get("quality_format"),
+                    merged.get("quality_bitrate"),
                     existing.get("id"),
                 ),
             )
@@ -1616,8 +1766,8 @@ class HistoryManager:
 				INSERT INTO {table_name} (
 					title, artists, album_title, duration_ms, track_number,
 					disc_number, explicit, status, external_ids, genres,
-					isrc, timestamp, position, metadata
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+					isrc, timestamp, position, metadata, service, quality_format, quality_bitrate
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				""",
                 (
                     row.get("title"),
@@ -1634,6 +1784,9 @@ class HistoryManager:
                     row.get("timestamp"),
                     row.get("position"),
                     row.get("metadata"),
+                    row.get("service"),
+                    row.get("quality_format"),
+                    row.get("quality_bitrate"),
                 ),
             )
 
