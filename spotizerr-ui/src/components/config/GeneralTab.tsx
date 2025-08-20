@@ -3,7 +3,7 @@ import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "../../contexts/settings-context";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 // --- Type Definitions ---
 interface Credential {
@@ -56,13 +56,21 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
     }
   }, [config, reset]);
 
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+
   const mutation = useMutation({
     mutationFn: saveGeneralConfig,
     onSuccess: () => {
       toast.success("General settings saved!");
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
-    onError: (e: Error) => toast.error(`Failed to save: ${e.message}`),
+    onError: (e: Error) => {
+      toast.error(`Failed to save: ${e.message}`);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    },
   });
 
   const onSubmit: SubmitHandler<GeneralSettings> = (data) => {
@@ -74,6 +82,24 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center gap-3">
+          {saveStatus === "success" && (
+            <span className="text-success text-sm">Saved</span>
+          )}
+          {saveStatus === "error" && (
+            <span className="text-error text-sm">Save failed</span>
+          )}
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+          >
+            {mutation.isPending ? "Saving..." : "Save General Settings"}
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Service Defaults</h3>
         <div className="flex flex-col gap-2">
@@ -140,14 +166,6 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
           The explicit content filter is controlled by an environment variable and cannot be changed here.
         </p>
       </div>
-
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
-      >
-        {mutation.isPending ? "Saving..." : "Save General Settings"}
-      </button>
     </form>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
@@ -46,14 +46,21 @@ function SpotifyApiForm() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["spotifyApiConfig"], queryFn: fetchSpotifyApiConfig });
   const { register, handleSubmit, reset } = useForm<SpotifyApiSettings>();
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   const mutation = useMutation({
     mutationFn: saveSpotifyApiConfig,
     onSuccess: () => {
       toast.success("Spotify API settings saved!");
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["spotifyApiConfig"] });
     },
-    onError: (e) => toast.error(`Failed to save: ${e.message}`),
+    onError: (e) => {
+      toast.error(`Failed to save: ${e.message}`);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    },
   });
 
   useEffect(() => {
@@ -66,6 +73,24 @@ function SpotifyApiForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <div className="flex items-center justify-end mb-2">
+        <div className="flex items-center gap-3">
+          {saveStatus === "success" && (
+            <span className="text-success text-sm">Saved</span>
+          )}
+          {saveStatus === "error" && (
+            <span className="text-error text-sm">Save failed</span>
+          )}
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+          >
+            {mutation.isPending ? "Saving..." : "Save Spotify API"}
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2">
         <label htmlFor="client_id" className="text-content-primary dark:text-content-primary-dark">Client ID</label>
         <input
@@ -86,13 +111,6 @@ function SpotifyApiForm() {
           placeholder="Optional"
         />
       </div>
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
-      >
-        {mutation.isPending ? "Saving..." : "Save Spotify API"}
-      </button>
     </form>
   );
 }
@@ -102,14 +120,21 @@ function WebhookForm() {
   const { data, isLoading } = useQuery({ queryKey: ["webhookConfig"], queryFn: fetchWebhookConfig });
   const { register, handleSubmit, control, reset, watch } = useForm<WebhookSettings>();
   const currentUrl = watch("url");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   const mutation = useMutation({
     mutationFn: saveWebhookConfig,
     onSuccess: () => {
       // No toast needed since the function shows one
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["webhookConfig"] });
     },
-    onError: (e) => toast.error(`Failed to save: ${e.message}`),
+    onError: (e) => {
+      toast.error(`Failed to save: ${e.message}`);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    },
   });
 
   const testMutation = useMutation({
@@ -130,6 +155,24 @@ function WebhookForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <div className="flex items-center justify-end mb-2">
+        <div className="flex items-center gap-3">
+          {saveStatus === "success" && (
+            <span className="text-success text-sm">Saved</span>
+          )}
+          {saveStatus === "error" && (
+            <span className="text-error text-sm">Save failed</span>
+          )}
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+          >
+            {mutation.isPending ? "Saving..." : "Save Webhook"}
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2">
         <label htmlFor="webhookUrl" className="text-content-primary dark:text-content-primary-dark">Webhook URL</label>
         <input
@@ -168,13 +211,6 @@ function WebhookForm() {
         </div>
       </div>
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={mutation.isPending}
-          className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
-        >
-          {mutation.isPending ? "Saving..." : "Save Webhook"}
-        </button>
         <button
           type="button"
           onClick={() => testMutation.mutate(currentUrl)}
