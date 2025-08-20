@@ -550,6 +550,9 @@ def retry_task(task_id):
         task_info["pad_tracks"] = task_info.get(
             "pad_tracks", config_params.get("tracknum_padding", True)
         )
+        task_info["pad_number_width"] = task_info.get(
+            "pad_number_width", config_params.get("padNumberWidth", 3)
+        )
 
         # Store the updated task info
         store_task_info(new_task_id, task_info)
@@ -1629,6 +1632,9 @@ def download_track(self, **task_data):
         real_time_multiplier = task_data.get(
             "real_time_multiplier", config_params.get("realTimeMultiplier", 0)
         )
+        pad_number_width = task_data.get(
+            "pad_number_width", config_params.get("padNumberWidth", 3)
+        )
 
         # Execute the download - service is now determined from URL
         download_track_func(
@@ -1650,6 +1656,7 @@ def download_track(self, **task_data):
             spotify_metadata=spotify_metadata,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task (consistency)
             real_time_multiplier=real_time_multiplier,
+            pad_number_width=pad_number_width,
         )
 
         return {"status": "success", "message": "Track download completed"}
@@ -1732,6 +1739,9 @@ def download_album(self, **task_data):
         real_time_multiplier = task_data.get(
             "real_time_multiplier", config_params.get("realTimeMultiplier", 0)
         )
+        pad_number_width = task_data.get(
+            "pad_number_width", config_params.get("padNumberWidth", 3)
+        )
 
         # Execute the download - service is now determined from URL
         download_album_func(
@@ -1753,6 +1763,7 @@ def download_album(self, **task_data):
             spotify_metadata=spotify_metadata,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
             real_time_multiplier=real_time_multiplier,
+            pad_number_width=pad_number_width,
         )
 
         return {"status": "success", "message": "Album download completed"}
@@ -1844,6 +1855,9 @@ def download_playlist(self, **task_data):
         real_time_multiplier = task_data.get(
             "real_time_multiplier", config_params.get("realTimeMultiplier", 0)
         )
+        pad_number_width = task_data.get(
+            "pad_number_width", config_params.get("padNumberWidth", 3)
+        )
 
         # Execute the download - service is now determined from URL
         download_playlist_func(
@@ -1868,6 +1882,7 @@ def download_playlist(self, **task_data):
             spotify_metadata=spotify_metadata,
             _is_celery_task_execution=True,  # Skip duplicate check inside Celery task
             real_time_multiplier=real_time_multiplier,
+            pad_number_width=pad_number_width,
         )
 
         return {"status": "success", "message": "Playlist download completed"}

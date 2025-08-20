@@ -50,6 +50,7 @@ DEFAULT_MAIN_CONFIG = {
     "separateTracksByUser": False,
     "watch": {},
     "realTimeMultiplier": 0,
+    "padNumberWidth": 3,
 }
 
 
@@ -65,6 +66,7 @@ def _migrate_legacy_keys(cfg: dict) -> tuple[dict, bool]:
         "recursive_quality": "recursiveQuality",
         "spotify_metadata": "spotifyMetadata",
         "real_time_multiplier": "realTimeMultiplier",
+        "pad_number_width": "padNumberWidth",
     }
     for legacy, camel in legacy_map.items():
         if legacy in out and camel not in out:

@@ -30,6 +30,7 @@ def download_track(
     spotify_metadata=True,
     _is_celery_task_execution=False,  # Added for consistency, not currently used for duplicate check
     real_time_multiplier=None,
+    pad_number_width=None,
 ):
     try:
         # Detect URL source (Spotify or Deezer) from URL
@@ -108,6 +109,7 @@ def download_track(
                         bitrate=bitrate,
                         artist_separator=artist_separator,
                         spotify_metadata=spotify_metadata,
+                        pad_number_width=pad_number_width,
                     )
                     print(
                         f"DEBUG: track.py - Track download via Deezer (account: {fallback}) successful for Spotify URL."
@@ -168,6 +170,7 @@ def download_track(
                             bitrate=bitrate,
                             artist_separator=artist_separator,
                             real_time_multiplier=real_time_multiplier,
+                            pad_number_width=pad_number_width,
                         )
                         print(
                             f"DEBUG: track.py - Spotify direct download (account: {main} for blob) successful."
@@ -225,6 +228,7 @@ def download_track(
                     bitrate=bitrate,
                     artist_separator=artist_separator,
                     real_time_multiplier=real_time_multiplier,
+                    pad_number_width=pad_number_width,
                 )
                 print(
                     f"DEBUG: track.py - Direct Spotify download (account: {main} for blob) successful."
@@ -264,6 +268,7 @@ def download_track(
                 convert_to=convert_to,
                 bitrate=bitrate,
                 artist_separator=artist_separator,
+                pad_number_width=pad_number_width,
             )
             print(
                 f"DEBUG: track.py - Direct Deezer download (account: {main}) successful."

@@ -29,6 +29,7 @@ def download_playlist(
     spotify_metadata=True,
     _is_celery_task_execution=False,  # Added to skip duplicate check from Celery task
     real_time_multiplier=None,
+    pad_number_width=None,
 ):
     if not _is_celery_task_execution:
         existing_task = get_existing_task_id(
@@ -114,6 +115,7 @@ def download_playlist(
                         bitrate=bitrate,
                         artist_separator=artist_separator,
                         spotify_metadata=spotify_metadata,
+                        pad_number_width=pad_number_width,
                     )
                     print(
                         f"DEBUG: playlist.py - Playlist download via Deezer (account: {fallback}) successful for Spotify URL."
@@ -177,6 +179,7 @@ def download_playlist(
                             bitrate=bitrate,
                             artist_separator=artist_separator,
                             real_time_multiplier=real_time_multiplier,
+                            pad_number_width=pad_number_width,
                         )
                         print(
                             f"DEBUG: playlist.py - Spotify direct download (account: {main} for blob) successful."
@@ -239,6 +242,7 @@ def download_playlist(
                     bitrate=bitrate,
                     artist_separator=artist_separator,
                     real_time_multiplier=real_time_multiplier,
+                    pad_number_width=pad_number_width,
                 )
                 print(
                     f"DEBUG: playlist.py - Direct Spotify download (account: {main} for blob) successful."
@@ -279,6 +283,7 @@ def download_playlist(
                 convert_to=convert_to,
                 bitrate=bitrate,
                 artist_separator=artist_separator,
+                pad_number_width=pad_number_width,
             )
             print(
                 f"DEBUG: playlist.py - Direct Deezer download (account: {main}) successful."
