@@ -62,6 +62,7 @@ export type FlatAppSettings = {
   compilation: string;
   artistSeparator: string;
   spotifyMetadata: boolean;
+  realTimeMultiplier: number;
 };
 
 const defaultSettings: FlatAppSettings = {
@@ -102,6 +103,7 @@ const defaultSettings: FlatAppSettings = {
   watch: {
     enabled: false,
   },
+  realTimeMultiplier: 0,
 };
 
 interface FetchedCamelCaseSettings {
@@ -129,6 +131,7 @@ const fetchSettings = async (): Promise<FlatAppSettings> => {
       ...(camelData as unknown as FlatAppSettings),
       // Ensure required frontend-only fields exist
       recursiveQuality: Boolean((camelData as any).recursiveQuality ?? false),
+      realTimeMultiplier: Number((camelData as any).realTimeMultiplier ?? 0),
     };
 
     return withDefaults;

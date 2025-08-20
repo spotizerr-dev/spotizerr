@@ -40,6 +40,7 @@ export interface AppSettings {
     // Add other watch properties from the old type if they still exist in the API response
   };
   // Add other root-level properties from the API if they exist
+  realTimeMultiplier: number;
 }
 
 export interface SettingsContextType {

@@ -23,6 +23,7 @@ interface DownloadSettings {
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
   recursiveQuality: boolean; // frontend field (sent as camelCase to backend)
   separateTracksByUser: boolean;
+  realTimeMultiplier: number;
 }
 
 interface WatchConfig {
@@ -150,7 +151,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       const missingServices: string[] = [];
       if (!spotifyCredentials?.length) missingServices.push("Spotify");
       if (!deezerCredentials?.length) missingServices.push("Deezer");
-      const error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
+      const error = `Download Fallback requires accounts to be configured for both Spotify and Deezer. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
       setValidationError(error);
       toast.error("Validation failed: " + error);
       return;
@@ -162,6 +163,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       maxRetries: Number(data.maxRetries),
       retryDelaySeconds: Number(data.retryDelaySeconds),
       retryDelayIncrease: Number(data.retryDelayIncrease),
+      realTimeMultiplier: Number(data.realTimeMultiplier ?? 0),
     });
   };
 
@@ -187,6 +189,26 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
         <div className="flex items-center justify-between">
           <label htmlFor="realTimeToggle" className="text-content-primary dark:text-content-primary-dark">Real-time downloading</label>
           <input id="realTimeToggle" type="checkbox" {...register("realTime")} className="h-6 w-6 rounded" />
+        </div>
+        {/* Real-time Multiplier (Spotify only) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <label htmlFor="realTimeMultiplier" className="text-content-primary dark:text-content-primary-dark">Real-time speed multiplier (Spotify)</label>
+            <span className="text-xs text-content-secondary dark:text-content-secondary-dark">0–10</span>
+          </div>
+          <input
+            id="realTimeMultiplier"
+            type="number"
+            min={0}
+            max={10}
+            step={1}
+            {...register("realTimeMultiplier")}
+            disabled={!realTime}
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus disabled:opacity-50"
+          />
+          <p className="text-xs text-content-muted dark:text-content-muted-dark">
+            Controls how fast Spotify real-time downloads go. Only affects Spotify downloads; ignored for Deezer.
+          </p>
         </div>
         <div className="flex items-center justify-between">
           <label htmlFor="fallbackToggle" className="text-content-primary dark:text-content-primary-dark">Download Fallback</label>

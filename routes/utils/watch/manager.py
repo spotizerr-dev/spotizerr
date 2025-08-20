@@ -30,6 +30,9 @@ from routes.utils.get_info import (
 )  # To fetch playlist, track, artist, and album details
 from routes.utils.celery_queue_manager import download_queue_manager
 
+# Added import to fetch base formatting config
+from routes.utils.celery_queue_manager import get_config_params
+
 logger = logging.getLogger(__name__)
 MAIN_CONFIG_FILE_PATH = Path("./data/config/main.json")
 WATCH_OLD_FILE_PATH = Path("./data/config/watch.json")
@@ -151,6 +154,38 @@ def get_watch_config():
 
 def construct_spotify_url(item_id, item_type="track"):
     return f"https://open.spotify.com/{item_type}/{item_id}"
+
+
+# Helper to replace playlist placeholders in custom formats per-track
+def _apply_playlist_placeholders(
+    base_dir_fmt: str,
+    base_track_fmt: str,
+    playlist_name: str,
+    playlist_position_one_based: int,
+    total_tracks_in_playlist: int,
+    pad_tracks: bool,
+) -> tuple[str, str]:
+    try:
+        width = max(2, len(str(total_tracks_in_playlist))) if pad_tracks else 0
+        if (
+            pad_tracks
+            and playlist_position_one_based is not None
+            and playlist_position_one_based > 0
+        ):
+            playlist_num_str = str(playlist_position_one_based).zfill(width)
+        else:
+            playlist_num_str = (
+                str(playlist_position_one_based) if playlist_position_one_based else ""
+            )
+
+        dir_fmt = base_dir_fmt.replace("%playlist%", playlist_name)
+        track_fmt = base_track_fmt.replace("%playlist%", playlist_name).replace(
+            "%playlistnum%", playlist_num_str
+        )
+        return dir_fmt, track_fmt
+    except Exception:
+        # On any error, return originals
+        return base_dir_fmt, base_track_fmt
 
 
 def has_playlist_changed(playlist_spotify_id: str, current_snapshot_id: str) -> bool:
@@ -320,6 +355,11 @@ def check_watched_playlists(specific_playlist_id: str = None):
     )
     config = get_watch_config()
     use_snapshot_checking = config.get("useSnapshotIdChecking", True)
+    # Fetch base formatting configuration once for this run
+    formatting_cfg = get_config_params()
+    base_dir_fmt = formatting_cfg.get("customDirFormat", "%ar_album%/%album%")
+    base_track_fmt = formatting_cfg.get("customTrackFormat", "%tracknum%. %music%")
+    pad_tracks = formatting_cfg.get("tracknumPadding", True)
 
     if specific_playlist_id:
         playlist_obj = get_watched_playlist(specific_playlist_id)
@@ -483,12 +523,17 @@ def check_watched_playlists(specific_playlist_id: str = None):
 
             current_api_track_ids = set()
             api_track_id_to_item_map = {}
-            for item in all_api_track_items:  # Use all_api_track_items
+            api_track_position_map: dict[str, int] = {}
+            # Build maps for quick lookup and position within the playlist (1-based)
+            for idx, item in enumerate(
+                all_api_track_items, start=1
+            ):  # Use overall playlist index for numbering
                 track = item.get("track")
                 if track and track.get("id") and not track.get("is_local"):
                     track_id = track["id"]
                     current_api_track_ids.add(track_id)
                     api_track_id_to_item_map[track_id] = item
+                    api_track_position_map[track_id] = idx
 
             db_track_ids = get_playlist_track_ids_from_db(playlist_spotify_id)
 
@@ -507,6 +552,19 @@ def check_watched_playlists(specific_playlist_id: str = None):
                         continue
 
                     track_to_queue = api_item["track"]
+                    # Compute per-track formatting overrides for playlist placeholders
+                    position_in_playlist = api_track_position_map.get(track_id)
+                    custom_dir_format, custom_track_format = (
+                        _apply_playlist_placeholders(
+                            base_dir_fmt,
+                            base_track_fmt,
+                            playlist_name,
+                            position_in_playlist if position_in_playlist else 0,
+                            api_total_tracks,
+                            pad_tracks,
+                        )
+                    )
+
                     task_payload = {
                         "download_type": "track",
                         "url": construct_spotify_url(track_id, "track"),
@@ -525,7 +583,9 @@ def check_watched_playlists(specific_playlist_id: str = None):
                             "track_spotify_id": track_id,
                             "track_item_for_db": api_item,  # Pass full API item for DB update on completion
                         },
-                        # "track_details_for_db" was old name, using track_item_for_db consistent with celery_tasks
+                        # Override formats so %playlist% and %playlistnum% resolve now per track
+                        "custom_dir_format": custom_dir_format,
+                        "custom_track_format": custom_track_format,
                     }
                     try:
                         task_id_or_none = download_queue_manager.add_task(
