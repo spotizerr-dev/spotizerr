@@ -16,6 +16,7 @@ interface FormattingSettings {
   compilation: string;
   artistSeparator: string;
   spotifyMetadata: boolean;
+  padNumberWidth?: number | "auto";
 }
 
 interface FormattingTabProps {
@@ -97,7 +98,10 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
   });
 
   const { register, handleSubmit, setValue } = useForm<FormattingSettings>({
-    values: config,
+    values: {
+      ...config,
+      padNumberWidth: config.padNumberWidth ?? 3,
+    },
   });
 
   // Correctly register the refs for react-hook-form while also holding a local ref.
@@ -188,6 +192,27 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
             className="h-6 w-6 rounded"
           />
         </div>
+        <div className="flex items-center justify-between gap-4">
+          <label htmlFor="padNumberWidth" className="text-content-primary dark:text-content-primary-dark">Track Number Padding Width</label>
+          <input
+            id="padNumberWidth"
+            type="text"
+            placeholder="3 or auto"
+            {...register("padNumberWidth", {
+              setValueAs: (v) => {
+                if (typeof v !== "string") return v;
+                const trimmed = v.trim().toLowerCase();
+                if (trimmed === "auto") return "auto" as const;
+                const parsed = parseInt(trimmed, 10);
+                return Number.isNaN(parsed) ? 3 : parsed;
+              },
+            })}
+            className="block w-40 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus text-sm"
+          />
+        </div>
+        <p className="text-xs text-content-muted dark:text-content-muted-dark">
+          "01. Track" if set to 2, "001. Track" if set to 3...
+        </p>
         <div className="flex items-center justify-between">
           <label htmlFor="artistSeparator" className="text-content-primary dark:text-content-primary-dark">Artist Separator</label>
           <input
