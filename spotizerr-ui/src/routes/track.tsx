@@ -3,7 +3,7 @@ import { useEffect, useState, useContext } from "react";
 import apiClient from "../lib/api-client";
 import type { TrackType } from "../types/spotify";
 import { toast } from "sonner";
-import { QueueContext } from "../contexts/queue-context";
+import { QueueContext, getStatus } from "../contexts/queue-context";
 import { FaSpotify, FaArrowLeft } from "react-icons/fa";
 
 // Helper to format milliseconds to mm:ss
@@ -22,7 +22,19 @@ export const Track = () => {
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
-  const { addItem } = context;
+  const { addItem, items } = context;
+
+  // Track queue status
+  const trackQueueItem = track ? items.find(item => item.downloadType === "track" && item.spotifyId === track.id) : undefined;
+  const trackStatus = trackQueueItem ? getStatus(trackQueueItem) : null;
+
+  useEffect(() => {
+    if (trackStatus === "queued") {
+      toast.success(`${track?.name} queued.`);
+    } else if (trackStatus === "error") {
+      toast.error(`Failed to queue ${track?.name}`);
+    }
+  }, [trackStatus]);
 
   useEffect(() => {
     const fetchTrack = async () => {
@@ -173,9 +185,16 @@ export const Track = () => {
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <button
             onClick={handleDownloadTrack}
-            className="w-full sm:w-auto bg-button-primary hover:bg-button-primary-hover text-button-primary-text font-bold py-3 px-8 rounded-full transition duration-300 shadow-lg hover:shadow-xl"
+            disabled={!!trackQueueItem && trackStatus !== "error"}
+            className="w-full sm:w-auto bg-button-primary hover:bg-button-primary-hover text-button-primary-text font-bold py-3 px-8 rounded-full transition duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Download
+            {trackStatus
+              ? trackStatus === "queued"
+                ? "Queued."
+                : trackStatus === "error"
+                ? "Download"
+                : "Downloading..."
+              : "Download"}
           </button>
           <a
             href={track.external_urls.spotify}

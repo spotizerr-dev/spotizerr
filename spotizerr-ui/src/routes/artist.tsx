@@ -3,7 +3,7 @@ import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import apiClient from "../lib/api-client";
 import type { AlbumType, ArtistType, TrackType } from "../types/spotify";
-import { QueueContext } from "../contexts/queue-context";
+import { QueueContext, getStatus } from "../contexts/queue-context";
 import { useSettings } from "../contexts/settings-context";
 import { FaArrowLeft, FaBookmark, FaRegBookmark, FaDownload } from "react-icons/fa";
 import { AlbumCard } from "../components/AlbumCard";
@@ -14,6 +14,7 @@ export const Artist = () => {
   const [albums, setAlbums] = useState<AlbumType[]>([]);
   const [topTracks, setTopTracks] = useState<TrackType[]>([]);
   const [isWatched, setIsWatched] = useState(false);
+  const [artistStatus, setArtistStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const context = useContext(QueueContext);
   const { settings } = useSettings();
@@ -30,7 +31,14 @@ export const Artist = () => {
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
-  const { addItem } = context;
+  const { addItem, items } = context;
+
+  // Track queue status mapping
+  const trackStatuses = topTracks.reduce((acc, t) => {
+    const qi = items.find(item => item.downloadType === "track" && item.spotifyId === t.id);
+    acc[t.id] = qi ? getStatus(qi) : null;
+    return acc;
+  }, {} as Record<string, string | null>);
 
   const applyFilters = useCallback(
     (items: AlbumType[]) => {
@@ -194,6 +202,7 @@ export const Artist = () => {
   };
 
   const handleDownloadArtist = async () => {
+    setArtistStatus("downloading");
     if (!artistId || !artist) return;
 
     try {
@@ -203,13 +212,16 @@ export const Artist = () => {
       const response = await apiClient.get(`/artist/download/${artistId}`);
 
       if (response.data.queued_albums?.length > 0) {
+        setArtistStatus("queued");
         toast.success(`${artist.name} discography queued successfully!`, {
           description: `${response.data.queued_albums.length} albums added to queue.`,
         });
       } else {
+        setArtistStatus(null);
         toast.info("No new albums to download for this artist.");
       }
     } catch (error: any) {
+      setArtistStatus("error");
       console.error("Artist download failed:", error);
       toast.error("Failed to download artist", {
         description: error.response?.data?.error || "An unexpected error occurred.",
@@ -273,30 +285,52 @@ export const Artist = () => {
         <div className="flex gap-4 justify-center mt-4">
           <button
             onClick={handleDownloadArtist}
-            className="flex items-center gap-2 px-4 py-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-md transition-colors"
+            disabled={artistStatus === "downloading" || artistStatus === "queued"}
+            className="flex items-center gap-2 px-4 py-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={
+              artistStatus === "downloading"
+                ? "Downloading..."
+                : artistStatus === "queued"
+                ? "Queued."
+                : "Download All"
+            }
           >
-            <FaDownload className="icon-inverse" />
-            <span>Download All</span>
+            {artistStatus
+              ? artistStatus === "queued"
+                ? "Queued."
+                : artistStatus === "downloading"
+                ? "Downloading..."
+                : <>
+                    <FaDownload className="icon-inverse" />
+                    <span>Download All</span>
+                  </>
+              : <>
+                  <FaDownload className="icon-inverse" />
+                  <span>Download All</span>
+                </>
+            }
           </button>
-          <button
-            onClick={handleToggleWatch}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors border ${isWatched
-                ? "bg-button-primary text-button-primary-text border-primary"
-                : "bg-surface dark:bg-surface-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark border-border dark:border-border-dark text-content-primary dark:text-content-primary-dark"
-              }`}
-          >
-            {isWatched ? (
-              <>
-                <FaBookmark className="icon-inverse" />
-                <span>Watching</span>
-              </>
-            ) : (
-              <>
-                <FaRegBookmark className="icon-primary" />
-                <span>Watch</span>
-              </>
-            )}
-          </button>
+          {settings?.watch?.enabled && (
+            <button
+              onClick={handleToggleWatch}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors border ${isWatched
+                  ? "bg-button-primary text-button-primary-text border-primary"
+                  : "bg-surface dark:bg-surface-dark hover:bg-surface-muted dark:hover:bg-surface-muted-dark border-border dark:border-border-dark text-content-primary dark:text-content-primary-dark"
+                }`}
+            >
+              {isWatched ? (
+                <>
+                  <FaBookmark className="icon-inverse" />
+                  <span>Watching</span>
+                </>
+              ) : (
+                <>
+                  <FaRegBookmark className="icon-primary" />
+                  <span>Watch</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -318,9 +352,16 @@ export const Artist = () => {
                 </Link>
                 <button
                   onClick={() => handleDownloadTrack(track)}
-                  className="px-3 py-1 bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded"
+                  disabled={!!trackStatuses[track.id] && trackStatuses[track.id] !== "error"}
+                  className="px-3 py-1 bg-button-secondary hover:bg-button-secondary-hover text-button-secondary-text hover:text-button-secondary-text-hover rounded disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Download
+                  {trackStatuses[track.id]
+                    ? trackStatuses[track.id] === "queued"
+                      ? "Queued."
+                      : trackStatuses[track.id] === "error"
+                      ? "Download"
+                      : "Downloading..."
+                    : "Download"}
                 </button>
               </div>
             ))}
