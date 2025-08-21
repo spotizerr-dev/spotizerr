@@ -13,6 +13,7 @@ interface WatchSettings {
   enabled: boolean;
   watchPollIntervalSeconds: number;
   watchedArtistAlbumGroup: AlbumGroup[];
+  maxItemsPerRun: number;
 }
 
 interface DownloadSettings {
@@ -92,8 +93,9 @@ export function WatchTab() {
       setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["watchConfig"] });
     },
-    onError: (error) => {
-      toast.error(`Failed to save settings: ${error.message}`);
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || error?.message || "Unknown error";
+      toast.error(`Failed to save settings: ${message}`);
       setSaveStatus("error");
       setTimeout(() => setSaveStatus("idle"), 3000);
     },
@@ -108,6 +110,7 @@ export function WatchTab() {
   }, [config, reset]);
 
   const watchEnabled = watch("enabled");
+  const maxItemsPerRunValue = watch("maxItemsPerRun");
 
   // Validation effect for watch + download method requirement
   useEffect(() => {
@@ -125,9 +128,15 @@ export function WatchTab() {
       if (!deezerCredentials?.length) missingServices.push("Deezer");
       error = `Watch with Fallback requires accounts for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
     }
+
+    // Validate maxItemsPerRun range (1..50)
+    const mir = Number(maxItemsPerRunValue);
+    if (!error && (Number.isNaN(mir) || mir < 1 || mir > 50)) {
+      error = "Max items per run must be between 1 and 50.";
+    }
     
     setValidationError(error);
-  }, [watchEnabled, downloadConfig?.realTime, downloadConfig?.fallback, spotifyCredentials?.length, deezerCredentials?.length]);
+  }, [watchEnabled, downloadConfig?.realTime, downloadConfig?.fallback, spotifyCredentials?.length, deezerCredentials?.length, maxItemsPerRunValue]);
 
   const onSubmit: SubmitHandler<WatchSettings> = (data) => {
     // Check validation before submitting
@@ -148,9 +157,18 @@ export function WatchTab() {
       return;
     }
 
+    // Validate maxItemsPerRun in handler too, to be safe
+    const mir = Number(data.maxItemsPerRun);
+    if (Number.isNaN(mir) || mir < 1 || mir > 50) {
+      setValidationError("Max items per run must be between 1 and 50.");
+      toast.error("Validation failed: Max items per run must be between 1 and 50.");
+      return;
+    }
+
     mutation.mutate({
       ...data,
       watchPollIntervalSeconds: Number(data.watchPollIntervalSeconds),
+      maxItemsPerRun: Number(data.maxItemsPerRun),
     });
   };
 
@@ -225,7 +243,20 @@ export function WatchTab() {
             {...register("watchPollIntervalSeconds")}
             className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
-          <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">How often to check watched items for updates.</p>
+          <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">How often to check for new items in watchlist.</p>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="maxItemsPerRun" className="text-content-primary dark:text-content-primary-dark">Max Items Per Run</label>
+          <input
+            id="maxItemsPerRun"
+            type="number"
+            min="1"
+            max="50"
+            {...register("maxItemsPerRun")}
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+          />
+          <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">Batch size per watch cycle (1–50).</p>
         </div>
       </div>
 

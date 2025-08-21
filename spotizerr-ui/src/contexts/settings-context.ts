@@ -37,7 +37,9 @@ export interface AppSettings {
   spotifyMetadata: boolean;
   watch: {
     enabled: boolean;
-    // Add other watch properties from the old type if they still exist in the API response
+    maxItemsPerRun: number;
+    watchPollIntervalSeconds: number;
+    watchedArtistAlbumGroup: string[];
   };
   // Add other root-level properties from the API if they exist
   realTimeMultiplier: number;
