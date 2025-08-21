@@ -87,7 +87,7 @@ def get_artist_discography(
 
 
 def download_artist_albums(
-    url, album_type="album,single,compilation", request_args=None
+    url, album_type="album,single,compilation", request_args=None, username=None
 ):
     """
     Download albums by an artist, filtered by album types.
@@ -97,6 +97,7 @@ def download_artist_albums(
         album_type (str): Comma-separated list of album types to download
                          (album, single, compilation, appears_on)
         request_args (dict): Original request arguments for tracking
+        username (str | None): Username initiating the request, used for per-user separation
 
     Returns:
         tuple: (list of successfully queued albums, list of duplicate albums)
@@ -160,11 +161,15 @@ def download_artist_albums(
         album_name = album.get("name", "Unknown Album")
         album_artists = album.get("artists", [])
         album_artist = (
-            album_artists[0].get("name", "Unknown Artist") if album_artists else "Unknown Artist"
+            album_artists[0].get("name", "Unknown Artist")
+            if album_artists
+            else "Unknown Artist"
         )
 
         if not album_url:
-            logger.warning(f"Skipping album '{album_name}' because it has no Spotify URL.")
+            logger.warning(
+                f"Skipping album '{album_name}' because it has no Spotify URL."
+            )
             continue
 
         task_data = {
@@ -174,6 +179,8 @@ def download_artist_albums(
             "artist": album_artist,
             "orig_request": request_args,
         }
+        if username:
+            task_data["username"] = username
 
         try:
             task_id = download_queue_manager.add_task(task_data)
@@ -199,7 +206,9 @@ def download_artist_albums(
                 }
             )
         except Exception as e:
-            logger.error(f"Failed to queue album {album_name} for an unknown reason: {e}")
+            logger.error(
+                f"Failed to queue album {album_name} for an unknown reason: {e}"
+            )
 
     logger.info(
         f"Artist album processing: {len(successfully_queued_albums)} queued, {len(duplicate_albums)} duplicates found."

@@ -190,7 +190,7 @@ export const Playlist = () => {
       <div className="bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-xl p-4 md:p-6 shadow-sm">
         <div className="flex flex-col items-center gap-4 md:gap-6">
           <img
-            src={playlistMetadata.images[0]?.url || "/placeholder.jpg"}
+            src={playlistMetadata.images?.at(0)?.url || "/placeholder.jpg"}
             alt={playlistMetadata.name}
             className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 object-cover rounded-lg shadow-lg mx-auto"
           />
@@ -255,7 +255,7 @@ export const Playlist = () => {
                     <span className="text-content-muted dark:text-content-muted-dark w-6 md:w-8 text-right text-sm font-medium">{index + 1}</span>
                     <Link to="/album/$albumId" params={{ albumId: track.album.id }}>
                       <img
-                        src={track.album.images.at(-1)?.url}
+                        src={track.album.images?.at(-1)?.url || "/placeholder.jpg "}
                         alt={track.album.name}
                         className="w-10 h-10 md:w-12 md:h-12 object-cover rounded hover:scale-105 transition-transform duration-300"
                       />

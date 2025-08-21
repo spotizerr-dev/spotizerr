@@ -145,7 +145,7 @@ If you self-host a music server with other users than yourself, you almost certa
 
 ### Monitor an Artist
 1. Search for the artist
-2. Click "Add to Watchlist" 
+2. Click "Add to Watchlist"
 3. Configure which release types to monitor (albums, singles, etc.)
 4. New releases will be automatically downloaded
 
@@ -244,6 +244,10 @@ This software is for educational purposes and personal use only. Ensure you comp
 - Downloaded files retain original metadata
 - Service limitations apply based on account types
 
+### Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md)
+
 ## 🙏 Acknowledgements
 
-This project was inspired by the amazing [deezspot library](https://github.com/jakiepari/deezspot). Although their creators are in no way related to Spotizerr, they still deserve credit for their excellent work. 
+This project was inspired by the amazing [deezspot library](https://github.com/jakiepari/deezspot). Although their creators are in no way related to Spotizerr, they still deserve credit for their excellent work.

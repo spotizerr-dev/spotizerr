@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ interface FormattingSettings {
   compilation: string;
   artistSeparator: string;
   spotifyMetadata: boolean;
+  padNumberWidth?: number | "auto";
 }
 
 interface FormattingTabProps {
@@ -79,20 +80,28 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
   const queryClient = useQueryClient();
   const dirInputRef = useRef<HTMLInputElement | null>(null);
   const trackInputRef = useRef<HTMLInputElement | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   const mutation = useMutation({
     mutationFn: saveFormattingConfig,
     onSuccess: () => {
       toast.success("Formatting settings saved!");
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => {
       toast.error(`Failed to save settings: ${error.message}`);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
   const { register, handleSubmit, setValue } = useForm<FormattingSettings>({
-    values: config,
+    values: {
+      ...config,
+      padNumberWidth: config.padNumberWidth ?? 3,
+    },
   });
 
   // Correctly register the refs for react-hook-form while also holding a local ref.
@@ -120,6 +129,24 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center gap-3">
+          {saveStatus === "success" && (
+            <span className="text-success text-sm">Saved</span>
+          )}
+          {saveStatus === "error" && (
+            <span className="text-error text-sm">Save failed</span>
+          )}
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+          >
+            {mutation.isPending ? "Saving..." : "Save Formatting Settings"}
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">File Naming</h3>
         <div className="flex flex-col gap-2">
@@ -165,6 +192,27 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
             className="h-6 w-6 rounded"
           />
         </div>
+        <div className="flex items-center justify-between gap-4">
+          <label htmlFor="padNumberWidth" className="text-content-primary dark:text-content-primary-dark">Track Number Padding Width</label>
+          <input
+            id="padNumberWidth"
+            type="text"
+            placeholder="3 or auto"
+            {...register("padNumberWidth", {
+              setValueAs: (v) => {
+                if (typeof v !== "string") return v;
+                const trimmed = v.trim().toLowerCase();
+                if (trimmed === "auto") return "auto" as const;
+                const parsed = parseInt(trimmed, 10);
+                return Number.isNaN(parsed) ? 3 : parsed;
+              },
+            })}
+            className="block w-40 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus text-sm"
+          />
+        </div>
+        <p className="text-xs text-content-muted dark:text-content-muted-dark">
+          "01. Track" if set to 2, "001. Track" if set to 3...
+        </p>
         <div className="flex items-center justify-between">
           <label htmlFor="artistSeparator" className="text-content-primary dark:text-content-primary-dark">Artist Separator</label>
           <input
@@ -185,14 +233,6 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
           <input id="spotifyMetadataToggle" type="checkbox" {...register("spotifyMetadata")} className="h-6 w-6 rounded" />
         </div>
       </div>
-
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
-      >
-        {mutation.isPending ? "Saving..." : "Save Formatting Settings"}
-      </button>
     </form>
   );
 }

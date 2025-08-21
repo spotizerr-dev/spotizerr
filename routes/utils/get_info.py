@@ -239,7 +239,7 @@ def get_spotify_info(
 
     Args:
         spotify_id: The Spotify ID of the entity
-        spotify_type: The type of entity (track, album, playlist, artist, artist_discography, episode)
+        spotify_type: The type of entity (track, album, playlist, artist, artist_discography, episode, album_tracks)
         limit (int, optional): The maximum number of items to return. Used for pagination.
         offset (int, optional): The index of the first item to return. Used for pagination.
 
@@ -255,6 +255,12 @@ def get_spotify_info(
         elif spotify_type == "album":
             return client.album(spotify_id)
 
+        elif spotify_type == "album_tracks":
+            # Fetch album's tracks with pagination support
+            return client.album_tracks(
+                spotify_id, limit=limit or 20, offset=offset or 0
+            )
+
         elif spotify_type == "playlist":
             # Use optimized playlist fetching
             return get_playlist_full(spotify_id)
@@ -269,7 +275,10 @@ def get_spotify_info(
         elif spotify_type == "artist_discography":
             # Get artist's albums with pagination
             albums = client.artist_albums(
-                spotify_id, limit=limit or 20, offset=offset or 0
+                spotify_id,
+                limit=limit or 20,
+                offset=offset or 0,
+                include_groups="single,album,appears_on",
             )
             return albums
 

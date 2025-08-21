@@ -54,6 +54,9 @@ type ChildTrack = {
   timestamp: number;
   position?: number;
   metadata: Record<string, any>;
+  service?: string;
+  quality_format?: string;
+  quality_bitrate?: string;
 };
 
 type ChildrenResponse = {
@@ -73,7 +76,9 @@ const STATUS_CLASS: Record<string, string> = {
   skipped: "text-content-muted dark:text-content-muted-dark",
 };
 
-const formatQuality = (entry: HistoryEntry): string => {
+const formatQuality = (
+  entry: { quality_format?: string; quality_bitrate?: string }
+): string => {
   const format = entry.quality_format || "Unknown";
   const bitrate = entry.quality_bitrate || "";
   return bitrate ? `${format} ${bitrate}` : format;
@@ -195,11 +200,8 @@ export const History = () => {
         id: "quality",
         header: "Quality",
         cell: (info) => {
-          const entry = info.row.original;
-          if ("download_type" in entry) {
-            return formatQuality(entry);
-          }
-          return "N/A";
+          const entry = info.row.original as HistoryEntry | ChildTrack;
+          return formatQuality(entry);
         },
       }),
       columnHelper.accessor("status", {
@@ -622,7 +624,7 @@ export const History = () => {
                   <div className="col-span-2">
                     <span className="text-content-muted dark:text-content-muted-dark">Quality:</span>
                     <span className="ml-1 text-content-primary dark:text-content-primary-dark">
-                      {"download_type" in entry ? formatQuality(entry) : "N/A"}
+                      {formatQuality(entry as HistoryEntry | ChildTrack)}
                     </span>
                   </div>
                   <div className="col-span-2">

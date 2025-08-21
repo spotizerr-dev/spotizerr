@@ -72,6 +72,9 @@ def get_config_params():
             ),
             "separateTracksByUser": config.get("separateTracksByUser", False),
             "watch": config.get("watch", {}),
+            "realTimeMultiplier": config.get(
+                "realTimeMultiplier", config.get("real_time_multiplier", 0)
+            ),
         }
     except Exception as e:
         logger.error(f"Error reading config for parameters: {e}")
@@ -96,6 +99,7 @@ def get_config_params():
             "recursiveQuality": False,
             "separateTracksByUser": False,
             "watch": {},
+            "realTimeMultiplier": 0,
         }
 
 
@@ -363,7 +367,7 @@ class CeleryDownloadQueueManager:
             original_request = task.get(
                 "orig_request", task.get("original_request", {})
             )
-            
+
             # Get username for user-specific paths
             username = task.get("username", "")
 
@@ -389,9 +393,11 @@ class CeleryDownloadQueueManager:
                     original_request.get("real_time"), config_params["realTime"]
                 ),
                 "custom_dir_format": self._get_user_specific_dir_format(
-                    original_request.get("custom_dir_format", config_params["customDirFormat"]),
+                    original_request.get(
+                        "custom_dir_format", config_params["customDirFormat"]
+                    ),
                     config_params.get("separateTracksByUser", False),
-                    username
+                    username,
                 ),
                 "custom_track_format": original_request.get(
                     "custom_track_format", config_params["customTrackFormat"]
@@ -419,6 +425,9 @@ class CeleryDownloadQueueManager:
                 "retry_count": 0,
                 "original_request": original_request,
                 "created_at": time.time(),
+                "real_time_multiplier": original_request.get(
+                    "real_time_multiplier", config_params.get("realTimeMultiplier", 0)
+                ),
             }
 
             # If from_watch_job is True, ensure track_details_for_db is passed through
@@ -497,12 +506,12 @@ class CeleryDownloadQueueManager:
     def _get_user_specific_dir_format(self, base_format, separate_by_user, username):
         """
         Modify the directory format to include username if separateTracksByUser is enabled
-        
+
         Args:
             base_format (str): The base directory format from config
             separate_by_user (bool): Whether to separate tracks by user
             username (str): The username to include in path
-            
+
         Returns:
             str: The modified directory format
         """

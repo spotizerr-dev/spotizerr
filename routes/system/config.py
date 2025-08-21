@@ -72,6 +72,28 @@ def validate_config(config_data: dict, watch_config: dict = None) -> tuple[bool,
         if watch_config is None:
             watch_config = get_watch_config_http()
 
+        # Ensure realTimeMultiplier is a valid integer in range 0..10 if provided
+        if "realTimeMultiplier" in config_data or "real_time_multiplier" in config_data:
+            key = (
+                "realTimeMultiplier"
+                if "realTimeMultiplier" in config_data
+                else "real_time_multiplier"
+            )
+            val = config_data.get(key)
+            if isinstance(val, bool):
+                return False, "realTimeMultiplier must be an integer between 0 and 10."
+            try:
+                ival = int(val)
+            except Exception:
+                return False, "realTimeMultiplier must be an integer between 0 and 10."
+            if ival < 0 or ival > 10:
+                return False, "realTimeMultiplier must be between 0 and 10."
+            # Normalize to camelCase in the working dict so save_config writes it
+            if key == "real_time_multiplier":
+                config_data["realTimeMultiplier"] = ival
+            else:
+                config_data["realTimeMultiplier"] = ival
+
         # Check if fallback is enabled but missing required accounts
         if config_data.get("fallback", False):
             has_spotify = has_credentials("spotify")
@@ -169,6 +191,7 @@ def _migrate_legacy_keys_inplace(cfg: dict) -> bool:
         "artist_separator": "artistSeparator",
         "recursive_quality": "recursiveQuality",
         "spotify_metadata": "spotifyMetadata",
+        "real_time_multiplier": "realTimeMultiplier",
     }
     modified = False
     for legacy, camel in legacy_map.items():

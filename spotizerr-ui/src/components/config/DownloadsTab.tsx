@@ -23,6 +23,7 @@ interface DownloadSettings {
   spotifyQuality: "NORMAL" | "HIGH" | "VERY_HIGH";
   recursiveQuality: boolean; // frontend field (sent as camelCase to backend)
   separateTracksByUser: boolean;
+  realTimeMultiplier: number;
 }
 
 interface WatchConfig {
@@ -71,6 +72,7 @@ const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credenti
 export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   // Fetch watch config
   const { data: watchConfig } = useQuery({
@@ -96,10 +98,14 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
     mutationFn: saveDownloadConfig,
     onSuccess: () => {
       toast.success("Download settings saved successfully!");
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => {
       toast.error(`Failed to save settings: ${error.message}`);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
@@ -150,7 +156,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       const missingServices: string[] = [];
       if (!spotifyCredentials?.length) missingServices.push("Spotify");
       if (!deezerCredentials?.length) missingServices.push("Deezer");
-      const error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
+      const error = `Download Fallback requires accounts to be configured for both Spotify and Deezer. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
       setValidationError(error);
       toast.error("Validation failed: " + error);
       return;
@@ -162,6 +168,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       maxRetries: Number(data.maxRetries),
       retryDelaySeconds: Number(data.retryDelaySeconds),
       retryDelayIncrease: Number(data.retryDelayIncrease),
+      realTimeMultiplier: Number(data.realTimeMultiplier ?? 0),
     });
   };
 
@@ -171,6 +178,24 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center gap-3">
+          {saveStatus === "success" && (
+            <span className="text-success text-sm">Saved</span>
+          )}
+          {saveStatus === "error" && (
+            <span className="text-error text-sm">Save failed</span>
+          )}
+          <button
+            type="submit"
+            disabled={mutation.isPending || !!validationError}
+            className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+          >
+            {mutation.isPending ? "Saving..." : "Save Download Settings"}
+          </button>
+        </div>
+      </div>
+
       {/* Download Settings */}
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Download Behavior</h3>
@@ -187,6 +212,26 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
         <div className="flex items-center justify-between">
           <label htmlFor="realTimeToggle" className="text-content-primary dark:text-content-primary-dark">Real-time downloading</label>
           <input id="realTimeToggle" type="checkbox" {...register("realTime")} className="h-6 w-6 rounded" />
+        </div>
+        {/* Real-time Multiplier (Spotify only) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <label htmlFor="realTimeMultiplier" className="text-content-primary dark:text-content-primary-dark">Real-time speed multiplier (Spotify)</label>
+            <span className="text-xs text-content-secondary dark:text-content-secondary-dark">0–10</span>
+          </div>
+          <input
+            id="realTimeMultiplier"
+            type="number"
+            min={0}
+            max={10}
+            step={1}
+            {...register("realTimeMultiplier")}
+            disabled={!realTime}
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus disabled:opacity-50"
+          />
+          <p className="text-xs text-content-muted dark:text-content-muted-dark">
+            Controls how fast Spotify real-time downloads go. Only affects Spotify downloads; ignored for Deezer.
+          </p>
         </div>
         <div className="flex items-center justify-between">
           <label htmlFor="fallbackToggle" className="text-content-primary dark:text-content-primary-dark">Download Fallback</label>
@@ -338,14 +383,6 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
           />
         </div>
       </div>
-
-      <button
-        type="submit"
-        disabled={mutation.isPending || !!validationError}
-        className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
-      >
-        {mutation.isPending ? "Saving..." : "Save Download Settings"}
-      </button>
     </form>
   );
 }
