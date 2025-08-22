@@ -129,6 +129,20 @@ async def handle_create_credential(service: str, name: str, request: Request, cu
         # For Deezer, it expects 'arl' and 'region'
         # Validation is handled within create_credential utility function
         result = create_credential(service, name, data)
+
+        # set as active Spotify account if none is set
+        if service == "spotify":
+            try:
+                from routes.utils.celery_config import get_config_params as get_main_config_params
+                from routes.system.config import save_config
+                config = get_main_config_params()
+                # The field is likely "spotify" (as used in frontend)
+                if not config.get("spotify"):
+                    config["spotify"] = name
+                    save_config(config)
+            except Exception as e:
+                logger.warning(f"Could not set new Spotify account '{name}' as active: {e}")
+
         return {
             "message": f"Credential for '{name}' ({service}) created successfully.",
             "details": result,
