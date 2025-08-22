@@ -4,7 +4,7 @@ import logging
 import time
 import json
 import asyncio
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 
 from routes.utils.celery_tasks import (
     get_task_info,
@@ -141,7 +141,7 @@ def start_sse_redis_subscriber():
     thread.start()
     logger.info("SSE Redis Subscriber: Background thread started")
 
-async def transform_callback_to_task_format(task_id: str, event_data: dict) -> dict:
+async def transform_callback_to_task_format(task_id: str, event_data: dict) -> Optional[dict]:
     """Transform callback event data into the task format expected by frontend"""
     try:
         # Import here to avoid circular imports
@@ -646,7 +646,7 @@ async def list_tasks(request: Request, current_user: User = Depends(require_auth
                 other_tasks.append(task_response)
 
         # Sort other tasks by creation time (newest first)
-        other_tasks.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+        other_tasks.sort(key=lambda x: x.get("created_at") or 0.0, reverse=True)
         
         if active_only:
             # Return only active tasks without pagination
@@ -876,7 +876,7 @@ async def cancel_task_endpoint(task_id: str, current_user: User = Depends(requir
             try:
                 # Push an immediate SSE update so clients reflect cancellation and partial summary
                 await trigger_sse_update(task_id, "cancelled")
-                result["sse_notified"] = True
+                result["sse_notified"] = "true"
             except Exception as e:
                 logger.error(f"SSE notify after cancel failed for {task_id}: {e}")
             return result
