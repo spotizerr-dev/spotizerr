@@ -246,9 +246,10 @@ export const Artist = () => {
     return <div>Artist data could not be fully loaded. Please try again later.</div>;
   }
 
-  const artistAlbums = applyFilters(albums.filter((album) => album.album_type === "album"));
-  const artistSingles = applyFilters(albums.filter((album) => album.album_type === "single"));
-  const artistCompilations = applyFilters(albums.filter((album) => album.album_type === "compilation"));
+  const artistAlbums = applyFilters(albums.filter((album) => (album.album_group ?? album.album_type) === "album"));
+  const artistSingles = applyFilters(albums.filter((album) => (album.album_group ?? album.album_type) === "single"));
+  const artistCompilations = applyFilters(albums.filter((album) => (album.album_group ?? album.album_type) === "compilation"));
+  const artistAppearsOn = applyFilters(albums.filter((album) => (album.album_group ?? "") === "appears_on"));
 
   return (
     <div className="artist-page">
@@ -358,6 +359,18 @@ export const Artist = () => {
           <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Compilations</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
             {artistCompilations.map((album) => (
+              <AlbumCard key={album.id} album={album} onDownload={() => handleDownloadAlbum(album)} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Appears On */}
+      {artistAppearsOn.length > 0 && (
+        <div className="mb-12">
+          <h2 className="text-3xl font-bold mb-6 text-content-primary dark:text-content-primary-dark">Appears On</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {artistAppearsOn.map((album) => (
               <AlbumCard key={album.id} album={album} onDownload={() => handleDownloadAlbum(album)} />
             ))}
           </div>
