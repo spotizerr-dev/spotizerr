@@ -25,6 +25,9 @@ EXPECTED_WATCHED_PLAYLISTS_COLUMNS = {
     "last_checked": "INTEGER",
     "added_at": "INTEGER",
     "is_active": "INTEGER DEFAULT 1",
+    # New: batch progress for per-interval page fetching
+    "batch_next_offset": "INTEGER DEFAULT 0",
+    "batch_processing_snapshot_id": "TEXT",
 }
 
 EXPECTED_PLAYLIST_TRACKS_COLUMNS = {
@@ -55,6 +58,8 @@ EXPECTED_WATCHED_ARTISTS_COLUMNS = {
     "genres": "TEXT",  # Comma-separated
     "popularity": "INTEGER",
     "image_url": "TEXT",
+    # New: batch progress for per-interval page fetching
+    "batch_next_offset": "INTEGER DEFAULT 0",
 }
 
 EXPECTED_ARTIST_ALBUMS_COLUMNS = {
@@ -439,6 +444,61 @@ def update_playlist_snapshot(
         )
 
 
+# --- New: per-playlist batch progress helpers ---
+
+
+def get_playlist_batch_progress(playlist_spotify_id: str) -> tuple[int, str | None]:
+    """Returns (batch_next_offset, batch_processing_snapshot_id) for a watched playlist."""
+    try:
+        with _get_playlists_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT batch_next_offset, batch_processing_snapshot_id FROM watched_playlists WHERE spotify_id = ?",
+                (playlist_spotify_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return 0, None
+            next_offset = (
+                row["batch_next_offset"] if "batch_next_offset" in row.keys() else 0
+            )
+            processing_snapshot = (
+                row["batch_processing_snapshot_id"]
+                if "batch_processing_snapshot_id" in row.keys()
+                else None
+            )
+            return int(next_offset or 0), processing_snapshot
+    except sqlite3.Error as e:
+        logger.error(
+            f"Error retrieving batch progress for playlist {playlist_spotify_id}: {e}",
+            exc_info=True,
+        )
+        return 0, None
+
+
+def set_playlist_batch_progress(
+    playlist_spotify_id: str, next_offset: int, processing_snapshot_id: str | None
+) -> None:
+    """Updates batch_next_offset and batch_processing_snapshot_id for a watched playlist."""
+    try:
+        with _get_playlists_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE watched_playlists
+                SET batch_next_offset = ?, batch_processing_snapshot_id = ?
+                WHERE spotify_id = ?
+                """,
+                (int(next_offset or 0), processing_snapshot_id, playlist_spotify_id),
+            )
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.error(
+            f"Error updating batch progress for playlist {playlist_spotify_id}: {e}",
+            exc_info=True,
+        )
+
+
 def get_playlist_track_ids_from_db(playlist_spotify_id: str):
     """Retrieves all track Spotify IDs from a specific playlist's tracks table in playlists.db."""
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
@@ -773,7 +833,7 @@ def add_specific_tracks_to_playlist_table(
 def remove_specific_tracks_from_playlist_table(
     playlist_spotify_id: str, track_spotify_ids: list
 ):
-    """Removes specific tracks from the playlist's local track table."""
+    """Removes specific tracks from the playlist's local DB table."""
     table_name = f"playlist_{playlist_spotify_id.replace('-', '_')}"
     if not track_spotify_ids:
         return 0
@@ -799,7 +859,7 @@ def remove_specific_tracks_from_playlist_table(
             conn.commit()
             deleted_count = cursor.rowcount
             logger.info(
-                f"Manually removed {deleted_count} tracks from DB for playlist {playlist_spotify_id}."
+                f"Successfully removed {deleted_count} tracks locally for playlist {playlist_spotify_id}."
             )
             return deleted_count
     except sqlite3.Error as e:
@@ -1164,6 +1224,53 @@ def update_artist_metadata_after_check(
         )
 
 
+# --- New: per-artist batch progress helpers ---
+
+
+def get_artist_batch_next_offset(artist_spotify_id: str) -> int:
+    try:
+        with _get_artists_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT batch_next_offset FROM watched_artists WHERE spotify_id = ?",
+                (artist_spotify_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return 0
+            return (
+                int(row["batch_next_offset"])
+                if "batch_next_offset" in row.keys()
+                else 0
+            )
+    except sqlite3.Error as e:
+        logger.error(
+            f"Error retrieving batch_next_offset for artist {artist_spotify_id}: {e}",
+            exc_info=True,
+        )
+        return 0
+
+
+def set_artist_batch_next_offset(artist_spotify_id: str, next_offset: int) -> None:
+    try:
+        with _get_artists_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE watched_artists
+                SET batch_next_offset = ?
+                WHERE spotify_id = ?
+                """,
+                (int(next_offset or 0), artist_spotify_id),
+            )
+            conn.commit()
+    except sqlite3.Error as e:
+        logger.error(
+            f"Error updating batch_next_offset for artist {artist_spotify_id}: {e}",
+            exc_info=True,
+        )
+
+
 def get_artist_album_ids_from_db(artist_spotify_id: str):
     """Retrieves all album Spotify IDs from a specific artist's albums table in artists.db."""
     table_name = f"artist_{artist_spotify_id.replace('-', '_')}"
@@ -1289,11 +1396,11 @@ def add_or_update_album_for_artist(
                     total_tracks,
                     link,
                     image_url,
-                    current_time,            # added_to_db
-                    current_time,            # last_seen_on_spotify
-                    task_id,                 # download_task_id
-                    download_status,         # download_status
-                    0,                       # is_fully_downloaded_managed_by_app
+                    current_time,  # added_to_db
+                    current_time,  # last_seen_on_spotify
+                    task_id,  # download_task_id
+                    download_status,  # download_status
+                    0,  # is_fully_downloaded_managed_by_app
                 )
                 cursor.execute(
                     f"""

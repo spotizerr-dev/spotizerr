@@ -44,6 +44,7 @@ export interface AlbumType {
   id: string;
   name: string;
   album_type: "album" | "single" | "compilation";
+  album_group?: "album" | "single" | "compilation" | "appears_on";
   artists: ArtistType[];
   images: ImageType[];
   release_date: string;

@@ -3,10 +3,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from .v3_0_6 import MigrationV3_0_6
-from .v3_1_0 import MigrationV3_1_0
-from .v3_1_1 import MigrationV3_1_1
-from .v3_1_2 import MigrationV3_1_2
+from .v3_2_0 import MigrationV3_2_0
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +38,7 @@ CHILDREN_EXPECTED_COLUMNS: dict[str, str] = {
     "metadata": "TEXT",
 }
 
-# 3.1.2 expected schemas for Watch DBs (kept here to avoid importing modules with side-effects)
+# 3.2.0 expected schemas for Watch DBs (kept here to avoid importing modules with side-effects)
 EXPECTED_WATCHED_PLAYLISTS_COLUMNS: dict[str, str] = {
     "spotify_id": "TEXT PRIMARY KEY",
     "name": "TEXT",
@@ -103,10 +100,7 @@ EXPECTED_ARTIST_ALBUMS_COLUMNS: dict[str, str] = {
     "is_fully_downloaded_managed_by_app": "INTEGER DEFAULT 0",
 }
 
-m306 = MigrationV3_0_6()
-m310 = MigrationV3_1_0()
-m311 = MigrationV3_1_1()
-m312 = MigrationV3_1_2()
+m320 = MigrationV3_2_0()
 
 
 def _safe_connect(path: Path) -> Optional[sqlite3.Connection]:
@@ -184,60 +178,53 @@ def _create_or_update_children_table(conn: sqlite3.Connection, table_name: str) 
     )
 
 
-def _update_children_tables_for_history(conn: sqlite3.Connection) -> None:
+# --- Helper to validate instance is at least 3.1.2 on history DB ---
+
+
+def _history_children_tables(conn: sqlite3.Connection) -> list[str]:
+    tables: set[str] = set()
     try:
-        try:
-            cur = conn.execute(
-                "SELECT DISTINCT children_table FROM download_history WHERE children_table IS NOT NULL AND TRIM(children_table) != ''"
-            )
-            for row in cur.fetchall():
-                table_name = row[0]
-                if not table_name:
-                    continue
-                _create_or_update_children_table(conn, table_name)
-        except sqlite3.Error as e:
-            logger.warning(
-                f"Failed to scan referenced children tables from main history: {e}"
-            )
-
-        try:
-            cur = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'album_%' OR name LIKE 'playlist_%') AND name != 'download_history'"
-            )
-            for row in cur.fetchall():
-                table_name = row[0]
-                _create_or_update_children_table(conn, table_name)
-        except sqlite3.Error as e:
-            logger.warning(f"Failed to scan legacy children tables in history DB: {e}")
-        logger.info("Children history tables migration ensured")
-    except Exception:
-        logger.error("Failed migrating children history tables", exc_info=True)
-
-
-def _ensure_creds_filesystem() -> None:
-    try:
-        BLOBS_DIR.mkdir(parents=True, exist_ok=True)
-        if not SEARCH_JSON.exists():
-            SEARCH_JSON.write_text(
-                '{ "client_id": "", "client_secret": "" }\n', encoding="utf-8"
-            )
-            logger.info(f"Created default global Spotify creds file at {SEARCH_JSON}")
-    except Exception:
-        logger.error(
-            "Failed to ensure credentials filesystem (blobs/search.json)", exc_info=True
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE 'album_%' OR name LIKE 'playlist_%') AND name != 'download_history'"
         )
+        for row in cur.fetchall():
+            if row and row[0]:
+                tables.add(row[0])
+    except sqlite3.Error as e:
+        logger.warning(f"Failed to scan sqlite_master for children tables: {e}")
+
+    try:
+        cur = conn.execute(
+            "SELECT DISTINCT children_table FROM download_history WHERE children_table IS NOT NULL AND TRIM(children_table) != ''"
+        )
+        for row in cur.fetchall():
+            t = row[0]
+            if t:
+                tables.add(t)
+    except sqlite3.Error as e:
+        logger.warning(f"Failed to scan download_history for children tables: {e}")
+
+    return sorted(tables)
 
 
-def _apply_versioned_updates(
-    conn: sqlite3.Connection, c_base, u_base, post_update=None
-) -> None:
-    if not c_base(conn):
-        u_base(conn)
-    if post_update:
-        post_update(conn)
+def _is_history_at_least_3_2_0(conn: sqlite3.Connection) -> bool:
+    required_cols = {"service", "quality_format", "quality_bitrate"}
+    tables = _history_children_tables(conn)
+    if not tables:
+        # Nothing to migrate implies OK
+        return True
+    for t in tables:
+        try:
+            cur = conn.execute(f"PRAGMA table_info({t})")
+            cols = {row[1] for row in cur.fetchall()}
+            if not required_cols.issubset(cols):
+                return False
+        except sqlite3.OperationalError:
+            return False
+    return True
 
 
-# --- 3.1.2 upgrade helpers for Watch DBs ---
+# --- 3.2.0 verification helpers for Watch DBs ---
 
 
 def _update_watch_playlists_db(conn: sqlite3.Connection) -> None:
@@ -298,10 +285,10 @@ def _update_watch_playlists_db(conn: sqlite3.Connection) -> None:
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({table_name})",
             )
-        logger.info("Upgraded watch playlists DB to 3.1.2 schema")
+        logger.info("Upgraded watch playlists DB to 3.2.0 base schema")
     except Exception:
         logger.error(
-            "Failed to upgrade watch playlists DB to 3.1.2 schema", exc_info=True
+            "Failed to upgrade watch playlists DB to 3.2.0 base schema", exc_info=True
         )
 
 
@@ -361,10 +348,24 @@ def _update_watch_artists_db(conn: sqlite3.Connection) -> None:
                 EXPECTED_ARTIST_ALBUMS_COLUMNS,
                 f"artist albums ({table_name})",
             )
-        logger.info("Upgraded watch artists DB to 3.1.2 schema")
+        logger.info("Upgraded watch artists DB to 3.2.0 base schema")
     except Exception:
         logger.error(
-            "Failed to upgrade watch artists DB to 3.1.2 schema", exc_info=True
+            "Failed to upgrade watch artists DB to 3.2.0 base schema", exc_info=True
+        )
+
+
+def _ensure_creds_filesystem() -> None:
+    try:
+        BLOBS_DIR.mkdir(parents=True, exist_ok=True)
+        if not SEARCH_JSON.exists():
+            SEARCH_JSON.write_text(
+                '{ "client_id": "", "client_secret": "" }\n', encoding="utf-8"
+            )
+            logger.info(f"Created default global Spotify creds file at {SEARCH_JSON}")
+    except Exception:
+        logger.error(
+            "Failed to ensure credentials filesystem (blobs/search.json)", exc_info=True
         )
 
 
@@ -374,75 +375,42 @@ def run_migrations_if_needed():
         return
 
     try:
-        # History DB
-        with _safe_connect(HISTORY_DB) as conn:
-            if conn:
-                _apply_versioned_updates(
-                    conn,
-                    m306.check_history,
-                    m306.update_history,
-                    post_update=_update_children_tables_for_history,
+        # Require instance to be at least 3.2.0 on history DB; otherwise abort
+        with _safe_connect(HISTORY_DB) as history_conn:
+            if history_conn and not _is_history_at_least_3_2_0(history_conn):
+                logger.error(
+                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.1."
                 )
-                _apply_versioned_updates(conn, m311.check_history, m311.update_history)
-                _apply_versioned_updates(conn, m312.check_history, m312.update_history)
-                conn.commit()
+                raise RuntimeError(
+                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.1."
+                )
 
         # Watch playlists DB
         with _safe_connect(PLAYLISTS_DB) as conn:
             if conn:
-                _apply_versioned_updates(
-                    conn,
-                    m306.check_watch_playlists,
-                    m306.update_watch_playlists,
-                )
-                _apply_versioned_updates(
-                    conn,
-                    m311.check_watch_playlists,
-                    m311.update_watch_playlists,
-                )
-                _apply_versioned_updates(
-                    conn,
-                    m312.check_watch_playlists,
-                    m312.update_watch_playlists,
-                )
                 _update_watch_playlists_db(conn)
+                # Apply 3.2.0 additions (batch progress columns)
+                if not m320.check_watch_playlists(conn):
+                    m320.update_watch_playlists(conn)
                 conn.commit()
 
-        # Watch artists DB
+        # Watch artists DB (if exists)
         if ARTISTS_DB.exists():
             with _safe_connect(ARTISTS_DB) as conn:
                 if conn:
-                    _apply_versioned_updates(
-                        conn, m306.check_watch_artists, m306.update_watch_artists
-                    )
-                    _apply_versioned_updates(
-                        conn, m310.check_watch_artists, m310.update_watch_artists
-                    )
-                    _apply_versioned_updates(
-                        conn, m311.check_watch_artists, m311.update_watch_artists
-                    )
-                    _apply_versioned_updates(
-                        conn, m312.check_watch_artists, m312.update_watch_artists
-                    )
                     _update_watch_artists_db(conn)
+                    if not m320.check_watch_artists(conn):
+                        m320.update_watch_artists(conn)
                     conn.commit()
 
-        # Accounts DB
+        # Accounts DB (no changes for this migration path)
         with _safe_connect(ACCOUNTS_DB) as conn:
             if conn:
-                _apply_versioned_updates(
-                    conn, m306.check_accounts, m306.update_accounts
-                )
-                _apply_versioned_updates(
-                    conn, m311.check_accounts, m311.update_accounts
-                )
-                _apply_versioned_updates(
-                    conn, m312.check_accounts, m312.update_accounts
-                )
                 conn.commit()
 
     except Exception as e:
         logger.error("Error during migration: %s", e, exc_info=True)
+        raise
     else:
         _ensure_creds_filesystem()
-        logger.info("Database migrations check completed")
+        logger.info("Database migrations check completed (3.2.0 -> 3.2.1 path)")

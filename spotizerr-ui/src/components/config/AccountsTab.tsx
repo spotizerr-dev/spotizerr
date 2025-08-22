@@ -85,6 +85,7 @@ export function AccountsTab() {
     onSuccess: () => {
       toast.success("Account added successfully!");
       queryClient.invalidateQueries({ queryKey: ["credentials", activeService] });
+      queryClient.invalidateQueries({ queryKey: ["config"] }); // Invalidate config to update active Spotify account in UI
       setIsAdding(false);
       setSubmitError(null);
       reset();

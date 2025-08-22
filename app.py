@@ -25,6 +25,7 @@ except Exception as e:
     logging.getLogger(__name__).error(
         f"Database migration step failed early in startup: {e}", exc_info=True
     )
+    sys.exit(1)
 
 # Import route routers (to be created)
 from routes.auth.credentials import router as credentials_router
@@ -46,6 +47,9 @@ from routes.utils.celery_config import REDIS_URL
 # Import authentication system
 from routes.auth import AUTH_ENABLED
 from routes.auth.middleware import AuthMiddleware
+
+# Import watch manager controls (start/stop) without triggering side effects
+from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
 
 # Import and initialize routes (this will start the watch manager)
 
@@ -166,9 +170,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logging.error(f"Failed to start Celery workers: {e}")
 
+    # Start Watch Manager after Celery is up
+    try:
+        start_watch_manager()
+        logging.info("Watch Manager initialized and registered for shutdown.")
+    except Exception as e:
+        logging.error(
+            f"Could not start Watch Manager: {e}. Watch functionality will be disabled.",
+            exc_info=True,
+        )
+
     yield
 
     # Shutdown
+    try:
+        stop_watch_manager()
+        logging.info("Watch Manager stopped")
+    except Exception as e:
+        logging.error(f"Error stopping Watch Manager: {e}")
+
     try:
         celery_manager.stop()
         logging.info("Celery workers stopped")

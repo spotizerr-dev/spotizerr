@@ -1,4 +1,5 @@
 import json
+from routes.utils.watch.manager import get_watch_config
 import logging
 from routes.utils.celery_queue_manager import download_queue_manager
 from routes.utils.get_info import get_spotify_info
@@ -86,16 +87,16 @@ def get_artist_discography(
         raise
 
 
-def download_artist_albums(
-    url, album_type="album,single,compilation", request_args=None, username=None
-):
+def download_artist_albums(url, album_type=None, request_args=None, username=None):
     """
     Download albums by an artist, filtered by album types.
+    If album_type is not provided, uses the watchedArtistAlbumGroup setting from watch config.
 
     Args:
         url (str): Spotify artist URL
         album_type (str): Comma-separated list of album types to download
                          (album, single, compilation, appears_on)
+                         If None, uses watchedArtistAlbumGroup setting
         request_args (dict): Original request arguments for tracking
         username (str | None): Username initiating the request, used for per-user separation
 
@@ -118,39 +119,82 @@ def download_artist_albums(
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    artist_data = get_spotify_info(artist_id, "artist_discography")
+    # Get watch config to determine which album groups to download
+    watch_config = get_watch_config()
+    allowed_groups = [
+        g.lower()
+        for g in watch_config.get("watchedArtistAlbumGroup", ["album", "single"])
+    ]
+    logger.info(
+        f"Filtering albums by watchedArtistAlbumGroup setting (exact album_group match): {allowed_groups}"
+    )
 
-    if not artist_data or "items" not in artist_data:
+    # Fetch all artist albums with pagination
+    all_artist_albums = []
+    offset = 0
+    limit = 50  # Spotify API limit for artist albums
+
+    logger.info(f"Fetching all albums for artist ID: {artist_id} with pagination")
+
+    while True:
+        logger.debug(
+            f"Fetching albums for {artist_id}. Limit: {limit}, Offset: {offset}"
+        )
+        artist_data_page = get_spotify_info(
+            artist_id, "artist_discography", limit=limit, offset=offset
+        )
+
+        if not artist_data_page or not isinstance(artist_data_page.get("items"), list):
+            logger.warning(
+                f"No album items found or invalid format for artist {artist_id} at offset {offset}. Response: {artist_data_page}"
+            )
+            break
+
+        current_page_albums = artist_data_page.get("items", [])
+        if not current_page_albums:
+            logger.info(
+                f"No more albums on page for artist {artist_id} at offset {offset}. Total fetched so far: {len(all_artist_albums)}."
+            )
+            break
+
+        logger.debug(
+            f"Fetched {len(current_page_albums)} albums on current page for artist {artist_id}."
+        )
+        all_artist_albums.extend(current_page_albums)
+
+        # Check if Spotify indicates a next page URL
+        if artist_data_page.get("next"):
+            offset += limit  # Increment offset by the limit used for the request
+        else:
+            logger.info(
+                f"No next page URL for artist {artist_id}. Pagination complete. Total albums fetched: {len(all_artist_albums)}."
+            )
+            break
+
+    if not all_artist_albums:
         raise ValueError(
             f"Failed to retrieve artist data or no albums found for artist ID {artist_id}"
         )
 
-    allowed_types = [t.strip().lower() for t in album_type.split(",")]
-    logger.info(f"Filtering albums by types: {allowed_types}")
-
+    # Filter albums based on the allowed types using album_group field (like in manager.py)
     filtered_albums = []
-    for album in artist_data.get("items", []):
-        album_type_value = album.get("album_type", "").lower()
+    for album in all_artist_albums:
         album_group_value = album.get("album_group", "").lower()
+        album_name = album.get("name", "Unknown Album")
+        album_id = album.get("id", "Unknown ID")
 
-        if (
-            (
-                "album" in allowed_types
-                and album_type_value == "album"
-                and album_group_value == "album"
-            )
-            or (
-                "single" in allowed_types
-                and album_type_value == "single"
-                and album_group_value == "single"
-            )
-            or ("compilation" in allowed_types and album_type_value == "compilation")
-            or ("appears_on" in allowed_types and album_group_value == "appears_on")
-        ):
+        # Exact album_group match only (align with watch manager)
+        is_matching_group = album_group_value in allowed_groups
+
+        logger.debug(
+            f"Album {album_name} ({album_id}): album_group={album_group_value}. Allowed groups: {allowed_groups}. Match: {is_matching_group}."
+        )
+
+        if is_matching_group:
             filtered_albums.append(album)
 
     if not filtered_albums:
-        logger.warning(f"No albums match the specified types: {album_type}")
+        logger.warning(f"No albums match the specified groups: {allowed_groups}")
         return [], []
 
     successfully_queued_albums = []
@@ -168,7 +212,7 @@ def download_artist_albums(
 
         if not album_url:
             logger.warning(
-                f"Skipping album '{album_name}' because it has no Spotify URL."
+                f"Skipping album {album_name} because it has no Spotify URL."
             )
             continue
 
@@ -211,6 +255,6 @@ def download_artist_albums(
             )
 
     logger.info(
-        f"Artist album processing: {len(successfully_queued_albums)} queued, {len(duplicate_albums)} duplicates found."
+        f"Artist album processing: {len(successfully_queued_albums)} queued, {len(duplicate_albums)} duplicates found from {len(filtered_albums)} matching albums out of {len(all_artist_albums)} total albums."
     )
     return successfully_queued_albums, duplicate_albums
