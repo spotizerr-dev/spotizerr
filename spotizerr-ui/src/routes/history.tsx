@@ -166,18 +166,32 @@ export const History = () => {
         cell: (info) => {
           const entry = info.row.original;
           const isChild = "album_title" in entry;
-          return isChild ? (
+          const historyEntry = entry as HistoryEntry;
+          const spotifyId = historyEntry.external_ids?.spotify;
+          const downloadType = historyEntry.download_type;
+
+          const titleContent = isChild ? (
             <span className="pl-4 text-muted-foreground">└─ {entry.title}</span>
           ) : (
             <div className="flex items-center gap-2">
               <span className="font-semibold">{entry.title}</span>
-              {(entry as HistoryEntry).children_table && (
+              {historyEntry.children_table && (
                 <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                  {(entry as HistoryEntry).total_tracks || "?"} tracks
+                  {historyEntry.total_tracks || "?"} tracks
                 </span>
               )}
             </div>
           );
+
+          if (!isChild && spotifyId && downloadType) {
+            return (
+              <a href={`/${downloadType}/${spotifyId}`} className="hover:underline">
+                {titleContent}
+              </a>
+            );
+          }
+
+          return titleContent;
         },
       }),
       columnHelper.accessor("artists", {
