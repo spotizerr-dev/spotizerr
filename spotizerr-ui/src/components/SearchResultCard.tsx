@@ -1,4 +1,7 @@
 import { Link } from "@tanstack/react-router";
+import { useContext, useEffect } from "react";
+import { toast } from "sonner";
+import { QueueContext, getStatus } from "../contexts/queue-context";
 
 interface SearchResultCardProps {
   id: string;
@@ -10,6 +13,19 @@ interface SearchResultCardProps {
 }
 
 export const SearchResultCard = ({ id, name, subtitle, imageUrl, type, onDownload }: SearchResultCardProps) => {
+  const context = useContext(QueueContext);
+  if (!context) throw new Error("useQueue must be used within a QueueProvider");
+  const { items } = context;
+  const queueItem = items.find(item => item.downloadType === type && item.spotifyId === id);
+  const status = queueItem ? getStatus(queueItem) : null;
+
+  useEffect(() => {
+    if (status === "queued") {
+      toast.success(`${name} queued.`);
+    } else if (status === "error") {
+      toast.error(`Failed to queue ${name}`);
+    }
+  }, [status]);
   const getLinkPath = () => {
     switch (type) {
       case "track":
@@ -32,10 +48,26 @@ export const SearchResultCard = ({ id, name, subtitle, imageUrl, type, onDownloa
         {onDownload && (
           <button
             onClick={onDownload}
-            className="absolute bottom-2 right-2 p-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-full transition-opacity shadow-lg opacity-0 group-hover:opacity-100 duration-300 z-10"
-            title={`Download ${type}`}
+            disabled={!!status && status !== "error"}
+            className="absolute bottom-2 right-2 p-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-full transition-opacity shadow-lg opacity-0 group-hover:opacity-100 duration-300 z-10 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={
+              status
+                ? status === "queued"
+                  ? `${name} queued`
+                  : status === "error"
+                  ? `Download ${type}`
+                  : "Downloading..."
+                : `Download ${type}`
+            }
           >
-            <img src="/download.svg" alt="Download" className="w-5 h-5 logo" />
+            {status
+              ? status === "queued"
+                ? "Queued."
+                : status === "error"
+                ? <img src="/download.svg" alt="Download" className="w-5 h-5 logo" />
+                : "Downloading..."
+              : <img src="/download.svg" alt="Download" className="w-5 h-5 logo" />
+            }
           </button>
         )}
       </div>

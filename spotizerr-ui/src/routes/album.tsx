@@ -1,7 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState, useContext, useRef, useCallback } from "react";
 import apiClient from "../lib/api-client";
-import { QueueContext } from "../contexts/queue-context";
+import { QueueContext, getStatus } from "../contexts/queue-context";
 import { useSettings } from "../contexts/settings-context";
 import type { AlbumType, TrackType } from "../types/spotify";
 import { toast } from "sonner";
@@ -24,7 +24,19 @@ export const Album = () => {
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
-  const { addItem } = context;
+  const { addItem, items } = context;
+
+  // Queue status for this album
+  const albumQueueItem = items.find(item => item.downloadType === "album" && item.spotifyId === album?.id);
+  const albumStatus = albumQueueItem ? getStatus(albumQueueItem) : null;
+
+  useEffect(() => {
+    if (albumStatus === "queued") {
+      toast.success(`${album?.name} queued.`);
+    } else if (albumStatus === "error") {
+      toast.error(`Failed to queue ${album?.name}`);
+    }
+  }, [albumStatus]);
 
   const totalTracks = album?.total_tracks ?? 0;
   const hasMore = tracks.length < totalTracks;
@@ -174,13 +186,27 @@ export const Album = () => {
         <div className="mt-4 md:mt-6">
           <button
             onClick={handleDownloadAlbum}
-            disabled={isExplicitFilterEnabled && hasExplicitTrack}
+            disabled={(isExplicitFilterEnabled && hasExplicitTrack) || (!!albumQueueItem && albumStatus !== "error")}
             className="w-full px-6 py-3 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold shadow-sm"
             title={
-              isExplicitFilterEnabled && hasExplicitTrack ? "Album contains explicit tracks" : "Download Full Album"
+              isExplicitFilterEnabled && hasExplicitTrack
+                ? "Album contains explicit tracks"
+                : albumStatus
+                ? albumStatus === "queued"
+                  ? "Album queued"
+                  : albumStatus === "error"
+                  ? "Download Full Album"
+                  : "Downloading..."
+                : "Download Full Album"
             }
           >
-            Download Album
+            {albumStatus
+              ? albumStatus === "queued"
+                ? "Queued."
+                : albumStatus === "error"
+                ? "Download Album"
+                : "Downloading..."
+              : "Download Album"}
           </button>
         </div>
       </div>

@@ -4,7 +4,7 @@ import apiClient from "../lib/api-client";
 import { useSettings } from "../contexts/settings-context";
 import { toast } from "sonner";
 import type { TrackType, PlaylistMetadataType, PlaylistTracksResponseType, PlaylistItemType } from "../types/spotify";
-import { QueueContext } from "../contexts/queue-context";
+import { QueueContext, getStatus } from "../contexts/queue-context";
 import { FaArrowLeft } from "react-icons/fa";
 
 
@@ -28,7 +28,21 @@ export const Playlist = () => {
   if (!context) {
     throw new Error("useQueue must be used within a QueueProvider");
   }
-  const { addItem } = context;
+  const { addItem, items } = context;
+
+  // Playlist queue status
+  const playlistQueueItem = playlistMetadata
+    ? items.find(item => item.downloadType === "playlist" && item.spotifyId === playlistMetadata.id)
+    : undefined;
+  const playlistStatus = playlistQueueItem ? getStatus(playlistQueueItem) : null;
+
+  useEffect(() => {
+    if (playlistStatus === "queued") {
+      toast.success(`${playlistMetadata?.name} queued.`);
+    } else if (playlistStatus === "error") {
+      toast.error(`Failed to queue ${playlistMetadata?.name}`);
+    }
+  }, [playlistStatus]);
 
   // Load playlist metadata first
   useEffect(() => {
@@ -167,6 +181,14 @@ export const Playlist = () => {
     return <div className="p-8 text-center">Loading playlist...</div>;
   }
 
+  // Map track download statuses
+  const trackStatuses = tracks.reduce((acc, { track }) => {
+    if (!track) return acc;
+    const qi = items.find(item => item.downloadType === "track" && item.spotifyId === track.id);
+    acc[track.id] = qi ? getStatus(qi) : null;
+    return acc;
+  }, {} as Record<string, string | null>);
+
   const filteredTracks = tracks.filter(({ track }) => {
     if (!track) return false;
     if (settings?.explicitFilter && track.explicit) return false;
@@ -209,25 +231,34 @@ export const Playlist = () => {
         <div className="mt-4 md:mt-6 flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
             onClick={handleDownloadPlaylist}
-            className="flex-1 px-6 py-3 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-lg transition-all font-semibold shadow-sm"
+            disabled={!!playlistQueueItem && playlistStatus !== "error"}
+            className="flex-1 px-6 py-3 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-lg transition-all font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Download All
+            {playlistStatus
+              ? playlistStatus === "queued"
+                ? "Queued."
+                : playlistStatus === "error"
+                ? "Download All"
+                : "Downloading..."
+              : "Download All"}
           </button>
-          <button
-            onClick={handleToggleWatch}
-            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg transition-all font-semibold shadow-sm ${
-              isWatched
-                ? "bg-error hover:bg-error-hover text-button-primary-text"
-                : "bg-surface-muted dark:bg-surface-muted-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark"
-            }`}
-          >
-            <img
-              src={isWatched ? "/eye-crossed.svg" : "/eye.svg"}
-              alt="Watch status"
-              className={`w-5 h-5 ${isWatched ? "icon-inverse" : "logo"}`}
-            />
-            {isWatched ? "Unwatch" : "Watch"}
-          </button>
+          {settings?.watch?.enabled && (
+            <button
+              onClick={handleToggleWatch}
+              className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg transition-all font-semibold shadow-sm ${
+                isWatched
+                  ? "bg-error hover:bg-error-hover text-button-primary-text"
+                  : "bg-surface-muted dark:bg-surface-muted-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark"
+              }`}
+            >
+              <img
+                src={isWatched ? "/eye-crossed.svg" : "/eye.svg"}
+                alt="Watch status"
+                className={`w-5 h-5 ${isWatched ? "icon-inverse" : "logo"}`}
+              />
+              {isWatched ? "Unwatch" : "Watch"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -287,10 +318,26 @@ export const Playlist = () => {
                     </span>
                     <button
                       onClick={() => handleDownloadTrack(track)}
-                      className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center bg-surface-muted dark:bg-surface-muted-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark border border-border-muted dark:border-border-muted-dark hover:border-border-accent dark:hover:border-border-accent-dark rounded-full transition-all hover:scale-105 hover:shadow-sm"
-                      title="Download"
+                      disabled={!!trackStatuses[track.id] && trackStatuses[track.id] !== "error"}
+                      className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center bg-surface-muted dark:bg-surface-muted-dark hover:bg-surface-accent dark:hover:bg-surface-accent-dark border border-border-muted dark:border-border-muted-dark hover:border-border-accent dark:hover:border-border-accent-dark rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={
+                        trackStatuses[track.id]
+                          ? trackStatuses[track.id] === "queued"
+                            ? "Queued."
+                            : trackStatuses[track.id] === "error"
+                            ? "Download"
+                            : "Downloading..."
+                          : "Download"
+                      }
                     >
-                      <img src="/download.svg" alt="Download" className="w-4 h-4 logo" />
+                      {trackStatuses[track.id]
+                        ? trackStatuses[track.id] === "queued"
+                          ? "Queued."
+                          : trackStatuses[track.id] === "error"
+                          ? <img src="/download.svg" alt="Download" className="w-4 h-4 logo" />
+                          : "Downloading..."
+                        : <img src="/download.svg" alt="Download" className="w-4 h-4 logo" />
+                      }
                     </button>
                   </div>
                 </div>
