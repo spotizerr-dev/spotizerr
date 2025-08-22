@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
@@ -80,20 +80,16 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
   const queryClient = useQueryClient();
   const dirInputRef = useRef<HTMLInputElement | null>(null);
   const trackInputRef = useRef<HTMLInputElement | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   const mutation = useMutation({
     mutationFn: saveFormattingConfig,
     onSuccess: () => {
       toast.success("Formatting settings saved!");
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => {
+      console.error("Failed to save formatting settings:", error.message);
       toast.error(`Failed to save settings: ${error.message}`);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
@@ -131,12 +127,6 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <div className="flex items-center justify-end mb-4">
         <div className="flex items-center gap-3">
-          {saveStatus === "success" && (
-            <span className="text-success text-sm">Saved</span>
-          )}
-          {saveStatus === "error" && (
-            <span className="text-error text-sm">Save failed</span>
-          )}
           <button
             type="submit"
             disabled={mutation.isPending}

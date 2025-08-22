@@ -3,7 +3,7 @@ import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "../../contexts/settings-context";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 // --- Type Definitions ---
 interface Credential {
@@ -56,20 +56,15 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
     }
   }, [config, reset]);
 
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
-
   const mutation = useMutation({
     mutationFn: saveGeneralConfig,
     onSuccess: () => {
       toast.success("General settings saved!");
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (e: Error) => {
+      console.error("Failed to save general settings:", e.message);
       toast.error(`Failed to save: ${e.message}`);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
@@ -84,12 +79,6 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <div className="flex items-center justify-end mb-4">
         <div className="flex items-center gap-3">
-          {saveStatus === "success" && (
-            <span className="text-success text-sm">Saved</span>
-          )}
-          {saveStatus === "error" && (
-            <span className="text-error text-sm">Save failed</span>
-          )}
           <button
             type="submit"
             disabled={mutation.isPending}
@@ -103,14 +92,18 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Service Defaults</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="service" className="text-content-primary dark:text-content-primary-dark">Default Service</label>
+          <label htmlFor="service" className="text-content-primary dark:text-content-primary-dark">
+            Default Service
+          </label>
           <select
             id="service"
             {...register("service")}
             className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           >
             <option value="spotify">Spotify</option>
-            <option value="deezer" disabled>Deezer (not yet...)</option>
+            <option value="deezer" disabled>
+              Deezer (not yet...)
+            </option>
           </select>
         </div>
       </div>
@@ -118,7 +111,9 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Spotify Settings</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="spotifyAccount" className="text-content-primary dark:text-content-primary-dark">Active Spotify Account</label>
+          <label htmlFor="spotifyAccount" className="text-content-primary dark:text-content-primary-dark">
+            Active Spotify Account
+          </label>
           <select
             id="spotifyAccount"
             {...register("spotify")}
@@ -136,7 +131,9 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Deezer Settings</h3>
         <div className="flex flex-col gap-2">
-          <label htmlFor="deezerAccount" className="text-content-primary dark:text-content-primary-dark">Active Deezer Account</label>
+          <label htmlFor="deezerAccount" className="text-content-primary dark:text-content-primary-dark">
+            Active Deezer Account
+          </label>
           <select
             id="deezerAccount"
             {...register("deezer")}
@@ -159,7 +156,9 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
             <span className={`font-semibold ${globalSettings?.explicitFilter ? "text-success" : "text-error"}`}>
               {globalSettings?.explicitFilter ? "Enabled" : "Disabled"}
             </span>
-            <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark px-2 py-1 rounded-full">ENV</span>
+            <span className="text-xs bg-surface-accent dark:bg-surface-accent-dark text-content-primary dark:text-content-primary-dark px-2 py-1 rounded-full">
+              ENV
+            </span>
           </div>
         </div>
         <p className="text-sm text-content-muted dark:text-content-muted-dark mt-1">
