@@ -53,7 +53,7 @@ const CONVERSION_FORMATS: Record<string, string[]> = {
 
 // --- API Functions ---
 const saveDownloadConfig = async (data: Partial<DownloadSettings>) => {
-  const payload: any = { ...data };
+  const payload: Partial<DownloadSettings> = { ...data };
   const { data: response } = await authApiClient.client.post("/config", payload);
   return response;
 };
@@ -72,7 +72,6 @@ const fetchCredentials = async (service: "spotify" | "deezer"): Promise<Credenti
 export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   const queryClient = useQueryClient();
   const [validationError, setValidationError] = useState<string>("");
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   // Fetch watch config
   const { data: watchConfig } = useQuery({
@@ -89,7 +88,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   });
 
   const { data: deezerCredentials } = useQuery({
-    queryKey: ["credentials", "deezer"], 
+    queryKey: ["credentials", "deezer"],
     queryFn: () => fetchCredentials("deezer"),
     staleTime: 30000,
   });
@@ -98,14 +97,11 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
     mutationFn: saveDownloadConfig,
     onSuccess: () => {
       toast.success("Download settings saved successfully!");
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => {
+      console.error("Failed to save settings", error.message);
       toast.error(`Failed to save settings: ${error.message}`);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
@@ -126,12 +122,12 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
   // Validation effect for watch + download method requirement
   useEffect(() => {
     let error = "";
-    
+
     // Check watch requirements
     if (watchConfig?.enabled && !realTime && !fallback) {
       error = "When watch is enabled, either Real-time downloading or Download Fallback (or both) must be enabled.";
     }
-    
+
     // Check fallback account requirements
     if (fallback && (!spotifyCredentials?.length || !deezerCredentials?.length)) {
       const missingServices: string[] = [];
@@ -139,7 +135,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       if (!deezerCredentials?.length) missingServices.push("Deezer");
       error = `Download Fallback requires accounts to be configured for both services. Missing: ${missingServices.join(", ")}. Configure accounts in the Accounts tab.`;
     }
-    
+
     setValidationError(error);
   }, [watchConfig?.enabled, realTime, fallback, spotifyCredentials?.length, deezerCredentials?.length]);
 
@@ -180,12 +176,6 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <div className="flex items-center justify-end mb-4">
         <div className="flex items-center gap-3">
-          {saveStatus === "success" && (
-            <span className="text-success text-sm">Saved</span>
-          )}
-          {saveStatus === "error" && (
-            <span className="text-error text-sm">Save failed</span>
-          )}
           <button
             type="submit"
             disabled={mutation.isPending || !!validationError}
@@ -248,7 +238,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
         <p className="text-sm text-content-muted dark:text-content-muted-dark">
           When enabled, downloads will be organized in user-specific subdirectories (downloads/username/...)
         </p>
-        
+
         {/* Watch validation info */}
         {watchConfig?.enabled && (
           <div className="p-3 bg-info/10 border border-info/20 rounded-lg">
@@ -260,7 +250,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
             </p>
           </div>
         )}
-        
+
         {/* Fallback account requirements info */}
         {fallback && (!spotifyCredentials?.length || !deezerCredentials?.length) && (
           <div className="p-3 bg-warning/10 border border-warning/20 rounded-lg">
@@ -272,7 +262,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
             </p>
           </div>
         )}
-        
+
         {/* Validation error display */}
         {validationError && (
           <div className="p-3 bg-error/10 border border-error/20 rounded-lg">

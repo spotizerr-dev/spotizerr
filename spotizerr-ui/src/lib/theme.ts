@@ -1,71 +1,80 @@
 // Theme management functions
-export function getTheme(): 'light' | 'dark' | 'system' {
-  return (localStorage.getItem('theme') as 'light' | 'dark' | 'system') || 'system';
+export function getTheme(): "light" | "dark" | "system" {
+  return (localStorage.getItem("theme") as "light" | "dark" | "system") || "system";
 }
 
-export function setTheme(theme: 'light' | 'dark' | 'system') {
-  localStorage.setItem('theme', theme);
+export function setTheme(theme: "light" | "dark" | "system") {
+  localStorage.setItem("theme", theme);
   applyTheme(theme);
+  dispatchThemeChange();
 }
 
 export function toggleTheme() {
   const currentTheme = getTheme();
-  let nextTheme: 'light' | 'dark' | 'system';
-  
+  let nextTheme: "light" | "dark" | "system";
+
   switch (currentTheme) {
-    case 'light':
-      nextTheme = 'dark';
+    case "light":
+      nextTheme = "dark";
       break;
-    case 'dark':
-      nextTheme = 'system';
+    case "dark":
+      nextTheme = "system";
       break;
     default:
-      nextTheme = 'light';
+      nextTheme = "light";
       break;
   }
-  
+
   setTheme(nextTheme);
   return nextTheme;
 }
 
-function applyTheme(theme: 'light' | 'dark' | 'system') {
+function applyTheme(theme: "light" | "dark" | "system") {
   const root = document.documentElement;
-  
-  if (theme === 'system') {
+
+  if (theme === "system") {
     // Use system preference
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (prefersDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-  } else if (theme === 'dark') {
-    root.classList.add('dark');
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (prefersDark) root.classList.add("dark");
+    else root.classList.remove("dark");
+  } else if (theme === "dark") {
+    root.classList.add("dark");
   } else {
-    root.classList.remove('dark');
+    root.classList.remove("dark");
   }
+}
+
+function dispatchThemeChange() {
+  window.dispatchEvent(new CustomEvent("app-theme-changed"));
+}
+
+export function getEffectiveTheme(): "light" | "dark" {
+  const stored = getTheme();
+  if (stored === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return stored;
 }
 
 // Dark mode detection and setup
 export function setupDarkMode() {
   // First, ensure we start with a clean slate
-  document.documentElement.classList.remove('dark');
-  
+  document.documentElement.classList.remove("dark");
+
   const savedTheme = getTheme();
   applyTheme(savedTheme);
-  
+  dispatchThemeChange();
+
   // Listen for system theme changes (only when using system theme)
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   const handleSystemThemeChange = (e: MediaQueryListEvent) => {
     // Only respond to system changes when we're in system mode
-    if (getTheme() === 'system') {
-      if (e.matches) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+    if (getTheme() === "system") {
+      if (e.matches) document.documentElement.classList.add("dark");
+      else document.documentElement.classList.remove("dark");
+      dispatchThemeChange();
     }
   };
-  
-  mediaQuery.addEventListener('change', handleSystemThemeChange);
-} 
+
+  mediaQuery.addEventListener("change", handleSystemThemeChange);
+}
