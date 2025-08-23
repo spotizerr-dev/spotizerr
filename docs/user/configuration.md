@@ -9,7 +9,7 @@ Open Configuration in the web UI. Tabs:
 - Downloads (admin)
   - Concurrent downloads, retry behavior
   - Quality/format defaults and conversion
-  - Real-time mode (Spotify only): aligns download time with track length
+  - Real-time mode: aligns download time with track length
 - Formatting (admin)
   - File/folder naming patterns (examples)
     - `%artist%/%album%/%tracknum%. %title%`
@@ -17,8 +17,8 @@ Open Configuration in the web UI. Tabs:
 - Accounts (admin)
   - Spotify: use `spotizerr-auth` to add credentials
   - Deezer ARL (optional):
-    - Chrome/Edge: devtools → Application → Cookies → https://www.deezer.com → copy `arl`
-    - Firefox: devtools → Storage → Cookies → https://www.deezer.com → copy `arl`
+    - Chrome/Edge: DevTools → Application → Cookies → https://www.deezer.com → copy `arl`
+    - Firefox: DevTools → Storage → Cookies → https://www.deezer.com → copy `arl`
     - Paste ARL in Accounts
   - Select main account when multiple exist
 - Watch (admin)
@@ -31,17 +31,14 @@ Open Configuration in the web UI. Tabs:
   - Change password, view role and email
 
 Quality formats (reference):
-
 - Spotify: OGG 96k/160k/320k (320k requires Premium)
 - Deezer: MP3 128k/320k (320k may require Premium), FLAC (Premium)
 - Conversion: MP3/FLAC/AAC/OGG/OPUS/WAV/ALAC with custom bitrate
 
 Fallback system:
-
 - Configure primary and fallback services
 - Automatically switches if primary fails (useful for geo/account limits)
 
 Notes:
-
 - Explicit content filter applies in pages (e.g., hides explicit tracks on album/playlist views)
 - Watch system must be enabled before adding items

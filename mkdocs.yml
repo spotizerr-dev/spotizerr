@@ -21,7 +21,7 @@ nav:
   - Watchlist: user/watchlist
   - History: user/history
   - Multi-user: user/multi-user
-  - API: API_DOCUMENTATION
+  - API: api
 markdown_extensions:
   - toc:
       permalink: true

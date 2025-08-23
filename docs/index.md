@@ -13,4 +13,4 @@ Start with Getting started, then explore the sections below.
 - [History](user/history.md)
 - [Multi-user](user/multi-user.md)
 
-For API details, see [API](API_DOCUMENTATION.md).
+For API details, see [API](api.md).

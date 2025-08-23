@@ -1,18 +1,13 @@
 ## Albums
 
-Open an album from search or artist page.
+- Open from Search or an Artist page.
+- Actions:
+  - Download full album or any track
+  - Browse tracklist (order, artists, duration)
+  - Large albums: tracks load in pages as you scroll
+- Explicit filter hides explicit tracks when enabled in Config
 
-- Download
-  - Download full album
-  - Download individual tracks from the tracklist
-- Tracklist
-  - Shows order, artists, and duration
-  - Respects explicit filter (hidden if enabled)
-- Large albums
-  - Tracks load progressively as you scroll
-
-Backend endpoints used:
-
-- GET `/api/album/info?id=...&limit=50&offset=...` (metadata + paged tracks)
-- GET `/api/album/download/{album_id}` (queue download)
-- GET `/api/progress/stream` (live queue updates)
+Endpoints:
+- GET `/api/album/info?id=...&limit=50&offset=...` — album metadata + paged tracks
+- GET `/api/album/download/{album_id}` — queue album download
+- GET `/api/prgs/stream` — live progress via SSE
