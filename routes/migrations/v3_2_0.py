@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 class MigrationV3_2_0:
     """
-    Migration for version 3.2.0 (upgrade path 3.2.0 -> 3.2.1).
+    Migration for version 3.2.0 (upgrade path 3.2.0 -> 3.2.2).
     - Adds per-item batch progress columns to Watch DBs to support page-by-interval processing.
     - Enforces prerequisite: previous instance version must be 3.1.2 (validated by runner).
     """
@@ -21,7 +21,7 @@ class MigrationV3_2_0:
         "batch_next_offset": "INTEGER DEFAULT 0",
     }
 
-    # --- No-op for history/accounts in 3.2.1 ---
+    # --- No-op for history/accounts in 3.2.2 ---
 
     def check_history(self, conn: sqlite3.Connection) -> bool:
         return True
@@ -59,14 +59,14 @@ class MigrationV3_2_0:
                         f"ALTER TABLE watched_playlists ADD COLUMN {col_name} {col_type}"
                     )
                     logger.info(
-                        f"Added column '{col_name} {col_type}' to watched_playlists for 3.2.1 batch progress."
+                        f"Added column '{col_name} {col_type}' to watched_playlists for 3.2.2 batch progress."
                     )
                 except sqlite3.OperationalError as e:
                     logger.warning(
                         f"Could not add column '{col_name}' to watched_playlists: {e}"
                     )
         except Exception:
-            logger.error("Failed to update watched_playlists for 3.2.1", exc_info=True)
+            logger.error("Failed to update watched_playlists for 3.2.2", exc_info=True)
 
     # --- Watch: artists ---
 
@@ -90,11 +90,11 @@ class MigrationV3_2_0:
                         f"ALTER TABLE watched_artists ADD COLUMN {col_name} {col_type}"
                     )
                     logger.info(
-                        f"Added column '{col_name} {col_type}' to watched_artists for 3.2.1 batch progress."
+                        f"Added column '{col_name} {col_type}' to watched_artists for 3.2.2 batch progress."
                     )
                 except sqlite3.OperationalError as e:
                     logger.warning(
                         f"Could not add column '{col_name}' to watched_artists: {e}"
                     )
         except Exception:
-            logger.error("Failed to update watched_artists for 3.2.1", exc_info=True)
+            logger.error("Failed to update watched_artists for 3.2.2", exc_info=True)

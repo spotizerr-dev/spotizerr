@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from .v3_2_0 import MigrationV3_2_0
+from .v3_2_1 import log_noop_migration_detected
 
 logger = logging.getLogger(__name__)
 
@@ -379,10 +380,10 @@ def run_migrations_if_needed():
         with _safe_connect(HISTORY_DB) as history_conn:
             if history_conn and not _is_history_at_least_3_2_0(history_conn):
                 logger.error(
-                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.1."
+                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.2."
                 )
                 raise RuntimeError(
-                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.1."
+                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.2."
                 )
 
         # Watch playlists DB
@@ -413,4 +414,5 @@ def run_migrations_if_needed():
         raise
     else:
         _ensure_creds_filesystem()
-        logger.info("Database migrations check completed (3.2.0 -> 3.2.1 path)")
+        log_noop_migration_detected()
+        logger.info("Database migrations check completed (3.2.0 -> 3.2.2 path)")
