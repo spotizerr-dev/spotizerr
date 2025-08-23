@@ -12,9 +12,10 @@ Open a playlist from search.
   - Add/remove playlist to Watchlist (auto-download new additions when enabled)
 
 How-to: download a playlist
-1. Search for the playlist or paste its Spotify URL
-2. Click Download
-3. Monitor progress in the Queue; results appear in History
+
+  1. Search for the playlist or paste its Spotify URL
+  2. Click Download
+  3. Monitor progress in the Queue; results appear in History
 
 Backend endpoints used:
 

@@ -1,6 +1,6 @@
 ## Artists
 
-- Open an artist from search.
+Open an artist from search.
 
 - Discography
   - Albums, Singles, Compilations, Appears On sections
@@ -27,4 +27,5 @@ Backend endpoints used:
 
 - GET `/api/artist/info?id=...&limit=20&offset=...` (metadata + paged albums)
 - GET `/api/artist/download/{artist_id}?album_type=album,single,compilation` (queue discography)
-- PUT `/api/artist/watch/{artist_id}` / DELETE `/api/artist/watch/{artist_id}` / GET `/api/artist/watch/{artist_id}/status`
+- PUT `/api/artist/watch/{artist_id}` / DELETE `/api/artist/watch/{artist_id}`
+- GET `/api/artist/watch/{artist_id}/status`
