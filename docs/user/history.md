@@ -9,8 +9,8 @@ See all downloads and their outcomes.
   - Open an entry to view child tracks for albums/playlists
   - Re-queue failures from the UI
 
-- Backend endpoints used:
-  - GET `/api/history?download_type=&status=&limit=&offset=`
-  - GET `/api/history/{task_id}` (entry)
-  - GET `/api/history/{task_id}/children` (child tracks)
-  - GET `/api/history/stats`, `/api/history/recent`, `/api/history/failed` (summaries)
+Backend endpoints used:
+- GET `/api/history?download_type=&status=&limit=&offset=`
+- GET `/api/history/{task_id}` (entry)
+- GET `/api/history/{task_id}/children` (child tracks)
+- GET `/api/history/stats`, `/api/history/recent`, `/api/history/failed` (summaries)
