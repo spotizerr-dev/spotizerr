@@ -2,19 +2,23 @@
 
 Authentication is optional. When enabled:
 
-- Login/Register
+Login/Register
+
   - Local accounts with username/password
   - First registered user becomes admin
   - Public registration can be disabled
 
-- SSO (optional)
+SSO (optional)
+
   - Google and GitHub when configured
 
-- Roles
+Roles
+
   - User: can search/download, manage their profile
   - Admin: access to all Configuration tabs and user management
 
-- Admin actions
+Admin actions
+
   - Create/delete users, change roles
   - Reset user passwords
 
