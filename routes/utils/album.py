@@ -101,7 +101,7 @@ def download_album(
                     )
                     dl.download_albumspo(
                         link_album=url,  # Spotify URL
-                        output_dir="./downloads",
+                        output_dir="/app/downloads",
                         quality_download=quality,  # Deezer quality
                         recursive_quality=recursive_quality,
                         recursive_download=False,
@@ -159,7 +159,7 @@ def download_album(
                         )
                         spo.download_album(
                             link_album=url,  # Spotify URL
-                            output_dir="./downloads",
+                            output_dir="/app/downloads",
                             quality_download=fall_quality,  # Spotify quality
                             recursive_quality=recursive_quality,
                             recursive_download=False,
@@ -216,7 +216,7 @@ def download_album(
                 )
                 spo.download_album(
                     link_album=url,
-                    output_dir="./downloads",
+                    output_dir="/app/downloads",
                     quality_download=quality,
                     recursive_quality=recursive_quality,
                     recursive_download=False,
@@ -260,7 +260,7 @@ def download_album(
             )
             dl.download_albumdee(  # Deezer URL, download via Deezer
                 link_album=url,
-                output_dir="./downloads",
+                output_dir="/app/downloads",
                 quality_download=quality,
                 recursive_quality=recursive_quality,
                 recursive_download=False,

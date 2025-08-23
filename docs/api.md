@@ -129,7 +129,7 @@ Get SSO configuration and available providers.
 #### `GET /auth/sso/login/google`
 Redirect to Google OAuth.
 
-#### `GET /auth/sso/login/github`  
+#### `GET /auth/sso/login/github`
 Redirect to GitHub OAuth.
 
 #### `GET /auth/sso/callback/google`
@@ -168,7 +168,7 @@ Get track metadata.
 ```json
 {
   "id": "string",
-  "name": "string", 
+  "name": "string",
   "artists": [{"name": "string"}],
   "album": {"name": "string"},
   "duration_ms": 180000,
@@ -196,6 +196,8 @@ Download an entire album.
 Get album metadata.
 **Query Parameters:**
 - `id`: Spotify album ID
+- `limit`: Tracks page size (optional)
+- `offset`: Tracks page offset (optional)
 
 ### Playlist Downloads
 
@@ -216,6 +218,7 @@ Download an entire playlist.
 Get playlist metadata.
 **Query Parameters:**
 - `id`: Spotify playlist ID
+- `include_tracks`: true to include tracks (default: false)
 
 #### `GET /playlist/metadata`
 Get detailed playlist metadata including tracks.
@@ -244,14 +247,12 @@ Download artist's discography.
 }
 ```
 
-#### `GET /artist/download/cancel`
-**Query Parameters:**
-- `task_id`: Task ID to cancel
-
 #### `GET /artist/info`
 Get artist metadata.
 **Query Parameters:**
 - `id`: Spotify artist ID
+- `limit`: Albums page size (default: 10, min: 1)
+- `offset`: Albums page offset (default: 0, min: 0)
 
 ## 📺 Watch Functionality
 
@@ -371,11 +372,11 @@ Search Spotify content.
 ### Task Monitoring
 
 #### `GET /prgs/list`
-List all tasks with optional filtering.
+List tasks with pagination.
 **Query Parameters:**
-- `status`: Filter by status (`pending`, `running`, `completed`, `failed`)
-- `download_type`: Filter by type (`track`, `album`, `playlist`)
-- `limit`: Results limit
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 50, max: 100)
+- `active_only`: If true, only return active tasks
 
 #### `GET /prgs/{task_id}`
 Get specific task details and progress.
@@ -383,7 +384,10 @@ Get specific task details and progress.
 #### `GET /prgs/updates`
 Get task updates since last check.
 **Query Parameters:**
-- `since`: Timestamp to get updates since
+- `since`: Unix timestamp (required for delta updates). If omitted, returns a paginated snapshot.
+- `page`: Page number for non-active tasks (default: 1)
+- `limit`: Items per page for non-active tasks (default: 20, max: 100)
+- `active_only`: If true, only return active tasks
 
 #### `GET /prgs/stream`
 **Server-Sent Events (SSE)** endpoint for real-time progress updates.
@@ -448,13 +452,13 @@ Get download statistics.
 #### `GET /history/search`
 Search download history.
 **Query Parameters:**
-- `q`: Search query
-- `field`: Field to search (`name`, `artist`, `url`)
+- `q`: Search query (required)
+- `limit`: Max results (default: 50, max: 200)
 
 #### `GET /history/recent`
 Get recent downloads.
 **Query Parameters:**
-- `hours`: Hours to look back (default: 24)
+- `limit`: Max results (default: 20, max: 100)
 
 #### `GET /history/failed`
 Get failed downloads.
@@ -464,8 +468,7 @@ Clean up old history entries.
 **Request:**
 ```json
 {
-  "older_than_days": 30,
-  "keep_failed": true
+  "days_old": 30
 }
 ```
 
@@ -641,4 +644,4 @@ curl -X PUT "http://localhost:7171/api/playlist/watch/37i9dQZF1DXcBWIGoYBM5M" \
 
 ---
 
-*This documentation covers all endpoints discovered in the Spotizerr routes directory. The API is designed for high-throughput music downloading with comprehensive monitoring and management capabilities.* 
+*This documentation covers all endpoints discovered in the Spotizerr routes directory. The API is designed for high-throughput music downloading with comprehensive monitoring and management capabilities.*

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { authApiClient } from "../../lib/api-client";
 import { toast } from "sonner";
@@ -46,20 +46,16 @@ function SpotifyApiForm() {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ["spotifyApiConfig"], queryFn: fetchSpotifyApiConfig });
   const { register, handleSubmit, reset } = useForm<SpotifyApiSettings>();
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   const mutation = useMutation({
     mutationFn: saveSpotifyApiConfig,
     onSuccess: () => {
       toast.success("Spotify API settings saved!");
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
       queryClient.invalidateQueries({ queryKey: ["spotifyApiConfig"] });
     },
     onError: (e) => {
+      console.error("Failed to save Spotify API settings:", e.message);
       toast.error(`Failed to save: ${e.message}`);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
@@ -75,12 +71,6 @@ function SpotifyApiForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="flex items-center justify-end mb-2">
         <div className="flex items-center gap-3">
-          {saveStatus === "success" && (
-            <span className="text-success text-sm">Saved</span>
-          )}
-          {saveStatus === "error" && (
-            <span className="text-error text-sm">Save failed</span>
-          )}
           <button
             type="submit"
             disabled={mutation.isPending}
@@ -120,20 +110,16 @@ function WebhookForm() {
   const { data, isLoading } = useQuery({ queryKey: ["webhookConfig"], queryFn: fetchWebhookConfig });
   const { register, handleSubmit, control, reset, watch } = useForm<WebhookSettings>();
   const currentUrl = watch("url");
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
 
   const mutation = useMutation({
     mutationFn: saveWebhookConfig,
     onSuccess: () => {
       // No toast needed since the function shows one
-      setSaveStatus("success");
-      setTimeout(() => setSaveStatus("idle"), 3000);
+
       queryClient.invalidateQueries({ queryKey: ["webhookConfig"] });
     },
     onError: (e) => {
       toast.error(`Failed to save: ${e.message}`);
-      setSaveStatus("error");
-      setTimeout(() => setSaveStatus("idle"), 3000);
     },
   });
 
@@ -157,12 +143,6 @@ function WebhookForm() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div className="flex items-center justify-end mb-2">
         <div className="flex items-center gap-3">
-          {saveStatus === "success" && (
-            <span className="text-success text-sm">Saved</span>
-          )}
-          {saveStatus === "error" && (
-            <span className="text-error text-sm">Save failed</span>
-          )}
           <button
             type="submit"
             disabled={mutation.isPending}

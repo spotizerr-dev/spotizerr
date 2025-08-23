@@ -1,0 +1,30 @@
+site_name: Spotizerr Documentation
+site_description: Straight-to-the-point docs for Spotizerr
+site_dir: site
+use_directory_urls: true
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+nav:
+  - Getting started: user/getting-started
+  - Configuration: user/configuration
+  - Environment: user/environment
+  - Tracks: user/tracks
+  - Albums: user/albums
+  - Playlists: user/playlists
+  - Artists: user/artists
+  - Watchlist: user/watchlist
+  - History: user/history
+  - Multi-user: user/multi-user
+  - API: api
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - tables
+  - fenced_code

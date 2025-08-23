@@ -94,7 +94,7 @@ def download_track(
                     # download_trackspo means: Spotify URL, download via Deezer
                     dl.download_trackspo(
                         link_track=url,  # Spotify URL
-                        output_dir="./downloads",
+                        output_dir="/app/downloads",
                         quality_download=quality,  # Deezer quality
                         recursive_quality=recursive_quality,
                         recursive_download=False,
@@ -153,7 +153,7 @@ def download_track(
                         )
                         spo.download_track(
                             link_track=url,  # Spotify URL
-                            output_dir="./downloads",
+                            output_dir="/app/downloads",
                             quality_download=fall_quality,  # Spotify quality
                             recursive_quality=recursive_quality,
                             recursive_download=False,
@@ -169,7 +169,7 @@ def download_track(
                             convert_to=convert_to,
                             bitrate=bitrate,
                             artist_separator=artist_separator,
-                            real_time_multiplier=real_time_multiplier,
+                            spotify_metadata=spotify_metadata,
                             pad_number_width=pad_number_width,
                         )
                         print(
@@ -211,7 +211,7 @@ def download_track(
                 )
                 spo.download_track(
                     link_track=url,
-                    output_dir="./downloads",
+                    output_dir="/app/downloads",
                     quality_download=quality,
                     recursive_quality=recursive_quality,
                     recursive_download=False,
@@ -254,7 +254,7 @@ def download_track(
             )
             dl.download_trackdee(  # Deezer URL, download via Deezer
                 link_track=url,
-                output_dir="./downloads",
+                output_dir="/app/downloads",
                 quality_download=quality,
                 recursive_quality=recursive_quality,
                 recursive_download=False,
