@@ -97,7 +97,7 @@ export const Home = () => {
     setIsBulkAdding(true);
     try {
       const response = await authApiClient.client.post("/bulk/bulk-add-spotify-links", { links: supportedLinks });
-      const { message, count, failed_links } = response.data;
+      const {count, failed_links } = response.data;
 
       if (failed_links && failed_links.length > 0) {
         toast.warning("Bulk Add Completed with Warnings", {
