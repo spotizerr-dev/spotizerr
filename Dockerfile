@@ -18,20 +18,29 @@ RUN uv pip install --target /python -r requirements.txt
 FROM debian:stable-slim AS ffmpeg
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl xz-utils \
+    ca-certificates curl xz-utils jq \
     && rm -rf /var/lib/apt/lists/*
-RUN case "$TARGETARCH" in \
-      amd64) FFMPEG_PKG=ffmpeg-master-latest-linux64-gpl.tar.xz ;; \
-      arm64) FFMPEG_PKG=ffmpeg-master-latest-linuxarm64-gpl.tar.xz ;; \
+RUN set -euo pipefail; \
+    case "$TARGETARCH" in \
+      amd64) ARCH_SUFFIX=linux64 ;; \
+      arm64) ARCH_SUFFIX=linuxarm64 ;; \
       *) echo "Unsupported arch: $TARGETARCH" && exit 1 ;; \
-    esac && \
-    curl -fsSL -o /tmp/ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/${FFMPEG_PKG} && \
-    tar -xJf /tmp/ffmpeg.tar.xz -C /tmp && \
+    esac; \
+    ASSET_URL=$(curl -fsSL https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest \
+      | jq -r ".assets[] | select(.name | endswith(\"${ARCH_SUFFIX}-gpl.tar.xz\")) | .browser_download_url" \
+      | head -n1); \
+    if [ -z "$ASSET_URL" ]; then \
+      echo "Failed to resolve FFmpeg asset for arch ${ARCH_SUFFIX}" && exit 1; \
+    fi; \
+    echo "Fetching FFmpeg from: $ASSET_URL"; \
+    curl -fsSL -o /tmp/ffmpeg.tar.xz "$ASSET_URL"; \
+    tar -xJf /tmp/ffmpeg.tar.xz -C /tmp; \
     mv /tmp/ffmpeg-* /ffmpeg
 
 # Stage 4: Prepare world-writable runtime directories
 FROM busybox:1.36.1-musl AS runtime-dirs
 RUN mkdir -p /artifact/downloads /artifact/data/config /artifact/data/creds /artifact/data/watch /artifact/data/history /artifact/logs/tasks \
+    && touch /artifact/.cache \
     && chmod -R 0777 /artifact
 
 # Stage 5: Final application image (distroless)
@@ -44,6 +53,9 @@ WORKDIR /app
 # Ensure Python finds vendored site-packages and unbuffered output
 ENV PYTHONPATH=/python
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONUTF8=1
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # Copy application code
 COPY --chown=65532:65532 . .

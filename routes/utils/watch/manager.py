@@ -1098,7 +1098,7 @@ def update_playlist_m3u_file(playlist_spotify_id: str):
         # Get configuration settings
 
         output_dir = (
-            "./downloads"  # This matches the output_dir used in download functions
+            "/app/downloads"  # This matches the output_dir used in download functions
         )
 
         # Get all tracks for the playlist
@@ -1125,14 +1125,14 @@ def update_playlist_m3u_file(playlist_spotify_id: str):
         skipped_missing_final_path = 0
 
         for track in tracks:
-            # Use final_path from deezspot summary and convert from ./downloads to ../ relative path
+            # Use final_path from deezspot summary and convert from /app/downloads to ../ relative path
             final_path = track.get("final_path")
             if not final_path:
                 skipped_missing_final_path += 1
                 continue
             normalized = str(final_path).replace("\\", "/")
-            if normalized.startswith("./downloads/"):
-                relative_path = normalized.replace("./downloads/", "../", 1)
+            if normalized.startswith("/app/downloads/"):
+                relative_path = normalized.replace("/app/downloads/", "../", 1)
             elif "/downloads/" in normalized.lower():
                 idx = normalized.lower().rfind("/downloads/")
                 relative_path = "../" + normalized[idx + len("/downloads/") :]
