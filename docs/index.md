@@ -4,6 +4,7 @@ Start with Getting started, then explore the sections below.
 
 - [Getting started](user/getting-started.md)
 - [Configuration](user/configuration.md)
+- [Environment](user/environment.md)
 - [Tracks](user/tracks.md)
 - [Albums](user/albums.md)
 - [Playlists](user/playlists.md)
