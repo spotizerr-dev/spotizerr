@@ -211,7 +211,7 @@ Access logs via Docker:
 docker logs spotizerr
 ```
 
-**Log Locations:**
+**Log and File Locations:**
 - Application Logs: `docker logs spotizerr` (main app and Celery workers)
 - Individual Task Logs: `./logs/tasks/` (inside container, maps to your volume)
 - Credentials: `./data/creds/`
@@ -221,12 +221,33 @@ docker logs spotizerr
 - Download History Database: `./data/history/`
 - Spotify Token Cache: `./.cache/` (if `SPOTIPY_CACHE_PATH` is mapped)
 
+**Global Logging Level:**
+The application's global logging level can be controlled via the `LOG_LEVEL` environment variable.
+Supported values (case-insensitive): `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`, `NOTSET`.
+If not set, the default logging level is `WARNING`.
+Example in `.env` file: `LOG_LEVEL=DEBUG`
+
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
+
+Here is the text to add to your `README.md` file, preferably after the "Quick Start" section:
+
+## 💻 Development Setup
+
+To run Spotizerr in development mode:
+
+1.  **Backend (API):**
+    *   Ensure Python dependencies are installed (e.g., using `uv pip install -r requirements.txt`).
+    *   Start a Redis server.
+    *   Run the app insidie your activated virtual env: `python3 app.py`
+2.  **Frontend (UI):**
+    *   Navigate to `spotizerr-ui/`.
+    *   Install dependencies: `pnpm install`.
+    *   Start the development server: `pnpm dev`.
 
 ## 📄 License
 
