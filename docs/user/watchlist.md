@@ -12,6 +12,7 @@ Enable the watch system in Configuration → Watch first.
   - Trigger a manual check if you want immediate processing
 
 Backend endpoints used:
+
 - Artists: PUT/DELETE/GET status under `/api/artist/watch/*`
 - Playlists: PUT/DELETE/GET status under `/api/playlist/watch/*`
 - Manual triggers: POST `/api/artist/watch/trigger_check` and `/api/playlist/watch/trigger_check`

@@ -17,6 +17,7 @@ How-to: download a playlist
 3. Monitor progress in the Queue; results appear in History
 
 Backend endpoints used:
+
 - GET `/api/playlist/metadata?id=...` (metadata only)
 - GET `/api/playlist/tracks?id=...&limit=50&offset=...` (paged tracks)
 - GET `/api/playlist/info?id=...&include_tracks=true` (full info when needed)

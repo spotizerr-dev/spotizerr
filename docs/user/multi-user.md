@@ -16,5 +16,6 @@ Authentication is optional. When enabled:
   - Reset user passwords
 
 Where to find it in the UI:
+
 - User menu (top-right) → Profile settings
 - Configuration → User Management (admin)

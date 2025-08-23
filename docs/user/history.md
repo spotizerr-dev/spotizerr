@@ -10,6 +10,7 @@ See all downloads and their outcomes.
   - Re-queue failures from the UI
 
 Backend endpoints used:
+
 - GET `/api/history?download_type=&status=&limit=&offset=`
 - GET `/api/history/{task_id}` (entry)
 - GET `/api/history/{task_id}/children` (child tracks)
