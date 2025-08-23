@@ -6,6 +6,7 @@ import type { TrackType, AlbumType, SearchResult } from "@/types/spotify";
 import { QueueContext } from "@/contexts/queue-context";
 import { SearchResultCard } from "@/components/SearchResultCard";
 import { indexRoute } from "@/router";
+import { Music, Disc, User, ListMusic } from "lucide-react";
 
 // Utility function to safely get properties from search results
 const safelyGetProperty = <T,>(obj: any, path: string[], fallback: T): T => {
@@ -164,19 +165,33 @@ export const Home = () => {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a track, album, or artist"
+          placeholder="Search for a track, album, artist, or playlist"
           className="flex-1 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
         />
-        <select
-          value={searchType}
-          onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")}
-          className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
-        >
-          <option value="track">Track</option>
-          <option value="album">Album</option>
-          <option value="artist">Artist</option>
-          <option value="playlist">Playlist</option>
-        </select>
+        <div className="flex gap-2">
+          {["track", "album", "artist", "playlist"].map((typeOption) => (
+            <button
+              key={typeOption}
+              onClick={() => setSearchType(typeOption as "track" | "album" | "artist" | "playlist")}
+              className={`flex items-center gap-1 p-2 rounded-md text-sm font-medium transition-colors border ${
+                searchType === typeOption
+                  ? "bg-green-600 text-white border-green-600"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600"
+              }`}
+              
+            >
+              {
+                {
+                  track: <Music size={16} />,
+                  album: <Disc size={16} />,
+                  artist: <User size={16} />,
+                  playlist: <ListMusic size={16} />,
+                }[typeOption]
+              }
+              {typeOption.charAt(0).toUpperCase() + typeOption.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
       <div className={`flex-1 px-4 md:px-0 pb-4 ${
         // Only restrict overflow on mobile when there are results, otherwise allow normal behavior
@@ -185,11 +200,11 @@ export const Home = () => {
         {isLoading ? (
           <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading results...</p>
         ) : (
-          <>
-            {resultComponent}
-            <div ref={loaderRef} />
-            {isLoadingMore && <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>}
-          </>
+              <>
+                {resultComponent}
+                <div ref={loaderRef} />
+                {isLoadingMore && <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>}
+              </>
         )}
       </div>
     </div>
