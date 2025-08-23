@@ -10,7 +10,7 @@ Quick start (Docker Compose):
 
 ```bash
 mkdir spotizerr && cd spotizerr
-mkdir -p data logs downloads
+mkdir -p data logs downloads && touch .cache
 wget https://github.com/spotizerr-dev/spotizerr/blob/main/docker-compose.yaml
 
 # Before running this last command, check your docker compose file first, it is well-documented.
