@@ -11,17 +11,17 @@ theme:
     - search.suggest
     - search.highlight
 nav:
-  - Home: docs/index.md
-  - Getting started: docs/user/getting-started.md
-  - Configuration: docs/user/configuration.md
-  - Tracks: docs/user/tracks.md
-  - Albums: docs/user/albums.md
-  - Playlists: docs/user/playlists.md
-  - Artists: docs/user/artists.md
-  - Watchlist: docs/user/watchlist.md
-  - History: docs/user/history.md
-  - Multi-user: docs/user/multi-user.md
-  - API: docs/API_DOCUMENTATION.md
+  - Home: index
+  - Getting started: user/getting-started
+  - Configuration: user/configuration
+  - Tracks: user/tracks
+  - Albums: user/albums
+  - Playlists: user/playlists
+  - Artists: user/artists
+  - Watchlist: user/watchlist
+  - History: user/history
+  - Multi-user: user/multi-user
+  - API: API_DOCUMENTATION
 markdown_extensions:
   - toc:
       permalink: true
