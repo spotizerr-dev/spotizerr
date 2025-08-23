@@ -1,6 +1,6 @@
 ## Artists
 
-Open an artist from search.
+- Open an artist from search.
 
 - Discography
   - Albums, Singles, Compilations, Appears On sections
