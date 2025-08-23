@@ -13,8 +13,6 @@ Location: project `.env`. Minimal reference for server admins.
 - REDIS_PASSWORD: Password
 
 ### File ownership & permissions
-- PUID: Container user ID owning downloads (default `1000`)
-- PGID: Container group ID owning downloads (default `1000`)
 - UMASK: Default permissions for new files (default `0022`)
 - SKIP_SET_PERMISSIONS: Skip permission fix on startup (`true|false`, default `false`)
 

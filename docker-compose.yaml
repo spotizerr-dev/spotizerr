@@ -1,17 +1,20 @@
 name: spotizerr
 services:
   spotizerr:
-    image: cooldockerizer93/spotizerr:beta
+    image: cooldockerizer93/spotizerr
+    user: "1000:1000" # Spotizerr user:group ids
     volumes:
-    - ./data:/app/data
-    - ./downloads:/app/downloads
-    - ./logs:/app/logs
+    # Ensure these dirs exist and are writable by the container user
+    - ./data:/app/data # data directory, contains config, creds, watch, history
+    - ./downloads:/app/downloads # downloads directory, contains downloaded files
+    - ./logs:/app/logs # logs directory, contains logs
     ports:
+    # Port to expose the app on
     - 7171:7171
     container_name: spotizerr-app
-    user: "1000:1000" # spotizerr user:group ids
     restart: unless-stopped
     env_file:
+    # Ensure you have a .env file in the root of the project, with the correct values
     - .env
     depends_on:
     - redis

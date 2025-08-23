@@ -9,16 +9,11 @@
 Quick start (Docker Compose):
 
 ```bash
-# 1) Create a project directory
 mkdir spotizerr && cd spotizerr
+mkdir -p data logs downloads
+wget https://github.com/spotizerr-dev/spotizerr/blob/main/docker-compose.yaml
 
-# 2) Add .env
-# Download .env.example from the repo and create .env with your values
-
-# 3) Add docker-compose.yaml
-# Download docker-compose.yaml from the repo to this folder
-
-# 4) Start
+# Before running this last command, check your docker compose file first, it is well-documented.
 docker compose up -d
 ```
 
