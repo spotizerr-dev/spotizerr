@@ -1,62 +1,36 @@
-# Git
-.git
-.gitignore
-.gitattributes
+# Allowlist minimal build context
+*
 
-# Docker
-docker-compose.yaml
-docker-compose.yml
-Dockerfile
-.dockerignore
+# Backend
+!requirements.txt
+!app.py
+!routes/**
+# Re-ignore caches and compiled files inside routes
+routes/**/__pycache__/
+routes/**/.pytest_cache/
+routes/**/*.pyc
+routes/**/*.pyo
 
-# Node
-node_modules
-spotizerr-ui/node_modules
-npm-debug.log
-pnpm-lock.yaml
+# Frontend: only what's needed to build
+!spotizerr-ui/package.json
+!spotizerr-ui/pnpm-lock.yaml
+!spotizerr-ui/pnpm-workspace.yaml
+!spotizerr-ui/index.html
+!spotizerr-ui/vite.config.ts
+!spotizerr-ui/postcss.config.mjs
+!spotizerr-ui/tsconfig.json
+!spotizerr-ui/tsconfig.app.json
+!spotizerr-ui/tsconfig.node.json
+!spotizerr-ui/src/**
+!spotizerr-ui/public/**
+!spotizerr-ui/scripts/**
+# Exclude heavy/unnecessary frontend folders
+spotizerr-ui/node_modules/**
+spotizerr-ui/dist/**
+spotizerr-ui/dev-dist/**
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-.env
-.venv
-venv/
-env/
-.env.example
-
-# Editor/OS
-.vscode
-.idea
-.DS_Store
-*.swp
-
-# Application data
-credentials.json
-test.py
-downloads/
-creds/
-Test.py
-prgs/
-flask_server.log
-test.sh
-routes/__pycache__/*
-routes/utils/__pycache__/*
-search_test.py
-config/main.json
-.cache
-config/state/queue_state.json
-output.log
-queue_state.json
-search_demo.py
-celery_worker.log
-static/js/*
+# Always exclude local data/logs/tests/etc.
+.data/
 logs/
-data
+Downloads/
 tests/
-
-# Non-essential files
-docs/
-README.md

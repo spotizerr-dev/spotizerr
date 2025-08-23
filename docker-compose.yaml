@@ -1,7 +1,7 @@
 name: spotizerr
 services:
   spotizerr:
-    image: cooldockerizer93/spotizerr
+    image: cooldockerizer93/spotizerr:beta
     volumes:
     - ./data:/app/data
     - ./downloads:/app/downloads
@@ -9,6 +9,7 @@ services:
     ports:
     - 7171:7171
     container_name: spotizerr-app
+    user: "1000:1000" # spotizerr user:group ids
     restart: unless-stopped
     env_file:
     - .env

@@ -7,3 +7,5 @@ bcrypt==4.2.1
 PyJWT==2.10.1
 python-multipart==0.0.17
 fastapi-sso==0.18.0
+redis==5.0.7
+async-timeout==4.0.3

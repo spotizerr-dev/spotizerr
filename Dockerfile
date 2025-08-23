@@ -7,40 +7,59 @@ RUN pnpm install --frozen-lockfile
 COPY spotizerr-ui/. .
 RUN pnpm build
 
-# Stage 2: Final application image
-FROM python:3.12-slim
+# Stage 2: Python dependencies builder (create relocatable deps dir)
+FROM python:3.11-slim AS py-deps
+WORKDIR /app
+COPY requirements.txt .
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
+RUN uv pip install --target /python -r requirements.txt
 
-# Set an environment variable for non-interactive frontend installation
-ENV DEBIAN_FRONTEND=noninteractive
+# Stage 3: Fetch static ffmpeg/ffprobe binaries
+FROM debian:stable-slim AS ffmpeg
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+RUN case "$TARGETARCH" in \
+      amd64) FFMPEG_PKG=ffmpeg-master-latest-linux64-gpl.tar.xz ;; \
+      arm64) FFMPEG_PKG=ffmpeg-master-latest-linuxarm64-gpl.tar.xz ;; \
+      *) echo "Unsupported arch: $TARGETARCH" && exit 1 ;; \
+    esac && \
+    curl -fsSL -o /tmp/ffmpeg.tar.xz https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/${FFMPEG_PKG} && \
+    tar -xJf /tmp/ffmpeg.tar.xz -C /tmp && \
+    mv /tmp/ffmpeg-* /ffmpeg
+
+# Stage 4: Prepare world-writable runtime directories
+FROM busybox:1.36.1-musl AS runtime-dirs
+RUN mkdir -p /artifact/downloads /artifact/data/config /artifact/data/creds /artifact/data/watch /artifact/data/history /artifact/logs/tasks \
+    && chmod -R 0777 /artifact
+
+# Stage 5: Final application image (distroless)
+FROM gcr.io/distroless/python3-debian12
 
 LABEL org.opencontainers.image.source="https://github.com/Xoconoch/spotizerr"
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg gosu\
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Ensure Python finds vendored site-packages and unbuffered output
+ENV PYTHONPATH=/python
+ENV PYTHONUNBUFFERED=1
 
-# Install Python dependencies
-COPY requirements.txt .
+# Copy application code
+COPY --chown=65532:65532 . .
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
-RUN uv pip install --system -r requirements.txt
+# Copy compiled assets from the frontend build
+COPY --from=frontend-builder --chown=65532:65532 /app/spotizerr-ui/dist ./spotizerr-ui/dist
 
-# Copy application code (excluding UI source and TS source)
-COPY . .
+# Copy vendored Python dependencies
+COPY --from=py-deps --chown=65532:65532 /python /python
 
-# Copy compiled assets from previous stages
-COPY --from=frontend-builder /app/spotizerr-ui/dist ./spotizerr-ui/dist
+# Copy static ffmpeg binaries
+COPY --from=ffmpeg --chown=65532:65532 /ffmpeg/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg --chown=65532:65532 /ffmpeg/bin/ffprobe /usr/local/bin/ffprobe
 
-# Create necessary directories with proper permissions
-RUN mkdir -p downloads data/config data/creds data/watch data/history logs/tasks && \
-    chmod -R 777 downloads data logs
+# Copy pre-created world-writable runtime directories
+COPY --from=runtime-dirs --chown=65532:65532 /artifact/ ./
 
-# Make entrypoint script executable
-RUN chmod +x entrypoint.sh
-
-# Set entrypoint to our script
-ENTRYPOINT ["/app/entrypoint.sh"]
+# No shell or package manager available in distroless
+ENTRYPOINT ["python3", "app.py"]
