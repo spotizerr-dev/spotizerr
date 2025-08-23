@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 class MigrationV3_2_1:
     """
-    No-op migration for version 3.2.1 (upgrade path 3.2.1 -> 3.2.2).
+    No-op migration for version 3.2.1 (upgrade path 3.2.1 -> 3.3.0).
     No database schema changes are required.
     """
 
@@ -37,5 +37,5 @@ class MigrationV3_2_1:
 
 def log_noop_migration_detected() -> None:
     logger.info(
-        "No migration performed: detected schema for 3.2.1; no changes needed for 3.2.1 -> 3.2.2."
+        "No migration performed: detected schema for 3.2.1; no changes needed for 3.2.1 -> 3.3.0."
     )
