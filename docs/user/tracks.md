@@ -10,7 +10,7 @@ Find a track via search or open a track page.
 - Details shown
   - Artists, album, duration, popularity
 
-Backend endpoints used:
-- GET `/api/track/info?id=...` (metadata)
-- GET `/api/track/download/{track_id}` (queue download)
-- GET `/api/progress/stream` (live queue updates)
+- Backend endpoints used:
+  - GET `/api/track/info?id=...` (metadata)
+  - GET `/api/track/download/{track_id}` (queue download)
+  - GET `/api/progress/stream` (live queue updates)

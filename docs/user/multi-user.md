@@ -15,6 +15,6 @@ Authentication is optional. When enabled:
   - Create/delete users, change roles
   - Reset user passwords
 
-Where to find it in the UI:
-- User menu (top-right) → Profile settings
-- Configuration → User Management (admin)
+- Where to find it in the UI:
+  - User menu (top-right) → Profile settings
+  - Configuration → User Management (admin)

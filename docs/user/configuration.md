@@ -30,15 +30,15 @@ Open Configuration in the web UI. Tabs:
 - Profile (all users when auth is enabled)
   - Change password, view role and email
 
-Quality formats (reference):
-- Spotify: OGG 96k/160k/320k (320k requires Premium)
-- Deezer: MP3 128k/320k (320k may require Premium), FLAC (Premium)
-- Conversion: MP3/FLAC/AAC/OGG/OPUS/WAV/ALAC with custom bitrate
+- Quality formats (reference):
+  - Spotify: OGG 96k/160k/320k (320k requires Premium)
+  - Deezer: MP3 128k/320k (320k may require Premium), FLAC (Premium)
+  - Conversion: MP3/FLAC/AAC/OGG/OPUS/WAV/ALAC with custom bitrate
 
-Fallback system:
-- Configure primary and fallback services
-- Automatically switches if primary fails (useful for geo/account limits)
+- Fallback system:
+  - Configure primary and fallback services
+  - Automatically switches if primary fails (useful for geo/account limits)
 
-Notes:
-- Explicit content filter applies in pages (e.g., hides explicit tracks on album/playlist views)
-- Watch system must be enabled before adding items
+- Notes:
+  - Explicit content filter applies in pages (e.g., hides explicit tracks on album/playlist views)
+  - Watch system must be enabled before adding items
