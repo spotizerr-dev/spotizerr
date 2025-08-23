@@ -53,6 +53,19 @@ function extractApiErrorMessage(error: unknown): string {
       if (typeof data?.detail === "string") return data.detail;
       if (typeof data?.message === "string") return data.message;
       if (typeof data?.error === "string") return data.error;
+      // If data.error is an object, try to extract a message from it
+      if (typeof data?.error === "object" && data.error !== null && typeof data.error.message === "string") {
+        return data.error.message;
+      }
+      // If data is an object but none of the above matched, try JSON stringifying it
+      if (typeof data === "object" && data !== null) {
+        try {
+          return JSON.stringify(data);
+        } catch (e) {
+          // Fallback if stringify fails
+          return fallback;
+        }
+      }
     }
     if (typeof anyErr?.message === "string") return anyErr.message;
     return fallback;
@@ -66,7 +79,6 @@ export function AccountsTab() {
   const queryClient = useQueryClient();
   const [activeService, setActiveService] = useState<Service>("spotify");
   const [isAdding, setIsAdding] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { data: credentials, isLoading } = useQuery({
     queryKey: ["credentials", activeService],
@@ -87,13 +99,10 @@ export function AccountsTab() {
       queryClient.invalidateQueries({ queryKey: ["credentials", activeService] });
       queryClient.invalidateQueries({ queryKey: ["config"] }); // Invalidate config to update active Spotify account in UI
       setIsAdding(false);
-      setSubmitError(null);
       reset();
     },
     onError: (error) => {
       const msg = extractApiErrorMessage(error);
-      setSubmitError(msg);
-      toast.error(msg);
     },
   });
 
@@ -110,7 +119,6 @@ export function AccountsTab() {
   });
 
   const onSubmit: SubmitHandler<AccountFormData> = (data) => {
-    setSubmitError(null);
     addMutation.mutate({ service: activeService, data });
   };
 
@@ -118,11 +126,6 @@ export function AccountsTab() {
     <form onSubmit={handleSubmit(onSubmit)} className="p-4 border border-line dark:border-border-dark rounded-lg mt-4 space-y-4">
       <h4 className="font-semibold text-content-primary dark:text-content-primary-dark">Add New {activeService === "spotify" ? "Spotify" : "Deezer"} Account</h4>
 
-      {submitError && (
-        <div className="text-error-text bg-error-muted border border-error rounded p-2 text-sm">
-          {submitError}
-        </div>
-      )}
 
       <div className="flex flex-col gap-2">
         <label htmlFor="accountName" className="text-content-primary dark:text-content-primary-dark">Account Name</label>
