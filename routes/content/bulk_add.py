@@ -24,7 +24,7 @@ async def bulk_add_spotify_links(request: BulkAddLinksRequest):
         # Assuming links are pre-filtered by the frontend,
         # but still handle potential errors during info retrieval or unsupported types
         # Extract type and ID from the link directly using regex
-        match = re.match(r"https://open\.spotify\.com(?:/intl-[a-z]{2})?/(track|album|playlist|artist)/([a-zA-Z0-9]+)", link)
+        match = re.match(r"https://open\.spotify\.com(?:/intl-[a-z]{2})?/(track|album|playlist|artist)/([a-zA-Z0-9]+)(?:\?.*)?", link)
         if not match:
             logger.warning(f"Could not parse Spotify link (unexpected format after frontend filter): {link}")
             failed_links.append(link)
