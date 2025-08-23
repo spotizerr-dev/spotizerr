@@ -9,7 +9,7 @@ import { SearchResultCard } from "@/components/SearchResultCard";
 import { indexRoute } from "@/router";
 import { authApiClient } from "@/lib/api-client";
 import { useSettings } from "@/contexts/settings-context";
-import { FaEye } from "react-icons/fa";
+import { FaEye, FaDownload } from "react-icons/fa";
 
 // Utility function to safely get properties from search results
 const safelyGetProperty = <T,>(obj: any, path: string[], fallback: T): T => {
@@ -365,9 +365,13 @@ export const Home = () => {
             <button
               onClick={handleAddBulkLinks}
               disabled={isBulkAdding}
-              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {isBulkAdding ? "Adding..." : "Download"}
+              {isBulkAdding ? "Adding..." : (
+                <>
+                  <FaDownload className="icon-inverse" /> Download
+                </>
+              )}
             </button>
             {settings?.watch?.enabled && (
               <button
