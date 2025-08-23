@@ -11,6 +11,7 @@ theme:
     - search.suggest
     - search.highlight
 nav:
+  - Home: docs/index.md
   - Getting started: docs/user/getting-started.md
   - Configuration: docs/user/configuration.md
   - Tracks: docs/user/tracks.md
