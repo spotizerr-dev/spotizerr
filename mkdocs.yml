@@ -11,7 +11,7 @@ theme:
     - search.suggest
     - search.highlight
 nav:
-  - Home: /
+  - Home:
   - Getting started: user/getting-started
   - Configuration: user/configuration
   - Tracks: user/tracks
