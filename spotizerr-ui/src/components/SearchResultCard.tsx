@@ -49,7 +49,7 @@ export const SearchResultCard = ({ id, name, subtitle, imageUrl, type, onDownloa
           <button
             onClick={onDownload}
             disabled={!!status && status !== "error"}
-            className="absolute bottom-2 right-2 p-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-full transition-opacity shadow-lg opacity-0 group-hover:opacity-100 duration-300 z-10 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="absolute bottom-2 right-2 p-2 bg-button-success hover:bg-button-success-hover text-button-success-text rounded-full transition-opacity shadow-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100 duration-300 z-10 disabled:opacity-50 disabled:cursor-not-allowed"
             title={
               status
                 ? status === "queued"

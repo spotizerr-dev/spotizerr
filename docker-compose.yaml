@@ -1,16 +1,24 @@
+# HEY, YOU! READ THE DOCS BEFORE YOU DO ANYTHING!
+# https://spotizerr.rtfd.io
+
 name: spotizerr
 services:
   spotizerr:
     image: cooldockerizer93/spotizerr
+    user: "1000:1000" # Spotizerr user:group ids
     volumes:
-    - ./data:/app/data
-    - ./downloads:/app/downloads
-    - ./logs:/app/logs
+    # Ensure these directories and the .cache file exist and are writable by the container user
+    - ./data:/app/data # data directory, contains config, creds, watch, history
+    - ./downloads:/app/downloads # downloads directory, contains downloaded files
+    - ./logs:/app/logs # logs directory, contains logs
+    - ./.cache:/app/.cache # cache file
     ports:
+    # Port to expose the app on
     - 7171:7171
     container_name: spotizerr-app
     restart: unless-stopped
     env_file:
+    # Ensure you have a .env file in the root of the project, with the correct values
     - .env
     depends_on:
     - redis

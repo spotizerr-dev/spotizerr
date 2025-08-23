@@ -3,6 +3,7 @@ import logging
 import time
 import threading
 import os
+import sys
 
 # Import Celery task utilities
 from .celery_config import get_config_params, MAX_CONCURRENT_DL
@@ -49,6 +50,8 @@ class CeleryManager:
         # %h is replaced by celery with the actual hostname.
         hostname = f"worker_{worker_name_suffix}@%h"
         command = [
+            sys.executable,
+            "-m",
             "celery",
             "-A",
             self.app_name,
@@ -76,11 +79,14 @@ class CeleryManager:
                     log_method = logger.info  # Default log method
 
                     if error:  # This is a stderr stream
-                        if " - ERROR - " in line_stripped or " - CRITICAL - " in line_stripped:
+                        if (
+                            " - ERROR - " in line_stripped
+                            or " - CRITICAL - " in line_stripped
+                        ):
                             log_method = logger.error
                         elif " - WARNING - " in line_stripped:
                             log_method = logger.warning
-                    
+
                     log_method(f"{log_prefix}: {line_stripped}")
                 elif (
                     self.stop_event.is_set()
@@ -155,7 +161,8 @@ class CeleryManager:
                 queues="utility_tasks,default",  # Listen to utility and default
                 concurrency=5,  # Increased concurrency for SSE updates and utility tasks
                 worker_name_suffix="utw",  # Utility Worker
-                log_level_env=os.getenv("LOG_LEVEL", "WARNING").upper(),
+                log_level_env=os.getenv("LOG_LEVEL", "ERROR").upper(),
+
             )
             logger.info(
                 f"Starting Celery Utility Worker with command: {' '.join(utility_cmd)}"

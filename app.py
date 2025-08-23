@@ -41,7 +41,17 @@ except Exception as e:
 log_level_str = os.getenv("LOG_LEVEL", "WARNING").upper()
 log_level = LOG_LEVELS.get(log_level_str, logging.INFO)
 
-# Import route routers (to be created)
+# Apply process umask from environment as early as possible
+_umask_value = os.getenv("UMASK")
+if _umask_value:
+    try:
+        os.umask(int(_umask_value, 8))
+    except Exception:
+        # Defer logging setup; avoid failing on invalid UMASK
+        pass
+
+
+# Import and initialize routes (this will start the watch manager)
 from routes.auth.credentials import router as credentials_router
 from routes.auth.auth import router as auth_router
 from routes.content.album import router as album_router
@@ -66,7 +76,6 @@ from routes.auth.middleware import AuthMiddleware
 # Import watch manager controls (start/stop) without triggering side effects
 from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
 
-# Import and initialize routes (this will start the watch manager)
 
 
 # Configure application-wide logging
@@ -75,6 +84,17 @@ def setup_logging():
     # Create logs directory if it doesn't exist
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
+
+    # Ensure required runtime directories exist
+    for p in [
+        Path("downloads"),
+        Path("data/config"),
+        Path("data/creds"),
+        Path("data/watch"),
+        Path("data/history"),
+        Path("logs/tasks"),
+    ]:
+        p.mkdir(parents=True, exist_ok=True)
 
     # Set up log file paths
     main_log = logs_dir / "spotizerr.log"
@@ -131,6 +151,8 @@ def setup_logging():
 
 def check_redis_connection():
     """Check if Redis is available and accessible"""
+    from routes.utils.celery_config import REDIS_URL
+
     if not REDIS_URL:
         logging.error("REDIS_URL is not configured. Please check your environment.")
         return False
@@ -176,6 +198,20 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
 
+    # Run migrations before initializing services
+    try:
+        from routes.migrations import run_migrations_if_needed
+
+        run_migrations_if_needed()
+        logging.getLogger(__name__).info(
+            "Database migrations executed (if needed) early in startup."
+        )
+    except Exception as e:
+        logging.getLogger(__name__).error(
+            f"Database migration step failed early in startup: {e}", exc_info=True
+        )
+        sys.exit(1)
+
     # Check Redis connection
     if not check_redis_connection():
         logging.error(
@@ -185,6 +221,8 @@ async def lifespan(app: FastAPI):
 
     # Start Celery workers
     try:
+        from routes.utils.celery_manager import celery_manager
+
         celery_manager.start()
         logging.info("Celery workers started successfully")
     except Exception as e:
@@ -192,6 +230,8 @@ async def lifespan(app: FastAPI):
 
     # Start Watch Manager after Celery is up
     try:
+        from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
+
         start_watch_manager()
         logging.info("Watch Manager initialized and registered for shutdown.")
     except Exception as e:
@@ -204,12 +244,16 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     try:
+        from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
+
         stop_watch_manager()
         logging.info("Watch Manager stopped")
     except Exception as e:
         logging.error(f"Error stopping Watch Manager: {e}")
 
     try:
+        from routes.utils.celery_manager import celery_manager
+
         celery_manager.stop()
         logging.info("Celery workers stopped")
     except Exception as e:
@@ -235,13 +279,30 @@ def create_app():
     )
 
     # Add authentication middleware (only if auth is enabled)
-    if AUTH_ENABLED:
-        app.add_middleware(AuthMiddleware)
-        logging.info("Authentication system enabled")
-    else:
-        logging.info("Authentication system disabled")
+    try:
+        from routes.auth import AUTH_ENABLED
+        from routes.auth.middleware import AuthMiddleware
+
+        if AUTH_ENABLED:
+            app.add_middleware(AuthMiddleware)
+            logging.info("Authentication system enabled")
+        else:
+            logging.info("Authentication system disabled")
+    except Exception as e:
+        logging.warning(f"Auth system initialization failed or unavailable: {e}")
 
     # Register routers with URL prefixes
+    from routes.auth.auth import router as auth_router
+    from routes.system.config import router as config_router
+    from routes.core.search import router as search_router
+    from routes.auth.credentials import router as credentials_router
+    from routes.content.album import router as album_router
+    from routes.content.track import router as track_router
+    from routes.content.playlist import router as playlist_router
+    from routes.content.artist import router as artist_router
+    from routes.system.progress import router as prgs_router
+    from routes.core.history import router as history_router
+
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
     # Include SSO router if available
