@@ -10,10 +10,6 @@ A self-hosted music download manager with a lossless twist. Download everything 
 
 If you self-host a music server with other users than yourself, you almost certainly have realized that the process of adding requested items to the library is not without its friction. No matter how automated your flow is, unless your users are tech-savvy enough to do it themselves, chances are the process always needs some type of manual intervention from you, be it to rip the CDs yourself, tag some random files from youtube, etc. No more! Spotizerr allows for your users to access a nice little frontend where they can add whatever they want to the library without bothering you. What's that? You want some screenshots? Sure, why not:
 
-## How do I start?
-
-Docs are available at: https://spotizerr.rtfd.io
-
 <details>
   <summary>Main page</summary>
   <img width="393" height="743" alt="image" src="https://github.com/user-attachments/assets/f60e6c51-2ab2-4c4f-8572-a4c43e781758" />
@@ -30,6 +26,10 @@ Docs are available at: https://spotizerr.rtfd.io
   <summary>Download history</summary>
   <img width="1588" height="994" alt="image" src="https://github.com/user-attachments/assets/e34d7dbb-29e3-4d75-bcbd-0cee03fa57dc" />
 </details>
+
+## How do I start?
+
+Docs are available at: https://spotizerr.rtfd.io
 
 ### Common Issues
 
