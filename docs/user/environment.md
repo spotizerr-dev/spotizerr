@@ -33,6 +33,6 @@ Location: project `.env`. Minimal reference for server admins.
 - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 - GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
 
-Tips:
+### Tips
 - If running behind a reverse proxy, set `FRONTEND_URL` and `SSO_BASE_REDIRECT_URI` to public URLs.
 - Change `DEFAULT_ADMIN_*` on first login or disable registration and create users from the admin panel.

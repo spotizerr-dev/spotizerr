@@ -75,20 +75,20 @@ _Note: You will have to enable the virtual environment everytime you want to reg
 - Transfer playback to the temporary device when asked
 - Credentials are posted to Spotizerr automatically
 
-**Next steps:**
+### Next steps
 
 - Add Deezer ARL in Configuration → Accounts (optional, allows for FLAC availability if premium)
 - Adjust Download and Formatting options
 - Enable Watch system if you want automatic downloads
 
-**Troubleshooting (quick):**
+### Troubleshooting (quick)
 
 - Downloads not starting: verify service credentials and API keys
 - Watch not working: enable in Configuration → Watch and set intervals
 - Auth issues: ensure JWT secret and SSO creds (if used); try clearing browser cache
 - Queue stalling: force-refresh the page (ctrl+F5)
 
-**Logs:**
+### Logs
 ```bash
 docker logs spotizerr
 ```
