@@ -23,6 +23,22 @@ router = APIRouter()
 init_credentials_db()
 
 
+def _set_active_account_if_empty(service: str, name: str):
+    """
+    Sets the newly created account as the active account in the main config
+    if no active account is currently set for the given service.
+    """
+    try:
+        from routes.utils.celery_config import get_config_params as get_main_config_params
+        from routes.system.config import save_config
+        config = get_main_config_params()
+        if not config.get(service):
+            config[service] = name
+            save_config(config)
+    except Exception as e:
+        logger.warning(f"Could not set new {service.capitalize()} account '{name}' as active: {e}")
+
+
 @router.get("/spotify_api_config")
 @router.put("/spotify_api_config")
 async def handle_spotify_api_config(request: Request, current_user: User = Depends(require_admin_from_state)):
@@ -130,18 +146,7 @@ async def handle_create_credential(service: str, name: str, request: Request, cu
         # Validation is handled within create_credential utility function
         result = create_credential(service, name, data)
 
-        # set as active Spotify account if none is set
-        if service == "spotify":
-            try:
-                from routes.utils.celery_config import get_config_params as get_main_config_params
-                from routes.system.config import save_config
-                config = get_main_config_params()
-                # The field is likely "spotify" (as used in frontend)
-                if not config.get("spotify"):
-                    config["spotify"] = name
-                    save_config(config)
-            except Exception as e:
-                logger.warning(f"Could not set new Spotify account '{name}' as active: {e}")
+        _set_active_account_if_empty(service, name)
 
         return {
             "message": f"Credential for '{name}' ({service}) created successfully.",
