@@ -286,7 +286,6 @@ def _update_watch_playlists_db(conn: sqlite3.Connection) -> None:
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({table_name})",
             )
-        logger.info("Upgraded watch playlists DB to 3.2.0 base schema")
     except Exception:
         logger.error(
             "Failed to upgrade watch playlists DB to 3.2.0 base schema", exc_info=True
@@ -349,7 +348,6 @@ def _update_watch_artists_db(conn: sqlite3.Connection) -> None:
                 EXPECTED_ARTIST_ALBUMS_COLUMNS,
                 f"artist albums ({table_name})",
             )
-        logger.info("Upgraded watch artists DB to 3.2.0 base schema")
     except Exception:
         logger.error(
             "Failed to upgrade watch artists DB to 3.2.0 base schema", exc_info=True

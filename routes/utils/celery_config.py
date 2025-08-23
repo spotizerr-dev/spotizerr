@@ -28,6 +28,7 @@ CONFIG_FILE_PATH = Path("./data/config/main.json")
 
 DEFAULT_MAIN_CONFIG = {
     "service": "spotify",
+    "version": "3.2.2",
     "spotify": "",
     "deezer": "",
     "fallback": False,
