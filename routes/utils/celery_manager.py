@@ -2,6 +2,7 @@ import subprocess
 import logging
 import time
 import threading
+import os
 
 # Import Celery task utilities
 from .celery_config import get_config_params, MAX_CONCURRENT_DL
@@ -40,8 +41,10 @@ class CeleryManager:
         )
 
     def _get_worker_command(
-        self, queues, concurrency, worker_name_suffix, log_level="INFO"
+        self, queues, concurrency, worker_name_suffix, log_level_env=None
     ):
+        # Use LOG_LEVEL from environment if provided, otherwise default to INFO
+        log_level = log_level_env if log_level_env else os.getenv("LOG_LEVEL", "WARNING").upper()
         # Use a unique worker name to avoid conflicts.
         # %h is replaced by celery with the actual hostname.
         hostname = f"worker_{worker_name_suffix}@%h"
@@ -117,6 +120,7 @@ class CeleryManager:
                 queues="downloads",
                 concurrency=self.concurrency,
                 worker_name_suffix="dlw",  # Download Worker
+                log_level_env=os.getenv("LOG_LEVEL", "WARNING").upper(),
             )
             logger.info(
                 f"Starting Celery Download Worker with command: {' '.join(download_cmd)}"
@@ -151,7 +155,7 @@ class CeleryManager:
                 queues="utility_tasks,default",  # Listen to utility and default
                 concurrency=5,  # Increased concurrency for SSE updates and utility tasks
                 worker_name_suffix="utw",  # Utility Worker
-                log_level="ERROR"  # Reduce log verbosity for utility worker (only errors)
+                log_level_env=os.getenv("LOG_LEVEL", "WARNING").upper(),
             )
             logger.info(
                 f"Starting Celery Utility Worker with command: {' '.join(utility_cmd)}"
@@ -250,7 +254,7 @@ class CeleryManager:
 
                     # Restart only the download worker
                     download_cmd = self._get_worker_command(
-                        "downloads", self.concurrency, "dlw"
+                        "downloads", self.concurrency, "dlw", log_level_env=os.getenv("LOG_LEVEL", "WARNING").upper()
                     )
                     logger.info(
                         f"Restarting Celery Download Worker with command: {' '.join(download_cmd)}"
@@ -366,10 +370,7 @@ celery_manager = CeleryManager()
 
 # Example of how to use the manager (typically called from your main app script)
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(message)s",
-    )
+    # Removed logging.basicConfig as it's handled by the main app's setup_logging
     logger.info("Starting Celery Manager example...")
     celery_manager.start()
     try:

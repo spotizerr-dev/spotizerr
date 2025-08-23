@@ -31,12 +31,12 @@ class SSEBroadcaster:
     async def add_client(self, queue: asyncio.Queue):
         """Add a new SSE client"""
         self.clients.add(queue)
-        logger.info(f"SSE: Client connected (total: {len(self.clients)})")
+        logger.debug(f"SSE: Client connected (total: {len(self.clients)})")
         
     async def remove_client(self, queue: asyncio.Queue):
         """Remove an SSE client"""
         self.clients.discard(queue)
-        logger.info(f"SSE: Client disconnected (total: {len(self.clients)})")
+        logger.debug(f"SSE: Client disconnected (total: {len(self.clients)})")
         
     async def broadcast_event(self, event_data: dict):
         """Broadcast an event to all connected clients"""
@@ -69,7 +69,7 @@ class SSEBroadcaster:
         for client in disconnected:
             self.clients.discard(client)
             
-        logger.info(f"SSE Broadcaster: Successfully sent to {sent_count} clients, removed {len(disconnected)} disconnected clients")
+        logger.debug(f"SSE Broadcaster: Successfully sent to {sent_count} clients, removed {len(disconnected)} disconnected clients")
 
 # Global broadcaster instance
 sse_broadcaster = SSEBroadcaster()
@@ -139,7 +139,7 @@ def start_sse_redis_subscriber():
     # Start Redis subscriber in background thread
     thread = threading.Thread(target=redis_subscriber_thread, daemon=True)
     thread.start()
-    logger.info("SSE Redis Subscriber: Background thread started")
+    logger.debug("SSE Redis Subscriber: Background thread started")
 
 async def transform_callback_to_task_format(task_id: str, event_data: dict) -> Optional[dict]:
     """Transform callback event data into the task format expected by frontend"""
@@ -200,13 +200,7 @@ async def trigger_sse_update(task_id: str, reason: str = "task_update"):
         last_status = get_last_task_status(task_id)
         
         # Create a dummy request for the _build_task_response function
-        from fastapi import Request
-        class DummyRequest:
-            def __init__(self):
-                self.base_url = "http://localhost:7171"
-        
-        dummy_request = DummyRequest()
-        task_response = _build_task_response(task_info, last_status, task_id, current_time, dummy_request)
+        task_response = _build_task_response(task_info, last_status, task_id, current_time, request=None)
         
         # Create minimal event data - global counts will be added at broadcast time
         event_data = {
@@ -431,7 +425,7 @@ def _build_error_callback_object(last_status):
     return callback_object
 
 
-def _build_task_response(task_info, last_status, task_id, current_time, request: Request):
+def _build_task_response(task_info, last_status, task_id, current_time, request: Optional[Request] = None):
     """
     Helper function to build a standardized task response object.
     """
@@ -444,7 +438,7 @@ def _build_task_response(task_info, last_status, task_id, current_time, request:
         try:
             item_id = item_url.split("/")[-1]
             if item_id:
-                base_url = str(request.base_url).rstrip("/")
+                base_url = str(request.base_url).rstrip("/") if request else "http://localhost:7171"
                 dynamic_original_url = (
                     f"{base_url}/api/{download_type}/download/{item_id}"
                 )
@@ -496,7 +490,7 @@ def _build_task_response(task_info, last_status, task_id, current_time, request:
     return task_response
 
 
-async def get_paginated_tasks(page=1, limit=20, active_only=False, request: Request = None):
+async def get_paginated_tasks(page=1, limit=20, active_only=False, request: Optional[Request] = None):
     """
     Get paginated list of tasks.
     """
@@ -938,9 +932,9 @@ async def stream_task_updates(request: Request, current_user: User = Depends(get
         
         try:
             # Register this client with the broadcaster
-            logger.info(f"SSE Stream: New client connecting...")
+            logger.debug(f"SSE Stream: New client connecting...")
             await sse_broadcaster.add_client(client_queue)
-            logger.info(f"SSE Stream: Client registered successfully, total clients: {len(sse_broadcaster.clients)}")
+            logger.debug(f"SSE Stream: Client registered successfully, total clients: {len(sse_broadcaster.clients)}")
             
             # Send initial data immediately upon connection
             initial_data = await generate_task_update_event(time.time(), active_only, request)
@@ -973,7 +967,7 @@ async def stream_task_updates(request: Request, current_user: User = Depends(get
                         }
                         event_json = json.dumps(callback_event)
                         yield f"data: {event_json}\n\n"
-                        logger.info(f"SSE Stream: Sent replay callback for task {task_id}")
+                        logger.debug(f"SSE Stream: Sent replay callback for task {task_id}")
             
             # Send periodic heartbeats and listen for real-time events
             last_heartbeat = time.time()
@@ -1039,7 +1033,7 @@ async def stream_task_updates(request: Request, current_user: User = Depends(get
                     await asyncio.sleep(1)
                     
         except asyncio.CancelledError:
-            logger.info("SSE client disconnected")
+            logger.debug("SSE client disconnected")
             return
         except Exception as e:
             logger.error(f"SSE connection error: {e}", exc_info=True)
