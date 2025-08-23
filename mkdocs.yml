@@ -13,6 +13,7 @@ theme:
 nav:
   - Getting started: user/getting-started
   - Configuration: user/configuration
+  - Environment: user/environment
   - Tracks: user/tracks
   - Albums: user/albums
   - Playlists: user/playlists

@@ -1,5 +1,7 @@
 ## Configuration
 
+See also: [Environment variables](environment.md)
+
 Open Configuration in the web UI. Tabs:
 
 - General (admin)
