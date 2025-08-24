@@ -10,7 +10,7 @@ import {
 } from "./queue-context";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
-import type { CallbackObject } from "@/types/callbacks";
+import type { CallbackObject, SummaryObject, IDs } from "@/types/callbacks";
 import { useAuth } from "@/contexts/auth-context";
 
 export function QueueProvider({ children }: { children: ReactNode }) {
@@ -43,54 +43,89 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     return items.filter(item => isActiveStatus(getStatus(item))).length;
   }, [items]);
 
-  // Improved deduplication - check both id and taskId fields
-  const itemExists = useCallback((taskId: string, items: QueueItem[]): boolean => {
-    return items.some(item => 
-      item.id === taskId || 
-      item.taskId === taskId ||
-      // Also check spotify ID to prevent same track being added multiple times
-      (item.spotifyId && item.spotifyId === taskId)
-    );
+  const extractIDs = useCallback((cb?: CallbackObject): IDs | undefined => {
+    if (!cb) return undefined;
+    if ((cb as any).track) return (cb as any).track.ids as IDs;
+    if ((cb as any).album) return (cb as any).album.ids as IDs;
+    if ((cb as any).playlist) return (cb as any).playlist.ids as IDs;
+    return undefined;
   }, []);
 
   // Convert SSE task data to QueueItem
   const createQueueItemFromTask = useCallback((task: any): QueueItem => {
-    const spotifyId = task.original_url?.split("/").pop() || "";
+    const lastCallback = task.last_line as CallbackObject | undefined;
+    const ids = extractIDs(lastCallback);
+
+    // Determine container type up-front
+    const downloadType = (task.download_type || task.type || "track") as DownloadType;
+
+    // Compute spotifyId fallback chain
+    const fallbackFromUrl = task.original_url?.split("/").pop() || "";
+    const spotifyId = ids?.spotify || fallbackFromUrl || "";
     
     // Extract display info from callback
-    let name = task.name || "Unknown";
-    let artist = task.artist || "";
+    let name: string = task.name || "Unknown";
+    let artist: string = task.artist || "";
     
-    // Handle different callback structures
-    if (task.last_line) {
-      try {
-      if ("track" in task.last_line) {
-        name = task.last_line.track.title || name;
-        artist = task.last_line.track.artists?.[0]?.name || artist;
-      } else if ("album" in task.last_line) {
-        name = task.last_line.album.title || name;
-        artist = task.last_line.album.artists?.map((a: any) => a.name).join(", ") || artist;
-      } else if ("playlist" in task.last_line) {
-        name = task.last_line.playlist.title || name;
-        artist = task.last_line.playlist.owner?.name || artist;
+    try {
+      if (lastCallback) {
+        if ((lastCallback as any).track) {
+          // Prefer parent container title if this is an album/playlist operation
+          const parent = (lastCallback as any).parent;
+          if (downloadType === "playlist" && parent && (parent as any).title) {
+            name = (parent as any).title || name;
+            artist = (parent as any).owner?.name || artist;
+          } else if (downloadType === "album" && parent && (parent as any).title) {
+            name = (parent as any).title || name;
+            const arts = (parent as any).artists || [];
+            artist = Array.isArray(arts) && arts.length > 0 ? (arts.map((a: any) => a.name).filter(Boolean).join(", ")) : artist;
+          } else {
+            // Fallback to the current track's info for standalone track downloads
+            name = (lastCallback as any).track.title || name;
+            const arts = (lastCallback as any).track.artists || [];
+            artist = Array.isArray(arts) && arts.length > 0 ? (arts.map((a: any) => a.name).filter(Boolean).join(", ")) : artist;
+          }
+        } else if ((lastCallback as any).album) {
+          name = (lastCallback as any).album.title || name;
+          const arts = (lastCallback as any).album.artists || [];
+          artist = Array.isArray(arts) && arts.length > 0 ? (arts.map((a: any) => a.name).filter(Boolean).join(", ")) : artist;
+        } else if ((lastCallback as any).playlist) {
+          name = (lastCallback as any).playlist.title || name;
+          artist = (lastCallback as any).playlist.owner?.name || artist;
+        } else if ((lastCallback as any).status === "processing") {
+          name = (lastCallback as any).name || name;
+          artist = (lastCallback as any).artist || artist;
         }
-      } catch (error) {
-        console.warn(`createQueueItemFromTask: Error parsing callback for task ${task.task_id}:`, error);
       }
+    } catch (error) {
+      console.warn(`createQueueItemFromTask: Error parsing callback for task ${task.task_id}:`, error);
+    }
+
+    // Prefer summary from callback status_info if present; fallback to task.summary
+    let summary: SummaryObject | undefined = undefined;
+    try {
+      const statusInfo = (lastCallback as any)?.status_info;
+      if (statusInfo && typeof statusInfo === "object" && "summary" in statusInfo) {
+        summary = (statusInfo as any).summary || undefined;
+      }
+    } catch {}
+    if (!summary && task.summary) {
+      summary = task.summary as SummaryObject;
     }
 
     const queueItem: QueueItem = {
       id: task.task_id,
       taskId: task.task_id,
-      downloadType: task.download_type || task.type || "track",
+      downloadType,
       spotifyId,
-      lastCallback: task.last_line as CallbackObject,
+      ids,
+      lastCallback: lastCallback as CallbackObject,
       name,
       artist,
-      summary: task.summary,
+      summary,
       error: task.error,
     };
-
+    
     // Debug log for status detection issues
     const status = getStatus(queueItem);
     if (status === "unknown" || !status) {
@@ -98,7 +133,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     }
     
     return queueItem;
-  }, []);
+  }, [extractIDs]);
 
   // Schedule auto-removal for completed tasks
   const scheduleRemoval = useCallback((taskId: string, delay: number = 10000) => {
@@ -162,7 +197,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       
       sseConnection.current = eventSource;
 
-        eventSource.onopen = () => {
+      eventSource.onopen = () => {
         console.log("SSE connected successfully");
         reconnectAttempts.current = 0;
         lastHeartbeat.current = Date.now();
@@ -172,47 +207,47 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
         }
-        };
+      };
 
-        eventSource.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            
-            // Debug logging for all SSE events
-            console.log("🔄 SSE Event Received:", {
-              timestamp: new Date().toISOString(),
-              changeType: data.change_type || "update",
-              totalTasks: data.total_tasks,
-              taskCounts: data.task_counts,
-              tasksCount: data.tasks?.length || 0,
-              taskIds: data.tasks?.map((t: any) => {
-                const tempItem = createQueueItemFromTask(t);
-                const status = getStatus(tempItem);
-                // Special logging for playlist/album track progress
-                if (t.last_line?.current_track && t.last_line?.total_tracks) {
-                  return {
-                    id: t.task_id,
-                    status,
-                    type: t.download_type,
-                    track: `${t.last_line.current_track}/${t.last_line.total_tracks}`,
-                    trackStatus: t.last_line.status_info?.status
-                  };
-                }
-                return { id: t.task_id, status, type: t.download_type };
-              }) || [],
-              rawData: data
-            });
-            
-            if (data.error) {
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Debug logging for all SSE events
+          console.log("🔄 SSE Event Received:", {
+            timestamp: new Date().toISOString(),
+            changeType: data.change_type || "update",
+            totalTasks: data.total_tasks,
+            taskCounts: data.task_counts,
+            tasksCount: data.tasks?.length || 0,
+            taskIds: data.tasks?.map((t: any) => {
+              const tempItem = createQueueItemFromTask(t);
+              const status = getStatus(tempItem);
+              // Special logging for playlist/album track progress
+              if (t.last_line?.current_track && t.last_line?.total_tracks) {
+                return {
+                  id: t.task_id,
+                  status,
+                  type: t.download_type,
+                  track: `${t.last_line.current_track}/${t.last_line.total_tracks}`,
+                  trackStatus: t.last_line.status_info?.status
+                };
+              }
+              return { id: t.task_id, status, type: t.download_type };
+            }) || [],
+            rawData: data
+          });
+          
+          if (data.error) {
             console.error("SSE error:", data.error);
             toast.error("Connection error");
-              return;
-            }
+            return;
+          }
 
-          // Handle different message types from optimized backend
+          // Handle message types from backend
           const changeType = data.change_type || "update";
           const triggerReason = data.trigger_reason || "";
-            
+          
           if (changeType === "heartbeat") {
             // Heartbeat - just update counts, no task processing
             const { total_tasks, task_counts } = data;
@@ -221,7 +256,6 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               (total_tasks || 0);
             setTotalTasks(calculatedTotal);
             lastHeartbeat.current = Date.now();
-            // Reduce heartbeat logging noise - only log every 10th heartbeat
             if (Math.random() < 0.1) {
               console.log("SSE: Connection active (heartbeat)");
             }
@@ -249,9 +283,10 @@ export function QueueProvider({ children }: { children: ReactNode }) {
             
             setItems(prev => {
               // Create improved deduplication maps
-              const existingTaskIds = new Set();
-              const existingSpotifyIds = new Set();
-              const existingItemsMap = new Map();
+              const existingTaskIds = new Set<string>();
+              const existingSpotifyIds = new Set<string>();
+              const existingDeezerIds = new Set<string>();
+              const existingItemsMap = new Map<string, QueueItem>();
               
               prev.forEach(item => {
                 if (item.id) {
@@ -263,6 +298,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   existingItemsMap.set(item.taskId, item);
                 }
                 if (item.spotifyId) existingSpotifyIds.add(item.spotifyId);
+                if (item.ids?.deezer) existingDeezerIds.add(item.ids.deezer);
               });
               
               // Process each updated task
@@ -271,33 +307,37 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               const newTasksToAdd: QueueItem[] = [];
               
               for (const task of updatedTasks) {
-                const taskId = task.task_id;
-                const spotifyId = task.original_url?.split("/").pop();
+                const taskId = task.task_id as string;
                 
                 // Skip if already processed (shouldn't happen but safety check)
                 if (processedTaskIds.has(taskId)) continue;
                 processedTaskIds.add(taskId);
                 
                 // Check if this task exists in current queue
-                const existingItem = existingItemsMap.get(taskId) || 
-                  Array.from(existingItemsMap.values()).find(item => 
-                    item.spotifyId === spotifyId
-                  );
+                const existingItem = existingItemsMap.get(taskId);
+                const newItemCandidate = createQueueItemFromTask(task);
+                const candidateSpotify = newItemCandidate.spotifyId;
+                const candidateDeezer = newItemCandidate.ids?.deezer;
                 
-                if (existingItem) {
+                // If not found by id, try to match by identifiers
+                const existingById = existingItem || Array.from(existingItemsMap.values()).find(item => 
+                  (candidateSpotify && item.spotifyId === candidateSpotify) ||
+                  (candidateDeezer && item.ids?.deezer === candidateDeezer)
+                );
+                
+                if (existingById) {
                   // Skip SSE updates for items that are already cancelled by user action
-                  const existingStatus = getStatus(existingItem);
-                  if (existingStatus === "cancelled" && existingItem.error === "Cancelled by user") {
+                  const existingStatus = getStatus(existingById);
+                  if (existingStatus === "cancelled" && existingById.error === "Cancelled by user") {
                     console.log(`SSE: Skipping update for user-cancelled task ${taskId}`);
                     continue;
                   }
                   
                   // Update existing item
-                  const updatedItem = createQueueItemFromTask(task);
+                  const updatedItem = newItemCandidate;
                   const status = getStatus(updatedItem);
-                  const previousStatus = getStatus(existingItem);
+                  const previousStatus = getStatus(existingById);
                   
-                  // Only log significant status changes
                   if (previousStatus !== status) {
                     console.log(`SSE: Status change ${taskId}: ${previousStatus} → ${status}`);
                   }
@@ -305,33 +345,32 @@ export function QueueProvider({ children }: { children: ReactNode }) {
                   // Schedule removal for terminal states
                   if (isTerminalStatus(status)) {
                     const delay = status === "cancelled" ? 5000 : 10000;
-                    scheduleRemoval(existingItem.id, delay);
+                    scheduleRemoval(existingById.id, delay);
                     console.log(`SSE: Scheduling removal for terminal task ${taskId} (${status}) in ${delay}ms`);
                   }
                   
                   updatedItems.push(updatedItem);
                 } else {
                   // This is a new task from SSE
-                  const newItem = createQueueItemFromTask(task);
+                  const newItem = newItemCandidate;
                   const status = getStatus(newItem);
                   
-                  // Check for duplicates by spotify ID
-                  if (spotifyId && existingSpotifyIds.has(spotifyId)) {
-                    console.log(`SSE: Skipping duplicate by spotify ID: ${spotifyId}`);
+                  // Check for duplicates by identifiers
+                  if ((candidateSpotify && existingSpotifyIds.has(candidateSpotify)) ||
+                      (candidateDeezer && existingDeezerIds.has(candidateDeezer))) {
+                    console.log(`SSE: Skipping duplicate by identifier: ${candidateSpotify || candidateDeezer}`);
                     continue;
                   }
                   
-                  // Check if this is a pending download
-                  if (pendingDownloads.current.has(spotifyId || taskId)) {
+                  // Check if this is a pending download (by spotify id for now)
+                  if (pendingDownloads.current.has(candidateSpotify || newItem.id)) {
                     console.log(`SSE: Skipping pending download: ${taskId}`);
                     continue;
                   }
                   
-                  // For terminal tasks from SSE, these should be tasks that just transitioned
-                  // (backend now filters out already-terminal tasks)
+                  // For terminal tasks from SSE
                   if (isTerminalStatus(status)) {
                     console.log(`SSE: Adding recently completed task: ${taskId} (${status})`);
-                    // Schedule immediate removal for terminal tasks
                     const delay = status === "cancelled" ? 5000 : 10000;
                     scheduleRemoval(newItem.id, delay);
                   } else if (isActiveStatus(status)) {
@@ -349,7 +388,9 @@ export function QueueProvider({ children }: { children: ReactNode }) {
               const finalItems = prev.map(item => {
                 const updated = updatedItems.find(u => 
                   u.id === item.id || u.taskId === item.id ||
-                  u.id === item.taskId || u.taskId === item.taskId
+                  u.id === item.taskId || u.taskId === item.taskId ||
+                  (u.spotifyId && u.spotifyId === item.spotifyId) ||
+                  (u.ids?.deezer && u.ids.deezer === item.ids?.deezer)
                 );
                 return updated || item;
               });
@@ -360,69 +401,69 @@ export function QueueProvider({ children }: { children: ReactNode }) {
           } else if (changeType === "update") {
             // Update received but no tasks - might be count updates only
             console.log("SSE: Received update with count changes only");
-            }
-          } catch (error) {
-            console.error("Failed to parse SSE message:", error, event.data);
           }
-        };
+        } catch (error) {
+          console.error("Failed to parse SSE message:", error, event.data);
+        }
+      };
 
       eventSource.onerror = (error) => {
-          // Use appropriate logging level - first attempt failures are common and expected
-          if (reconnectAttempts.current === 0) {
-            console.log("SSE initial connection failed, will retry shortly...");
-          } else {
-            console.warn("SSE connection error:", error);
-          }
-          
-          // Only check for auth errors if auth is enabled
-          if (authEnabled) {
-            const token = authApiClient.getToken();
-            if (!token) {
-              console.warn("SSE: Connection error and no auth token - stopping reconnection attempts");
-              eventSource.close();
-              sseConnection.current = null;
-              stopHealthCheck();
-              return;
-            }
-          }
-          
-          eventSource.close();
-          sseConnection.current = null;
-          
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            reconnectAttempts.current++;
-            // Use shorter delays for faster recovery, especially on first attempts
-            const baseDelay = reconnectAttempts.current === 1 ? 100 : 1000;
-            const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.current - 1), 15000);
-            
-            if (reconnectAttempts.current === 1) {
-              console.log("SSE: Retrying connection shortly...");
-            } else {
-              console.log(`SSE: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
-            }
-            
-            reconnectTimeoutRef.current = window.setTimeout(() => {
-              if (reconnectAttempts.current === 1) {
-                console.log("SSE: Attempting reconnection...");
-              } else {
-                console.log("SSE: Attempting to reconnect...");
-              }
-              connectSSE();
-            }, delay);
-          } else {
-            console.error("SSE: Max reconnection attempts reached");
-            toast.error("Connection lost. Please refresh the page.");
-          }
-        };
-
-      } catch (error) {
-        console.log("Initial SSE connection setup failed, will retry:", error);
-        // Don't show toast for initial connection failures since they often recover quickly
-        if (reconnectAttempts.current > 0) {
-          toast.error("Failed to establish connection");
+        // Use appropriate logging level - first attempt failures are common and expected
+        if (reconnectAttempts.current === 0) {
+          console.log("SSE initial connection failed, will retry shortly...");
+        } else {
+          console.warn("SSE connection error:", error);
         }
+        
+        // Only check for auth errors if auth is enabled
+        if (authEnabled) {
+          const token = authApiClient.getToken();
+          if (!token) {
+            console.warn("SSE: Connection error and no auth token - stopping reconnection attempts");
+            eventSource.close();
+            sseConnection.current = null;
+            stopHealthCheck();
+            return;
+          }
+        }
+        
+        eventSource.close();
+        sseConnection.current = null;
+        
+        if (reconnectAttempts.current < maxReconnectAttempts) {
+          reconnectAttempts.current++;
+          // Use shorter delays for faster recovery, especially on first attempts
+          const baseDelay = reconnectAttempts.current === 1 ? 100 : 1000;
+          const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts.current - 1), 15000);
+          
+          if (reconnectAttempts.current === 1) {
+            console.log("SSE: Retrying connection shortly...");
+          } else {
+            console.log(`SSE: Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+          }
+          
+          reconnectTimeoutRef.current = window.setTimeout(() => {
+            if (reconnectAttempts.current === 1) {
+              console.log("SSE: Attempting reconnection...");
+            } else {
+              console.log("SSE: Attempting to reconnect...");
+            }
+            connectSSE();
+          }, delay);
+        } else {
+          console.error("SSE: Max reconnection attempts reached");
+          toast.error("Connection lost. Please refresh the page.");
+        }
+      };
+
+    } catch (error) {
+      console.log("Initial SSE connection setup failed, will retry:", error);
+      // Don't show toast for initial connection failures since they often recover quickly
+      if (reconnectAttempts.current > 0) {
+        toast.error("Failed to establish connection");
       }
-  }, [createQueueItemFromTask, scheduleRemoval, startHealthCheck, authEnabled]);
+    }
+  }, [createQueueItemFromTask, startHealthCheck, authEnabled, stopHealthCheck]);
 
   const disconnectSSE = useCallback(() => {
     if (sseConnection.current) {
@@ -449,17 +490,19 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       
       if (newTasks.length > 0) {
         setItems(prev => {
-          const uniqueNewTasks = newTasks
-            .filter((task: any) => !itemExists(task.task_id, prev))
-            .filter((task: any) => {
-              const tempItem = createQueueItemFromTask(task);
-              const status = getStatus(tempItem);
+          const extended = newTasks
+            .map((task: any) => createQueueItemFromTask(task))
+            .filter((qi: QueueItem) => {
+              const status = getStatus(qi);
               // Consistent filtering - exclude all terminal state tasks in pagination too
-              return !isTerminalStatus(status);
-            })
-            .map((task: any) => createQueueItemFromTask(task));
-          
-          return [...prev, ...uniqueNewTasks];
+              if (isTerminalStatus(status)) return false;
+              // Dedupe by task id or identifiers
+              if (prev.some(p => p.id === qi.id || p.taskId === qi.id)) return false;
+              if (qi.spotifyId && prev.some(p => p.spotifyId === qi.spotifyId)) return false;
+              if (qi.ids?.deezer && prev.some(p => p.ids?.deezer === qi.ids?.deezer)) return false;
+              return true;
+            });
+          return [...prev, ...extended];
         });
         setCurrentPage(nextPage);
       }
@@ -471,7 +514,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [hasMore, isLoadingMore, currentPage, createQueueItemFromTask, itemExists]);
+  }, [hasMore, isLoadingMore, currentPage, createQueueItemFromTask]);
 
   // Note: SSE connection state is managed through the initialize effect and restartSSE method
   // The auth context should call restartSSE() when login/logout occurs
@@ -496,13 +539,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
         const { tasks, pagination, total_tasks, task_counts } = response.data;
         
         const queueItems = tasks
-          .filter((task: any) => {
-            const tempItem = createQueueItemFromTask(task);
-            const status = getStatus(tempItem);
-            // On refresh, exclude all terminal state tasks to start with a clean queue
+          .map((task: any) => createQueueItemFromTask(task))
+          .filter((qi: QueueItem) => {
+            const status = getStatus(qi);
             return !isTerminalStatus(status);
-          })
-          .map((task: any) => createQueueItemFromTask(task));
+          });
 
         console.log(`Queue initialized: ${queueItems.length} items (filtered out terminal state tasks)`);
         setItems(queueItems);
@@ -542,8 +583,8 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       return;
     }
     
-    // Check if item already exists in queue
-    if (itemExists(item.spotifyId, items)) {
+    // Check if item already exists in queue (by spotify id or identifiers on items)
+    if (items.some(i => i.spotifyId === item.spotifyId || i.ids?.spotify === item.spotifyId)) {
       toast.info("Item already in queue");
       return;
     }
@@ -551,22 +592,22 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     const tempId = uuidv4();
     pendingDownloads.current.add(item.spotifyId);
     
-      const newItem: QueueItem = {
+    const newItem: QueueItem = {
       id: tempId,
       downloadType: item.type,
       spotifyId: item.spotifyId,
       name: item.name,
       artist: item.artist || "",
-    };
+    } as QueueItem;
     
-      setItems(prev => [newItem, ...prev]);
+    setItems(prev => [newItem, ...prev]);
 
-      try {
+    try {
       const response = await authApiClient.client.get(`/${item.type}/download/${item.spotifyId}`);
-        const { task_id: taskId } = response.data;
+      const { task_id: taskId } = response.data;
 
-        setItems(prev =>
-          prev.map(i =>
+      setItems(prev =>
+        prev.map(i =>
           i.id === tempId ? { ...i, id: taskId, taskId } : i
         )
       );
@@ -575,15 +616,15 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       pendingDownloads.current.delete(item.spotifyId);
       
       connectSSE(); // Ensure connection is active
-      } catch (error: any) {
+    } catch (error: any) {
       console.error(`Failed to start download:`, error);
-        toast.error(`Failed to start download for ${item.name}`);
+      toast.error(`Failed to start download for ${item.name}`);
       
       // Remove failed item and clear from pending
       setItems(prev => prev.filter(i => i.id !== tempId));
       pendingDownloads.current.delete(item.spotifyId);
     }
-  }, [connectSSE, itemExists, items]);
+  }, [connectSSE, items]);
 
   const removeItem = useCallback((id: string) => {
     const item = items.find(i => i.id === id);
@@ -604,32 +645,18 @@ export function QueueProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const cancelItem = useCallback(async (id: string) => {
-      const item = items.find(i => i.id === id);
+    const item = items.find(i => i.id === id);
     if (!item?.taskId) return;
 
-      try {
-        await authApiClient.client.post(`/prgs/cancel/${item.taskId}`);
-        
-        setItems(prev =>
-          prev.map(i =>
-          i.id === id ? { 
-            ...i, 
-            error: "Cancelled by user",
-            lastCallback: {
-              status: "cancelled",
-              timestamp: Date.now() / 1000,
-              type: item.downloadType,
-              name: item.name,
-              artist: item.artist
-            } as unknown as CallbackObject
-          } : i
-        )
-      );
+    try {
+      await authApiClient.client.post(`/prgs/cancel/${item.taskId}`);
       
-      // Remove immediately after showing cancelled state briefly
+      // Mark as cancelled via error field to preserve type safety
+      setItems(prev => prev.map(i => i.id === id ? { ...i, error: "Cancelled by user" } : i));
+      
+      // Remove shortly after showing cancelled state
       setTimeout(() => {
         setItems(prev => prev.filter(i => i.id !== id));
-        // Clean up any existing removal timer
         if (removalTimers.current[id]) {
           clearTimeout(removalTimers.current[id]);
           delete removalTimers.current[id];
@@ -637,11 +664,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       }, 500);
       
       toast.info(`Cancelled: ${item.name}`);
-      } catch (error) {
+    } catch (error) {
       console.error("Failed to cancel task:", error);
       toast.error(`Failed to cancel: ${item.name}`);
     }
-  }, [items, scheduleRemoval]);
+  }, [items]);
 
   const cancelAll = useCallback(async () => {
     const activeItems = items.filter(item => {
@@ -657,26 +684,11 @@ export function QueueProvider({ children }: { children: ReactNode }) {
     try {
       await authApiClient.client.post("/prgs/cancel/all");
       
+      // Mark each active item as cancelled via error field
       activeItems.forEach(item => {
-        setItems(prev =>
-          prev.map(i =>
-            i.id === item.id ? { 
-              ...i, 
-              error: "Cancelled by user",
-              lastCallback: {
-                status: "cancelled",
-                timestamp: Date.now() / 1000,
-                type: item.downloadType,
-                name: item.name,
-                artist: item.artist
-              } as unknown as CallbackObject
-            } : i
-          )
-        );
-        // Remove immediately after showing cancelled state briefly
+        setItems(prev => prev.map(i => i.id === item.id ? { ...i, error: "Cancelled by user" } : i));
         setTimeout(() => {
           setItems(prev => prev.filter(i => i.id !== item.id));
-          // Clean up any existing removal timer
           if (removalTimers.current[item.id]) {
             clearTimeout(removalTimers.current[item.id]);
             delete removalTimers.current[item.id];
@@ -689,7 +701,7 @@ export function QueueProvider({ children }: { children: ReactNode }) {
       console.error("Failed to cancel all:", error);
       toast.error("Failed to cancel downloads");
     }
-  }, [items, scheduleRemoval]);
+  }, [items]);
 
   const clearCompleted = useCallback(() => {
     setItems(prev => prev.filter(item => {

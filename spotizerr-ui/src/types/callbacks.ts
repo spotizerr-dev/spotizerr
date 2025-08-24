@@ -222,11 +222,22 @@ export interface SummaryObject {
     total_successful: number;
     total_skipped: number;
     total_failed: number;
+    // Optional metadata present in deezspot summaries (album/playlist and sometimes single-track)
+    service: "spotify" | "deezer";
+    quality: string; // e.g., "ogg", "flac"
+    bitrate: string; // e.g., "320k"
+    m3u_path?: string; // playlist convenience output
+    // Convenience fields that may appear for single-track flows
+    final_path?: string;
+    download_quality?: string; // e.g., "OGG_320"
 }
 
 export interface DoneObject extends BaseStatusObject {
     status: "done";
     summary?: SummaryObject;
+    // Convenience fields often present on done for tracks
+    final_path?: string;
+    download_quality?: string;
 }
 
 export type StatusInfo =

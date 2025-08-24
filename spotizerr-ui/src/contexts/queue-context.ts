@@ -1,23 +1,23 @@
 import { createContext, useContext } from "react";
-import type { SummaryObject, CallbackObject, TrackCallbackObject, AlbumCallbackObject, PlaylistCallbackObject, ProcessingCallbackObject } from "@/types/callbacks";
+import type { SummaryObject, CallbackObject, TrackCallbackObject, AlbumCallbackObject, PlaylistCallbackObject, ProcessingCallbackObject, IDs } from "@/types/callbacks";
 
 export type DownloadType = "track" | "album" | "playlist";
 
 // Type guards for callback objects
 const isProcessingCallback = (obj: CallbackObject): obj is ProcessingCallbackObject => {
-  return "status" in obj && typeof obj.status === "string";
+  return "status" in obj && typeof (obj as ProcessingCallbackObject).status === "string" && (obj as any).name !== undefined;
 };
 
 const isTrackCallback = (obj: CallbackObject): obj is TrackCallbackObject => {
-  return "track" in obj && "status_info" in obj;
+  return (obj as any).track !== undefined && (obj as any).status_info !== undefined;
 };
 
 const isAlbumCallback = (obj: CallbackObject): obj is AlbumCallbackObject => {
-  return "album" in obj && "status_info" in obj;
+  return (obj as any).album !== undefined && (obj as any).status_info !== undefined;
 };
 
 const isPlaylistCallback = (obj: CallbackObject): obj is PlaylistCallbackObject => {
-  return "playlist" in obj && "status_info" in obj;
+  return (obj as any).playlist !== undefined && (obj as any).status_info !== undefined;
 };
 
 // Simplified queue item that works directly with callback objects
@@ -26,6 +26,9 @@ export interface QueueItem {
   taskId?: string;
   downloadType: DownloadType;
   spotifyId: string;
+  
+  // Primary identifiers from callback (spotify/deezer/isrc/upc)
+  ids?: IDs;
   
   // Current callback data - this is the source of truth
   lastCallback?: CallbackObject;
@@ -43,6 +46,11 @@ export interface QueueItem {
 
 // Status extraction utilities
 export const getStatus = (item: QueueItem): string => {
+  // If user locally cancelled the task, reflect it without fabricating a callback
+  if (item.error === "Cancelled by user") {
+    return "cancelled";
+  }
+
   if (!item.lastCallback) {
     // Only log if this seems problematic (task has been around for a while)
     return "initializing";
@@ -57,32 +65,30 @@ export const getStatus = (item: QueueItem): string => {
     if (item.downloadType === "album" || item.downloadType === "playlist") {
       const currentTrack = item.lastCallback.current_track || 1;
       const totalTracks = item.lastCallback.total_tracks || 1;
-      const trackStatus = item.lastCallback.status_info.status;
+      const trackStatus = item.lastCallback.status_info.status as string;
       
       // If this is the last track and it's in a terminal state, the parent is done
       if (currentTrack >= totalTracks && ["done", "skipped", "error"].includes(trackStatus)) {
-        console.log(`🎵 Playlist/Album completed: ${item.name} (track ${currentTrack}/${totalTracks}, status: ${trackStatus})`);
         return "completed";
       }
       
       // If track is in terminal state but not the last track, parent is still downloading
       if (["done", "skipped", "error"].includes(trackStatus)) {
-        console.log(`🎵 Playlist/Album progress: ${item.name} (track ${currentTrack}/${totalTracks}, status: ${trackStatus}) - continuing...`);
         return "downloading";
       }
       
       // Track is actively being processed
       return "downloading";
     }
-    return item.lastCallback.status_info.status;
+    return item.lastCallback.status_info.status as string;
   }
   
   if (isAlbumCallback(item.lastCallback)) {
-    return item.lastCallback.status_info.status;
+    return item.lastCallback.status_info.status as string;
   }
   
   if (isPlaylistCallback(item.lastCallback)) {
-    return item.lastCallback.status_info.status;
+    return item.lastCallback.status_info.status as string;
   }
   
   console.warn(`getStatus: Unknown callback type for item ${item.id}:`, item.lastCallback);
@@ -104,8 +110,8 @@ export const getProgress = (item: QueueItem): number | undefined => {
   
   // For individual tracks
   if (item.downloadType === "track" && isTrackCallback(item.lastCallback)) {
-    if (item.lastCallback.status_info.status === "real-time" && "progress" in item.lastCallback.status_info) {
-      return item.lastCallback.status_info.progress;
+    if ((item.lastCallback.status_info as any).status === "real-time" && "progress" in (item.lastCallback.status_info as any)) {
+      return (item.lastCallback.status_info as any).progress as number;
     }
     return undefined;
   }
@@ -115,8 +121,9 @@ export const getProgress = (item: QueueItem): number | undefined => {
     const callback = item.lastCallback;
     const currentTrack = callback.current_track || 1;
     const totalTracks = callback.total_tracks || 1;
-    const trackProgress = (callback.status_info.status === "real-time" && "progress" in callback.status_info) 
-      ? callback.status_info.progress : 0;
+    const statusInfo: any = callback.status_info;
+    const trackProgress = (statusInfo.status === "real-time" && "progress" in statusInfo) 
+      ? statusInfo.progress : 0;
     
     // Formula: ((completed tracks) + (current track progress / 100)) / total tracks * 100
     const completedTracks = currentTrack - 1;

@@ -98,7 +98,7 @@ def download_playlist(
                     )
                     dl.download_playlistspo(
                         link_playlist=url,  # Spotify URL
-                        output_dir="/app/downloads",
+                        output_dir="./downloads",
                         quality_download=quality,  # Deezer quality
                         recursive_quality=recursive_quality,
                         recursive_download=False,
@@ -161,7 +161,7 @@ def download_playlist(
                         )
                         spo.download_playlist(
                             link_playlist=url,  # Spotify URL
-                            output_dir="/app/downloads",
+                            output_dir="./downloads",
                             quality_download=fall_quality,  # Spotify quality
                             recursive_quality=recursive_quality,
                             recursive_download=False,
@@ -224,7 +224,7 @@ def download_playlist(
                 )
                 spo.download_playlist(
                     link_playlist=url,
-                    output_dir="/app/downloads",
+                    output_dir="./downloads",
                     quality_download=quality,
                     recursive_quality=recursive_quality,
                     recursive_download=False,
@@ -268,7 +268,7 @@ def download_playlist(
             )
             dl.download_playlistdee(  # Deezer URL, download via Deezer
                 link_playlist=url,
-                output_dir="/app/downloads",
+                output_dir="./downloads",
                 quality_download=quality,
                 recursive_quality=recursive_quality,  # Usually False for playlists to get individual track qualities
                 recursive_download=False,

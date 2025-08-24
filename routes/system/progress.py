@@ -4,7 +4,7 @@ import logging
 import time
 import json
 import asyncio
-from typing import Set
+from typing import Set, Optional
 
 import redis
 import threading
@@ -42,12 +42,12 @@ class SSEBroadcaster:
         """Add a new SSE client"""
         self.clients.add(queue)
         logger.debug(f"SSE: Client connected (total: {len(self.clients)})")
-        
+
     async def remove_client(self, queue: asyncio.Queue):
         """Remove an SSE client"""
         self.clients.discard(queue)
         logger.debug(f"SSE: Client disconnected (total: {len(self.clients)})")
-        
+
     async def broadcast_event(self, event_data: dict):
         """Broadcast an event to all connected clients"""
         logger.debug(
@@ -118,26 +118,22 @@ def start_sse_redis_subscriber():
 
                         # Handle different event types
                         if event_type == "progress_update":
-                            # Transform callback data into task format expected by frontend
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            try:
-                                broadcast_data = loop.run_until_complete(
-                                    transform_callback_to_task_format(
-                                        task_id, event_data
-                                    )
-                                )
-                                if broadcast_data:
+                            # Transform callback data into standardized update format expected by frontend
+                            standardized = standardize_incoming_event(event_data)
+                            if standardized:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
                                     loop.run_until_complete(
-                                        sse_broadcaster.broadcast_event(broadcast_data)
+                                        sse_broadcaster.broadcast_event(standardized)
                                     )
                                     logger.debug(
-                                        f"SSE Redis Subscriber: Broadcasted callback to {len(sse_broadcaster.clients)} clients"
+                                        f"SSE Redis Subscriber: Broadcasted standardized progress update to {len(sse_broadcaster.clients)} clients"
                                     )
-                            finally:
-                                loop.close()
+                                finally:
+                                    loop.close()
                         elif event_type == "summary_update":
-                            # Task summary update - use existing trigger_sse_update logic
+                            # Task summary update - use standardized trigger
                             loop = asyncio.new_event_loop()
                             asyncio.set_event_loop(loop)
                             try:
@@ -152,18 +148,20 @@ def start_sse_redis_subscriber():
                             finally:
                                 loop.close()
                         else:
-                            # Unknown event type - broadcast as-is
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            try:
-                                loop.run_until_complete(
-                                    sse_broadcaster.broadcast_event(event_data)
-                                )
-                                logger.debug(
-                                    f"SSE Redis Subscriber: Broadcasted {event_type} to {len(sse_broadcaster.clients)} clients"
-                                )
-                            finally:
-                                loop.close()
+                            # Unknown event type - attempt to standardize and broadcast
+                            standardized = standardize_incoming_event(event_data)
+                            if standardized:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                try:
+                                    loop.run_until_complete(
+                                        sse_broadcaster.broadcast_event(standardized)
+                                    )
+                                    logger.debug(
+                                        f"SSE Redis Subscriber: Broadcasted standardized {event_type} to {len(sse_broadcaster.clients)} clients"
+                                    )
+                                finally:
+                                    loop.close()
 
                     except Exception as e:
                         logger.error(
@@ -178,6 +176,85 @@ def start_sse_redis_subscriber():
     thread = threading.Thread(target=redis_subscriber_thread, daemon=True)
     thread.start()
     logger.debug("SSE Redis Subscriber: Background thread started")
+
+
+def build_task_object_from_callback(
+    task_id: str, callback_data: dict
+) -> Optional[dict]:
+    """Build a standardized task object from callback payload and task info."""
+    try:
+        task_info = get_task_info(task_id)
+        if not task_info:
+            return None
+        return {
+            "task_id": task_id,
+            "original_url": f"http://localhost:7171/api/{task_info.get('download_type', 'track')}/download/{task_info.get('url', '').split('/')[-1] if task_info.get('url') else ''}",
+            "last_line": callback_data,
+            "timestamp": time.time(),
+            "download_type": task_info.get("download_type", "track"),
+            "type": task_info.get("type", task_info.get("download_type", "track")),
+            "name": task_info.get("name", "Unknown"),
+            "artist": task_info.get("artist", ""),
+            "created_at": task_info.get("created_at"),
+        }
+    except Exception as e:
+        logger.error(
+            f"Error building task object from callback for {task_id}: {e}",
+            exc_info=True,
+        )
+        return None
+
+
+def standardize_incoming_event(event_data: dict) -> Optional[dict]:
+    """
+    Convert various incoming event shapes into a standardized SSE payload:
+    {
+      'change_type': 'update' | 'heartbeat',
+      'tasks': [...],
+      'current_timestamp': float,
+      'trigger_reason': str (optional)
+    }
+    """
+    try:
+        # Heartbeat passthrough (ensure tasks array exists)
+        if event_data.get("change_type") == "heartbeat":
+            return {
+                "change_type": "heartbeat",
+                "tasks": [],
+                "current_timestamp": time.time(),
+            }
+
+        # If already has tasks, just coerce change_type
+        if isinstance(event_data.get("tasks"), list):
+            return {
+                "change_type": event_data.get("change_type", "update"),
+                "tasks": event_data["tasks"],
+                "current_timestamp": time.time(),
+                "trigger_reason": event_data.get("trigger_reason"),
+            }
+
+        # If it's a callback-shaped event
+        callback_data = event_data.get("callback_data")
+        task_id = event_data.get("task_id")
+        if callback_data and task_id:
+            task_obj = build_task_object_from_callback(task_id, callback_data)
+            if task_obj:
+                return {
+                    "change_type": "update",
+                    "tasks": [task_obj],
+                    "current_timestamp": time.time(),
+                    "trigger_reason": event_data.get("event_type", "callback_update"),
+                }
+
+        # Fallback to empty update
+        return {
+            "change_type": "update",
+            "tasks": [],
+            "current_timestamp": time.time(),
+        }
+    except Exception as e:
+        logger.error(f"Failed to standardize incoming event: {e}", exc_info=True)
+        return None
 
 
 async def transform_callback_to_task_format(task_id: str, event_data: dict) -> dict:
@@ -210,7 +287,7 @@ async def transform_callback_to_task_format(task_id: str, event_data: dict) -> d
 
         # Build minimal event data - global counts will be added at broadcast time
         return {
-            "change_type": "update",  # Use "update" so it gets processed by existing frontend logic
+            "change_type": "update",
             "tasks": [task_object],  # Frontend expects tasks array
             "current_timestamp": time.time(),
             "updated_count": 1,
@@ -253,12 +330,12 @@ async def trigger_sse_update(task_id: str, reason: str = "task_update"):
             task_info, last_status, task_id, current_time, dummy_request
         )
 
-        # Create minimal event data - global counts will be added at broadcast time
+        # Create standardized event data - global counts will be added at broadcast time
         event_data = {
             "tasks": [task_response],
             "current_timestamp": current_time,
             "since_timestamp": current_time,
-            "change_type": "realtime",
+            "change_type": "update",
             "trigger_reason": reason,
         }
 
@@ -419,6 +496,14 @@ def add_global_task_counts_to_event(event_data):
         event_data["active_tasks"] = global_task_counts["active"]
         event_data["all_tasks_count"] = sum(global_task_counts.values())
 
+        # Ensure tasks array is present for schema consistency
+        if "tasks" not in event_data:
+            event_data["tasks"] = []
+
+        # Ensure change_type is present
+        if "change_type" not in event_data:
+            event_data["change_type"] = "update"
+
         return event_data
 
     except Exception as e:
@@ -495,7 +580,11 @@ def _build_task_response(
         try:
             item_id = item_url.split("/")[-1]
             if item_id:
-                base_url = str(request.base_url).rstrip("/") if request else "http://localhost:7171"
+                base_url = (
+                    str(request.base_url).rstrip("/")
+                    if request
+                    else "http://localhost:7171"
+                )
                 dynamic_original_url = (
                     f"{base_url}/api/{download_type}/download/{item_id}"
                 )
@@ -573,7 +662,9 @@ def _build_task_response(
     return task_response
 
 
-async def get_paginated_tasks(page=1, limit=20, active_only=False, request: Optional[Request] = None):
+async def get_paginated_tasks(
+    page=1, limit=20, active_only=False, request: Optional[Request] = None
+):
     """
     Get paginated list of tasks.
     """
@@ -1066,47 +1157,18 @@ async def stream_task_updates(
 
         try:
             # Register this client with the broadcaster
-            logger.debug(f"SSE Stream: New client connecting...")
+            logger.debug("SSE Stream: New client connecting...")
             await sse_broadcaster.add_client(client_queue)
-            logger.debug(f"SSE Stream: Client registered successfully, total clients: {len(sse_broadcaster.clients)}")
-            
-            # Send initial data immediately upon connection
+            logger.debug(
+                f"SSE Stream: Client registered successfully, total clients: {len(sse_broadcaster.clients)}"
+            )
+
+            # Send initial data immediately upon connection (standardized 'update')
             initial_data = await generate_task_update_event(
                 time.time(), active_only, request
             )
             yield initial_data
 
-            # Also send any active tasks as callback-style events to newly connected clients
-            all_tasks = get_all_tasks()
-            for task_summary in all_tasks:
-                task_id = task_summary.get("task_id")
-                if not task_id:
-                    continue
-
-                task_info = get_task_info(task_id)
-                if not task_info:
-                    continue
-
-                last_status = get_last_task_status(task_id)
-                task_status = get_task_status_from_last_status(last_status)
-
-                # Send recent callback data for active or recently completed tasks
-                if is_task_active(task_status) or (
-                    last_status and last_status.get("timestamp", 0) > time.time() - 30
-                ):
-                    if last_status and "raw_callback" in last_status:
-                        callback_event = {
-                            "task_id": task_id,
-                            "callback_data": last_status["raw_callback"],
-                            "timestamp": last_status.get("timestamp", time.time()),
-                            "change_type": "callback",
-                            "event_type": "progress_update",
-                            "replay": True,  # Mark as replay for client
-                        }
-                        event_json = json.dumps(callback_event)
-                        yield f"data: {event_json}\n\n"
-                        logger.debug(f"SSE Stream: Sent replay callback for task {task_id}")
-            
             # Send periodic heartbeats and listen for real-time events
             last_heartbeat = time.time()
             heartbeat_interval = 30.0
@@ -1173,6 +1235,7 @@ async def stream_task_updates(
                                 + task_counts["retrying"],
                                 "task_counts": task_counts,
                                 "change_type": "heartbeat",
+                                "tasks": [],
                             }
 
                             event_json = json.dumps(heartbeat_data)
@@ -1187,6 +1250,7 @@ async def stream_task_updates(
                             "error": "Internal server error",
                             "timestamp": time.time(),
                             "change_type": "error",
+                            "tasks": [],
                         }
                     )
                     yield f"data: {error_data}\n\n"
@@ -1289,6 +1353,7 @@ async def generate_task_update_event(
             "current_timestamp": current_time,
             "updated_count": len(updated_tasks),
             "since_timestamp": since_timestamp,
+            "change_type": "update",
             "initial": True,  # Mark as initial load
         }
 
@@ -1301,7 +1366,12 @@ async def generate_task_update_event(
     except Exception as e:
         logger.error(f"Error generating initial SSE event: {e}", exc_info=True)
         error_data = json.dumps(
-            {"error": "Failed to load initial data", "timestamp": time.time()}
+            {
+                "error": "Failed to load initial data",
+                "timestamp": time.time(),
+                "tasks": [],
+                "change_type": "error",
+            }
         )
         return f"data: {error_data}\n\n"
 

@@ -7,6 +7,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { useContext, useState, useEffect } from "react";
 import { getTheme, toggleTheme } from "@/lib/theme";
+import { useSettings } from "@/contexts/settings-context";
 
 function ThemeToggle() {
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark' | 'system'>('system');
@@ -80,6 +81,8 @@ function ThemeToggle() {
 
 function AppLayout() {
   const { toggleVisibility, totalTasks } = useContext(QueueContext) || {};
+  const { settings } = useSettings();
+  const watchEnabled = !!settings?.watch?.enabled;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-surface-secondary via-surface-muted to-surface-accent dark:from-surface-dark dark:via-surface-muted-dark dark:to-surface-secondary-dark text-content-primary dark:text-content-primary-dark flex flex-col overflow-hidden">
@@ -92,9 +95,11 @@ function AppLayout() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <UserMenu />
+            {watchEnabled && (
             <Link to="/watchlist" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/binoculars.svg" alt="Watchlist" className="w-6 h-6 logo" />
             </Link>
+            )}
             <Link to="/history" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/history.svg" alt="History" className="w-6 h-6 logo" />
             </Link>
@@ -144,9 +149,11 @@ function AppLayout() {
             <Link to="/" className="p-3 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/home.svg" alt="Home" className="w-6 h-6 logo" />
             </Link>
+            {watchEnabled && (
             <Link to="/watchlist" className="p-3 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/binoculars.svg" alt="Watchlist" className="w-6 h-6 logo" />
             </Link>
+            )}
             <Link to="/history" className="p-3 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/history.svg" alt="History" className="w-6 h-6 logo" />
             </Link>

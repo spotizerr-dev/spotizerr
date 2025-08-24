@@ -772,7 +772,7 @@ export const Queue = () => {
       const priorities = {
         "real-time": 1, downloading: 2, processing: 3, initializing: 4,
         retrying: 5, queued: 6, done: 7, completed: 7, error: 8, cancelled: 9, skipped: 10
-      };
+      } as Record<string, number>;
       return priorities[status as keyof typeof priorities] || 10;
     };
 

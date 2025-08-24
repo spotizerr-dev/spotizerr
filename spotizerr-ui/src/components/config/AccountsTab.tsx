@@ -103,6 +103,7 @@ export function AccountsTab() {
     },
     onError: (error) => {
       const msg = extractApiErrorMessage(error);
+      toast.error(msg);
     },
   });
 
