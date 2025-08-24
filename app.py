@@ -13,6 +13,16 @@ import redis
 import socket
 from urllib.parse import urlparse
 
+# Define a mapping from string log levels to logging constants
+LOG_LEVELS = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
 # Run DB migrations as early as possible, before importing any routers that may touch DBs
 try:
     from routes.migrations import run_migrations_if_needed
@@ -27,13 +37,28 @@ except Exception as e:
     )
     sys.exit(1)
 
-# Import route routers (to be created)
+# Get log level from environment variable, default to INFO
+log_level_str = os.getenv("LOG_LEVEL", "WARNING").upper()
+log_level = LOG_LEVELS.get(log_level_str, logging.INFO)
+
+# Apply process umask from environment as early as possible
+_umask_value = os.getenv("UMASK")
+if _umask_value:
+    try:
+        os.umask(int(_umask_value, 8))
+    except Exception:
+        # Defer logging setup; avoid failing on invalid UMASK
+        pass
+
+
+# Import and initialize routes (this will start the watch manager)
 from routes.auth.credentials import router as credentials_router
 from routes.auth.auth import router as auth_router
-from routes.content.artist import router as artist_router
 from routes.content.album import router as album_router
+from routes.content.artist import router as artist_router
 from routes.content.track import router as track_router
 from routes.content.playlist import router as playlist_router
+from routes.content.bulk_add import router as bulk_add_router
 from routes.core.search import router as search_router
 from routes.core.history import router as history_router
 from routes.system.progress import router as prgs_router
@@ -51,7 +76,6 @@ from routes.auth.middleware import AuthMiddleware
 # Import watch manager controls (start/stop) without triggering side effects
 from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
 
-# Import and initialize routes (this will start the watch manager)
 
 
 # Configure application-wide logging
@@ -61,12 +85,23 @@ def setup_logging():
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
 
+    # Ensure required runtime directories exist
+    for p in [
+        Path("downloads"),
+        Path("data/config"),
+        Path("data/creds"),
+        Path("data/watch"),
+        Path("data/history"),
+        Path("logs/tasks"),
+    ]:
+        p.mkdir(parents=True, exist_ok=True)
+
     # Set up log file paths
     main_log = logs_dir / "spotizerr.log"
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(log_level)
 
     # Clear any existing handlers from the root logger
     if root_logger.hasHandlers():
@@ -83,12 +118,12 @@ def setup_logging():
         main_log, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(log_format)
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(log_level)
 
     # Console handler for stderr
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(log_format)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(log_level)
 
     # Add handlers to root logger
     root_logger.addHandler(file_handler)
@@ -101,16 +136,23 @@ def setup_logging():
         "routes.utils.celery_manager",
         "routes.utils.celery_tasks",
         "routes.utils.watch",
+        "uvicorn",          # General Uvicorn logger
+        "uvicorn.access",   # Uvicorn access logs
+        "uvicorn.error",    # Uvicorn error logs
     ]:
         logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.INFO)
-        logger.propagate = True  # Propagate to root logger
+        logger.setLevel(log_level)
+        # For uvicorn.access, we explicitly set propagate to False to prevent duplicate logging
+        # if access_log=False is used in uvicorn.run, and to ensure our middleware handles it.
+        logger.propagate = False if logger_name == "uvicorn.access" else True
 
     logging.info("Logging system initialized")
 
 
 def check_redis_connection():
     """Check if Redis is available and accessible"""
+    from routes.utils.celery_config import REDIS_URL
+
     if not REDIS_URL:
         logging.error("REDIS_URL is not configured. Please check your environment.")
         return False
@@ -156,6 +198,20 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
 
+    # Run migrations before initializing services
+    try:
+        from routes.migrations import run_migrations_if_needed
+
+        run_migrations_if_needed()
+        logging.getLogger(__name__).info(
+            "Database migrations executed (if needed) early in startup."
+        )
+    except Exception as e:
+        logging.getLogger(__name__).error(
+            f"Database migration step failed early in startup: {e}", exc_info=True
+        )
+        sys.exit(1)
+
     # Check Redis connection
     if not check_redis_connection():
         logging.error(
@@ -165,6 +221,8 @@ async def lifespan(app: FastAPI):
 
     # Start Celery workers
     try:
+        from routes.utils.celery_manager import celery_manager
+
         celery_manager.start()
         logging.info("Celery workers started successfully")
     except Exception as e:
@@ -172,6 +230,8 @@ async def lifespan(app: FastAPI):
 
     # Start Watch Manager after Celery is up
     try:
+        from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
+
         start_watch_manager()
         logging.info("Watch Manager initialized and registered for shutdown.")
     except Exception as e:
@@ -184,12 +244,16 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     try:
+        from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
+
         stop_watch_manager()
         logging.info("Watch Manager stopped")
     except Exception as e:
         logging.error(f"Error stopping Watch Manager: {e}")
 
     try:
+        from routes.utils.celery_manager import celery_manager
+
         celery_manager.stop()
         logging.info("Celery workers stopped")
     except Exception as e:
@@ -215,13 +279,31 @@ def create_app():
     )
 
     # Add authentication middleware (only if auth is enabled)
-    if AUTH_ENABLED:
-        app.add_middleware(AuthMiddleware)
-        logging.info("Authentication system enabled")
-    else:
-        logging.info("Authentication system disabled")
+    try:
+        from routes.auth import AUTH_ENABLED
+        from routes.auth.middleware import AuthMiddleware
+
+        if AUTH_ENABLED:
+            app.add_middleware(AuthMiddleware)
+            logging.info("Authentication system enabled")
+        else:
+            logging.info("Authentication system disabled")
+    except Exception as e:
+        logging.warning(f"Auth system initialization failed or unavailable: {e}")
 
     # Register routers with URL prefixes
+    from routes.auth.auth import router as auth_router
+    from routes.system.config import router as config_router
+    from routes.core.search import router as search_router
+    from routes.auth.credentials import router as credentials_router
+    from routes.content.album import router as album_router
+    from routes.content.track import router as track_router
+    from routes.content.playlist import router as playlist_router
+    from routes.content.bulk_add import router as bulk_add_router
+    from routes.content.artist import router as artist_router
+    from routes.system.progress import router as prgs_router
+    from routes.core.history import router as history_router
+
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
     # Include SSO router if available
@@ -240,6 +322,7 @@ def create_app():
     app.include_router(album_router, prefix="/api/album", tags=["album"])
     app.include_router(track_router, prefix="/api/track", tags=["track"])
     app.include_router(playlist_router, prefix="/api/playlist", tags=["playlist"])
+    app.include_router(bulk_add_router, prefix="/api/bulk", tags=["bulk"])
     app.include_router(artist_router, prefix="/api/artist", tags=["artist"])
     app.include_router(prgs_router, prefix="/api/prgs", tags=["progress"])
     app.include_router(history_router, prefix="/api/history", tags=["history"])
@@ -363,4 +446,4 @@ if __name__ == "__main__":
     except ValueError:
         port = 7171
 
-    uvicorn.run(app, host=host, port=port, log_level="info", access_log=True)
+    uvicorn.run(app, host=host, port=port, log_level=log_level_str.lower(), access_log=False)

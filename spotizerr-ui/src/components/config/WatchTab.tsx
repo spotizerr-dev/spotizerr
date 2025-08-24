@@ -89,6 +89,7 @@ export function WatchTab() {
     onSuccess: () => {
       toast.success("Watch settings saved successfully!");
       queryClient.invalidateQueries({ queryKey: ["watchConfig"] });
+      queryClient.invalidateQueries({ queryKey: ["config"] }); // Invalidate main config to refresh watch.enabled in SettingsProvider
     },
     onError: (error: any) => {
       const message = error?.response?.data?.error || error?.message || "Unknown error";

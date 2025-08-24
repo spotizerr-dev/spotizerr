@@ -1,14 +1,14 @@
 import axios from "axios";
 import type { AxiosInstance } from "axios";
 import { toast } from "sonner";
-import type { 
-  LoginRequest, 
-  RegisterRequest, 
-  LoginResponse, 
-  AuthStatusResponse, 
+import type {
+  LoginRequest,
+  RegisterRequest,
+  LoginResponse,
+  AuthStatusResponse,
   User,
   CreateUserRequest,
-  SSOStatusResponse
+  SSOStatusResponse,
 } from "@/types/auth";
 
 class AuthApiClient {
@@ -38,7 +38,7 @@ class AuthApiClient {
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => Promise.reject(error),
     );
 
     // Response interceptor for error handling
@@ -62,11 +62,11 @@ class AuthApiClient {
             // Only clear token for auth-related endpoints
             const requestUrl = error.config?.url || "";
             const isAuthEndpoint = requestUrl.includes("/auth/") || requestUrl.endsWith("/auth");
-            
+
             if (isAuthEndpoint) {
               // Clear invalid token only for auth endpoints
               this.clearToken();
-              
+
               // Only show auth error if not during initial token check
               if (!this.isCheckingToken) {
                 toast.error("Session Expired", {
@@ -96,11 +96,12 @@ class AuthApiClient {
             description: "The server did not respond in time. Please try again later.",
           });
         } else {
-          const errorMessage = error.response?.data?.detail || 
-                              error.response?.data?.error || 
-                              error.message || 
-                              "An unknown error occurred.";
-          
+          const errorMessage =
+            error.response?.data?.detail ||
+            error.response?.data?.error ||
+            error.message ||
+            "An unknown error occurred.";
+
           // Don't show toast errors during token validation
           if (!this.isCheckingToken) {
             toast.error("API Error", {
@@ -109,14 +110,14 @@ class AuthApiClient {
           }
         }
         return Promise.reject(error);
-      }
+      },
     );
   }
 
   // Enhanced token management with storage options
   setToken(token: string | null, rememberMe: boolean = true) {
     this.token = token;
-    
+
     if (token) {
       if (rememberMe) {
         // Store in localStorage for persistence across browser sessions
@@ -149,16 +150,16 @@ class AuthApiClient {
     // Try localStorage first (persistent)
     let token = localStorage.getItem("auth_token");
     let isRemembered = localStorage.getItem("auth_remember") === "true";
-    
+
     // If not found in localStorage, try sessionStorage
     if (!token) {
       token = sessionStorage.getItem("auth_token");
       isRemembered = false;
     }
-    
+
     if (token) {
       this.token = token;
-      console.log(`Loaded ${isRemembered ? 'persistent' : 'session'} token from storage`);
+      console.log(`Loaded ${isRemembered ? "persistent" : "session"} token from storage`);
     }
   }
 
@@ -166,7 +167,7 @@ class AuthApiClient {
     // Preserve the remember me preference when clearing invalid tokens
     const wasRemembered = this.isRemembered();
     this.token = null;
-    
+
     if (wasRemembered) {
       // Keep the remember preference but remove the invalid token
       localStorage.removeItem("auth_token");
@@ -196,7 +197,7 @@ class AuthApiClient {
     try {
       this.isCheckingToken = true;
       const response = await this.apiClient.get<AuthStatusResponse>("/auth/status");
-      
+
       // If the token is valid and user is authenticated
       if (response.data.auth_enabled && response.data.authenticated && response.data.user) {
         console.log("Stored token is valid, user authenticated");
@@ -224,24 +225,24 @@ class AuthApiClient {
   async login(credentials: LoginRequest, rememberMe: boolean = true): Promise<LoginResponse> {
     const response = await this.apiClient.post<LoginResponse>("/auth/login", credentials);
     const loginData = response.data;
-    
+
     // Store the token with remember preference
     this.setToken(loginData.access_token, rememberMe);
-    
+
     toast.success("Login Successful", {
-      description: `Test  , ${loginData.user.username}!`,
+      description: `Welcome, ${loginData.user.username}!`,
     });
-    
+
     return loginData;
   }
 
   async register(userData: RegisterRequest): Promise<{ message: string }> {
     const response = await this.apiClient.post("/auth/register", userData);
-    
+
     toast.success("Registration Successful", {
       description: "Account created successfully! You can now log in.",
     });
-    
+
     return response.data;
   }
 
@@ -252,9 +253,9 @@ class AuthApiClient {
       // Ignore logout errors - clear token anyway
       console.warn("Logout request failed:", error);
     }
-    
+
     this.clearAllAuthData(); // Changed from this.clearToken()
-    
+
     toast.success("Logged Out", {
       description: "You have been logged out successfully.",
     });
@@ -270,11 +271,11 @@ class AuthApiClient {
       current_password: currentPassword,
       new_password: newPassword,
     });
-    
+
     toast.success("Password Changed", {
       description: "Your password has been updated successfully.",
     });
-    
+
     return response.data;
   }
 
@@ -286,31 +287,31 @@ class AuthApiClient {
 
   async deleteUser(username: string): Promise<{ message: string }> {
     const response = await this.apiClient.delete(`/auth/users/${username}`);
-    
+
     toast.success("User Deleted", {
       description: `User ${username} has been deleted.`,
     });
-    
+
     return response.data;
   }
 
   async updateUserRole(username: string, role: "user" | "admin"): Promise<{ message: string }> {
     const response = await this.apiClient.put(`/auth/users/${username}/role`, { role });
-    
+
     toast.success("Role Updated", {
       description: `User ${username} role updated to ${role}.`,
     });
-    
+
     return response.data;
   }
 
   async createUser(userData: CreateUserRequest): Promise<{ message: string }> {
     const response = await this.apiClient.post("/auth/users/create", userData);
-    
+
     toast.success("User Created", {
       description: `User ${userData.username} created successfully.`,
     });
-    
+
     return response.data;
   }
 
@@ -318,11 +319,11 @@ class AuthApiClient {
     const response = await this.apiClient.put(`/auth/users/${username}/password`, {
       new_password: newPassword,
     });
-    
+
     toast.success("Password Reset", {
       description: `Password for ${username} has been reset successfully.`,
     });
-    
+
     return response.data;
   }
 
@@ -336,7 +337,7 @@ class AuthApiClient {
   async handleSSOToken(token: string, rememberMe: boolean = true): Promise<User> {
     // Set the token and get user info
     this.setToken(token, rememberMe);
-    
+
     // Validate the token and get user data
     const tokenValidation = await this.validateStoredToken();
     if (tokenValidation.isValid && tokenValidation.userData?.user) {
@@ -374,4 +375,4 @@ class AuthApiClient {
 export const authApiClient = new AuthApiClient();
 
 // Export the client as default for backward compatibility
-export default authApiClient.client; 
+export default authApiClient.client;

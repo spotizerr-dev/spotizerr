@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from .v3_2_0 import MigrationV3_2_0
+from .v3_2_1 import log_noop_migration_detected
 
 logger = logging.getLogger(__name__)
 
@@ -285,7 +286,6 @@ def _update_watch_playlists_db(conn: sqlite3.Connection) -> None:
                 EXPECTED_PLAYLIST_TRACKS_COLUMNS,
                 f"playlist tracks ({table_name})",
             )
-        logger.info("Upgraded watch playlists DB to 3.2.0 base schema")
     except Exception:
         logger.error(
             "Failed to upgrade watch playlists DB to 3.2.0 base schema", exc_info=True
@@ -348,7 +348,6 @@ def _update_watch_artists_db(conn: sqlite3.Connection) -> None:
                 EXPECTED_ARTIST_ALBUMS_COLUMNS,
                 f"artist albums ({table_name})",
             )
-        logger.info("Upgraded watch artists DB to 3.2.0 base schema")
     except Exception:
         logger.error(
             "Failed to upgrade watch artists DB to 3.2.0 base schema", exc_info=True
@@ -379,10 +378,10 @@ def run_migrations_if_needed():
         with _safe_connect(HISTORY_DB) as history_conn:
             if history_conn and not _is_history_at_least_3_2_0(history_conn):
                 logger.error(
-                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.1."
+                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.3.0."
                 )
                 raise RuntimeError(
-                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.2.1."
+                    "Instance is not at schema version 3.2.0. Please upgrade to 3.2.0 before applying 3.3.0."
                 )
 
         # Watch playlists DB
@@ -413,4 +412,5 @@ def run_migrations_if_needed():
         raise
     else:
         _ensure_creds_filesystem()
-        logger.info("Database migrations check completed (3.2.0 -> 3.2.1 path)")
+        log_noop_migration_detected()
+        logger.info("Database migrations check completed (3.2.0 -> 3.3.0 path)")
