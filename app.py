@@ -299,6 +299,7 @@ def create_app():
     from routes.content.album import router as album_router
     from routes.content.track import router as track_router
     from routes.content.playlist import router as playlist_router
+    from routes.content.bulk_add import router as bulk_add_router
     from routes.content.artist import router as artist_router
     from routes.system.progress import router as prgs_router
     from routes.core.history import router as history_router
@@ -321,6 +322,7 @@ def create_app():
     app.include_router(album_router, prefix="/api/album", tags=["album"])
     app.include_router(track_router, prefix="/api/track", tags=["track"])
     app.include_router(playlist_router, prefix="/api/playlist", tags=["playlist"])
+    app.include_router(bulk_add_router, prefix="/api/bulk", tags=["bulk"])
     app.include_router(artist_router, prefix="/api/artist", tags=["artist"])
     app.include_router(prgs_router, prefix="/api/prgs", tags=["progress"])
     app.include_router(history_router, prefix="/api/history", tags=["history"])
