@@ -13,6 +13,34 @@ import redis
 import socket
 from urllib.parse import urlparse
 
+# Define a mapping from string log levels to logging constants
+LOG_LEVELS = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+# Run DB migrations as early as possible, before importing any routers that may touch DBs
+try:
+    from routes.migrations import run_migrations_if_needed
+
+    run_migrations_if_needed()
+    logging.getLogger(__name__).info(
+        "Database migrations executed (if needed) early in startup."
+    )
+except Exception as e:
+    logging.getLogger(__name__).error(
+        f"Database migration step failed early in startup: {e}", exc_info=True
+    )
+    sys.exit(1)
+
+# Get log level from environment variable, default to INFO
+log_level_str = os.getenv("LOG_LEVEL", "WARNING").upper()
+log_level = LOG_LEVELS.get(log_level_str, logging.INFO)
+
 # Apply process umask from environment as early as possible
 _umask_value = os.getenv("UMASK")
 if _umask_value:
@@ -22,7 +50,32 @@ if _umask_value:
         # Defer logging setup; avoid failing on invalid UMASK
         pass
 
+
 # Import and initialize routes (this will start the watch manager)
+from routes.auth.credentials import router as credentials_router
+from routes.auth.auth import router as auth_router
+from routes.content.album import router as album_router
+from routes.content.artist import router as artist_router
+from routes.content.track import router as track_router
+from routes.content.playlist import router as playlist_router
+from routes.content.bulk_add import router as bulk_add_router
+from routes.core.search import router as search_router
+from routes.core.history import router as history_router
+from routes.system.progress import router as prgs_router
+from routes.system.config import router as config_router
+
+
+# Import Celery configuration and manager
+from routes.utils.celery_manager import celery_manager
+from routes.utils.celery_config import REDIS_URL
+
+# Import authentication system
+from routes.auth import AUTH_ENABLED
+from routes.auth.middleware import AuthMiddleware
+
+# Import watch manager controls (start/stop) without triggering side effects
+from routes.utils.watch.manager import start_watch_manager, stop_watch_manager
+
 
 
 # Configure application-wide logging
@@ -48,7 +101,7 @@ def setup_logging():
 
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(log_level)
 
     # Clear any existing handlers from the root logger
     if root_logger.hasHandlers():
@@ -65,12 +118,12 @@ def setup_logging():
         main_log, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(log_format)
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(log_level)
 
     # Console handler for stderr
     console_handler = logging.StreamHandler(sys.stderr)
     console_handler.setFormatter(log_format)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(log_level)
 
     # Add handlers to root logger
     root_logger.addHandler(file_handler)
@@ -83,10 +136,15 @@ def setup_logging():
         "routes.utils.celery_manager",
         "routes.utils.celery_tasks",
         "routes.utils.watch",
+        "uvicorn",          # General Uvicorn logger
+        "uvicorn.access",   # Uvicorn access logs
+        "uvicorn.error",    # Uvicorn error logs
     ]:
         logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.INFO)
-        logger.propagate = True  # Propagate to root logger
+        logger.setLevel(log_level)
+        # For uvicorn.access, we explicitly set propagate to False to prevent duplicate logging
+        # if access_log=False is used in uvicorn.run, and to ensure our middleware handles it.
+        logger.propagate = False if logger_name == "uvicorn.access" else True
 
     logging.info("Logging system initialized")
 
@@ -386,4 +444,4 @@ if __name__ == "__main__":
     except ValueError:
         port = 7171
 
-    uvicorn.run(app, host=host, port=port, log_level="info", access_log=True)
+    uvicorn.run(app, host=host, port=port, log_level=log_level_str.lower(), access_log=False)

@@ -246,7 +246,7 @@ class CeleryDownloadQueueManager:
         """Initialize the Celery-based download queue manager"""
         self.max_concurrent = MAX_CONCURRENT_DL
         self.paused = False
-        print(
+        logger.info(
             f"Celery Download Queue Manager initialized with max_concurrent={self.max_concurrent}"
         )
 
