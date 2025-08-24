@@ -126,7 +126,7 @@ export function ProfileTab() {
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-content-secondary dark:text-content-secondary-dark mb-1">
+            <label className="block text_sm font-medium text-content-secondary dark:text-content-secondary-dark mb-1">
               Role
             </label>
             <p className="text-content-primary dark:text-content-primary-dark">
@@ -177,7 +177,7 @@ export function ProfileTab() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-content-secondary dark:text-content-secondary-dark mb-2">
+              <label className="block text-sm font_medium text-content-secondary dark:text-content-secondary-dark mb-2">
                 New Password
               </label>
               <input
@@ -226,8 +226,13 @@ export function ProfileTab() {
                 type="submit"
                 disabled={isChangingPassword}
                 className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Save Password"
               >
-                {isChangingPassword ? "Changing Password..." : "Change Password"}
+                {isChangingPassword ? (
+                  <img src="/spinner.svg" alt="Saving" className="w-5 h-5 animate-spin inline-block logo" />
+                ) : (
+                  <img src="/save.svg" alt="Save" className="w-5 h-5 inline-block logo" />
+                )}
               </button>
               <button
                 type="button"
@@ -252,7 +257,7 @@ export function ProfileTab() {
       {/* SSO User Notice */}
       {user?.is_sso_user && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-          <h3 className="text-lg font-medium text-blue-900 dark:text-blue-100 mb-2">
+          <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
             SSO Account
           </h3>
           <p className="text-blue-800 dark:text-blue-200">

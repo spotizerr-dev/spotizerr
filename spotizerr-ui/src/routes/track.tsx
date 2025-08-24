@@ -174,7 +174,7 @@ export const Track = () => {
                   style={{ width: `${track.popularity}%` }}
                 ></div>
               </div>
-              <span className="text-sm font-medium text-content-secondary dark:text-content-secondary-dark">
+              <span className="text-sm font-medium text-content_secondary dark:text-content-secondary-dark">
                 {track.popularity}%
               </span>
             </div>
@@ -193,14 +193,14 @@ export const Track = () => {
                 ? "Queued."
                 : trackStatus === "error"
                 ? "Download"
-                : "Downloading..."
+                : <img src="/spinner.svg" alt="Loading" className="w-5 h-5 animate-spin inline-block" />
               : "Download"}
           </button>
           <a
             href={track.external_urls.spotify}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full sm:w-auto flex items-center justify-center gap-3 text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition duration-300 py-3 px-8 border border-border dark:border-border-dark rounded-full hover:border-border-accent dark:hover:border-border-accent-dark"
+            className="w-full sm:w-auto flex items_center justify-center gap-3 text-content-secondary dark:text-content-secondary-dark hover:text-content-primary dark:hover:text-content-primary-dark transition duration-300 py-3 px-8 border border-border dark:border-border-dark rounded-full hover:border-border-accent dark:hover:border-border-accent-dark"
             aria-label="Listen on Spotify"
           >
             <FaSpotify size={20} className="icon-secondary hover:icon-primary" />

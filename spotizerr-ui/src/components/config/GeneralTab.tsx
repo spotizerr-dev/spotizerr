@@ -83,8 +83,13 @@ export function GeneralTab({ config, isLoading: isConfigLoading }: GeneralTabPro
             type="submit"
             disabled={mutation.isPending}
             className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+            title="Save General Settings"
           >
-            {mutation.isPending ? "Saving..." : "Save General Settings"}
+            {mutation.isPending ? (
+              <img src="/spinner.svg" alt="Saving" className="w-5 h-5 animate-spin logo" />
+            ) : (
+              <img src="/save.svg" alt="Save" className="w-5 h-5 logo" />
+            )}
           </button>
         </div>
       </div>

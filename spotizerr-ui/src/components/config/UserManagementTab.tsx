@@ -252,7 +252,7 @@ export function UserManagementTab() {
                     errors.email
                       ? "border-error focus:border-error"
                       : "border-input-border dark:border-input-border-dark focus:border-primary"
-                  } bg-input-background dark:bg-input-background-dark text-content-primary dark:text-content-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                  } bg-input-background dark:bg-input-background-dark text-content-primary dark:text-content-primary-dark focus:outline_none focus:ring-2 focus:ring-primary/20`}
                   placeholder="Enter email (optional)"
                   disabled={isCreating}
                 />
@@ -302,15 +302,13 @@ export function UserManagementTab() {
               <button
                 type="submit"
                 disabled={isCreating}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text_white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                title="Save User"
               >
                 {isCreating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Creating...
-                  </>
+                  <img src="/spinner.svg" alt="Saving" className="w-4 h-4 animate-spin logo" />
                 ) : (
-                  "Create User"
+                  <img src="/save.svg" alt="Save" className="w-4 h-4 logo" />
                 )}
               </button>
             </div>
@@ -474,14 +472,12 @@ export function UserManagementTab() {
                     type="submit"
                     disabled={isResettingPassword}
                     className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    title="Save Password"
                   >
                     {isResettingPassword ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Resetting...
-                      </>
+                      <img src="/spinner.svg" alt="Saving" className="w-4 h-4 animate-spin logo" />
                     ) : (
-                      "Reset Password"
+                      <img src="/save.svg" alt="Save" className="w-4 h-4 logo" />
                     )}
                   </button>
                 </div>

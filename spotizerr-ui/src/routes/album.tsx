@@ -205,7 +205,7 @@ export const Album = () => {
                 ? "Queued."
                 : albumStatus === "error"
                 ? "Download Album"
-                : "Downloading..."
+                : <img src="/spinner.svg" alt="Loading" className="w-5 h-5 animate-spin inline-block" />
               : "Download Album"}
           </button>
         </div>

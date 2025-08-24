@@ -54,8 +54,8 @@ function SpotifyApiForm() {
       queryClient.invalidateQueries({ queryKey: ["spotifyApiConfig"] });
     },
     onError: (e) => {
-      console.error("Failed to save Spotify API settings:", e.message);
-      toast.error(`Failed to save: ${e.message}`);
+      console.error("Failed to save Spotify API settings:", (e as any).message);
+      toast.error(`Failed to save: ${(e as any).message}`);
     },
   });
 
@@ -75,8 +75,13 @@ function SpotifyApiForm() {
             type="submit"
             disabled={mutation.isPending}
             className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+            title="Save Spotify API"
           >
-            {mutation.isPending ? "Saving..." : "Save Spotify API"}
+            {mutation.isPending ? (
+              <img src="/spinner.svg" alt="Saving" className="w-5 h-5 animate-spin logo" />
+            ) : (
+              <img src="/save.svg" alt="Save" className="w-5 h-5 logo" />
+            )}
           </button>
         </div>
       </div>
@@ -119,7 +124,7 @@ function WebhookForm() {
       queryClient.invalidateQueries({ queryKey: ["webhookConfig"] });
     },
     onError: (e) => {
-      toast.error(`Failed to save: ${e.message}`);
+      toast.error(`Failed to save: ${(e as any).message}`);
     },
   });
 
@@ -128,7 +133,7 @@ function WebhookForm() {
     onSuccess: () => {
       // No toast needed
     },
-    onError: (e) => toast.error(`Webhook test failed: ${e.message}`),
+    onError: (e) => toast.error(`Webhook test failed: ${(e as any).message}`),
   });
 
   useEffect(() => {
@@ -147,8 +152,13 @@ function WebhookForm() {
             type="submit"
             disabled={mutation.isPending}
             className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+            title="Save Webhook"
           >
-            {mutation.isPending ? "Saving..." : "Save Webhook"}
+            {mutation.isPending ? (
+              <img src="/spinner.svg" alt="Saving" className="w-5 h-5 animate-spin logo" />
+            ) : (
+              <img src="/save.svg" alt="Save" className="w-5 h-5 logo" />
+            )}
           </button>
         </div>
       </div>

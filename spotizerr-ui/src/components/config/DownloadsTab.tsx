@@ -100,8 +100,8 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => {
-      console.error("Failed to save settings", error.message);
-      toast.error(`Failed to save settings: ${error.message}`);
+      console.error("Failed to save settings", (error as any).message);
+      toast.error(`Failed to save settings: ${(error as any).message}`);
     },
   });
 
@@ -180,8 +180,13 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
             type="submit"
             disabled={mutation.isPending || !!validationError}
             className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+            title="Save Download Settings"
           >
-            {mutation.isPending ? "Saving..." : "Save Download Settings"}
+            {mutation.isPending ? (
+              <img src="/spinner.svg" alt="Saving" className="w-5 h-5 animate-spin logo" />
+            ) : (
+              <img src="/save.svg" alt="Save" className="w-5 h-5 logo" />
+            )}
           </button>
         </div>
       </div>
@@ -359,7 +364,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
             type="number"
             min="1"
             {...register("retryDelaySeconds")}
-            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+            className="block w_full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
           />
         </div>
         <div className="flex flex-col gap-2">
@@ -369,7 +374,7 @@ export function DownloadsTab({ config, isLoading }: DownloadsTabProps) {
             type="number"
             min="0"
             {...register("retryDelayIncrease")}
-            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+            className="block w-full p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline_none focus:ring-2 focus:ring-input-focus"
           />
         </div>
       </div>

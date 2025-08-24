@@ -300,7 +300,7 @@ export const Artist = () => {
               ? artistStatus === "queued"
                 ? "Queued."
                 : artistStatus === "downloading"
-                ? "Downloading..."
+                ? <img src="/spinner.svg" alt="Loading" className="w-5 h-5 animate-spin" />
                 : <>
                     <FaDownload className="icon-inverse" />
                     <span>Download All</span>
@@ -361,7 +361,7 @@ export const Artist = () => {
                       ? "Queued."
                       : trackStatuses[track.id] === "error"
                       ? "Download"
-                      : "Downloading..."
+                      : <img src="/spinner.svg" alt="Loading" className="w-4 h-4 animate-spin inline-block" />
                     : "Download"}
                 </button>
               </div>

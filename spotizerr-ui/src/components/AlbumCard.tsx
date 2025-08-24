@@ -54,7 +54,7 @@ export const AlbumCard = ({ album, onDownload }: AlbumCardProps) => {
                   ? "Queued."
                   : status === "error"
                   ? <img src="/download.svg" alt="Download" className="w-5 h-5 icon-inverse" />
-                  : "Downloading..."
+                  : <img src="/spinner.svg" alt="Loading" className="w-5 h-5 animate-spin" />
                 : <img src="/download.svg" alt="Download" className="w-5 h-5 icon-inverse" />
               }
             </button>

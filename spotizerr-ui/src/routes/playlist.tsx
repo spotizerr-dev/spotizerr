@@ -239,7 +239,7 @@ export const Playlist = () => {
                 ? "Queued."
                 : playlistStatus === "error"
                 ? "Download All"
-                : "Downloading..."
+                : <img src="/spinner.svg" alt="Loading" className="w-5 h-5 animate-spin inline-block" />
               : "Download All"}
           </button>
           {settings?.watch?.enabled && (
@@ -264,7 +264,7 @@ export const Playlist = () => {
 
       {/* Tracks Section */}
       <div className="space-y-3 md:space-y-4">
-        <div className="flex items-center justify-between px-1">
+        <div className="flex items-center justify_between px-1">
           <h2 className="text-xl font-semibold text-content-primary dark:text-content-primary-dark">Tracks</h2>
           {tracks.length > 0 && (
             <span className="text-sm text-content-muted dark:text-content-muted-dark">
@@ -335,7 +335,7 @@ export const Playlist = () => {
                           ? "Queued."
                           : trackStatuses[track.id] === "error"
                           ? <img src="/download.svg" alt="Download" className="w-4 h-4 logo" />
-                          : "Downloading..."
+                          : <img src="/spinner.svg" alt="Loading" className="w-4 h-4 animate-spin" />
                         : <img src="/download.svg" alt="Download" className="w-4 h-4 logo" />
                       }
                     </button>

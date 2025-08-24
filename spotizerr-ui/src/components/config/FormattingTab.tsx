@@ -88,8 +88,8 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
       queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (error) => {
-      console.error("Failed to save formatting settings:", error.message);
-      toast.error(`Failed to save settings: ${error.message}`);
+      console.error("Failed to save formatting settings:", (error as any).message);
+      toast.error(`Failed to save settings: ${(error as any).message}`);
     },
   });
 
@@ -131,8 +131,13 @@ export function FormattingTab({ config, isLoading }: FormattingTabProps) {
             type="submit"
             disabled={mutation.isPending}
             className="px-4 py-2 bg-button-primary hover:bg-button-primary-hover text-button-primary-text rounded-md disabled:opacity-50"
+            title="Save Formatting Settings"
           >
-            {mutation.isPending ? "Saving..." : "Save Formatting Settings"}
+            {mutation.isPending ? (
+              <img src="/spinner.svg" alt="Saving" className="w-5 h-5 animate-spin logo" />
+            ) : (
+              <img src="/save.svg" alt="Save" className="w-5 h-5 logo" />
+            )}
           </button>
         </div>
       </div>
