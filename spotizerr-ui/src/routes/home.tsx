@@ -3,10 +3,11 @@ import { useNavigate, useSearch, useRouterState } from "@tanstack/react-router";
 import { useDebounce } from "use-debounce";
 import { toast } from "sonner";
 import type { TrackType, AlbumType, SearchResult } from "@/types/spotify";
-import { parseSpotifyUrl} from "@/lib/spotify-utils";
+import { parseSpotifyUrl } from "@/lib/spotify-utils";
 import { QueueContext } from "@/contexts/queue-context";
 import { SearchResultCard } from "@/components/SearchResultCard";
 import { indexRoute } from "@/router";
+import { Music, Disc, User, ListMusic } from "lucide-react";
 import { authApiClient } from "@/lib/api-client";
 import { useSettings } from "@/contexts/settings-context";
 import { FaEye, FaDownload } from "react-icons/fa";
@@ -16,12 +17,12 @@ const safelyGetProperty = <T,>(obj: any, path: string[], fallback: T): T => {
   try {
     let current = obj;
     for (const key of path) {
-      if (current == null || typeof current !== 'object') {
+      if (current == null || typeof current !== "object") {
         return fallback;
       }
       current = current[key];
     }
-    return current ?? fallback;
+    return (current ?? fallback) as T;
   } catch {
     return fallback;
   }
@@ -37,7 +38,9 @@ export const Home = () => {
   const { settings } = useSettings();
 
   const [query, setQuery] = useState(q || "");
-  const [searchType, setSearchType] = useState<"track" | "album" | "artist" | "playlist">(type || "track");
+  const [searchType, setSearchType] = useState<
+    "track" | "album" | "artist" | "playlist"
+  >(type || "track");
   const [debouncedQuery] = useDebounce(query, 500);
   const [activeTab, setActiveTab] = useState<"search" | "bulkAdd">("search");
   const [linksInput, setLinksInput] = useState("");
@@ -48,8 +51,6 @@ export const Home = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const context = useContext(QueueContext);
   const loaderRef = useRef<HTMLDivElement | null>(null);
-
-  // Removed scroll locking on mobile empty state to avoid blocking scroll globally
 
   useEffect(() => {
     navigate({ search: (prev) => ({ ...prev, q: debouncedQuery, type: searchType }) });
@@ -65,7 +66,10 @@ export const Home = () => {
   const { addItem } = context;
 
   const handleAddBulkLinks = useCallback(async () => {
-    const allLinks = linksInput.split("\n").map((link) => link.trim()).filter(Boolean);
+    const allLinks = linksInput
+      .split("\n")
+      .map((link) => link.trim())
+      .filter(Boolean);
     if (allLinks.length === 0) {
       toast.info("No links provided to add.");
       return;
@@ -96,12 +100,16 @@ export const Home = () => {
 
     setIsBulkAdding(true);
     try {
-      const response = await authApiClient.client.post("/bulk/bulk-add-spotify-links", { links: supportedLinks });
-      const {count, failed_links } = response.data;
+      const response = await authApiClient.client.post("/bulk/bulk-add-spotify-links", {
+        links: supportedLinks,
+      });
+      const { count, failed_links } = response.data;
 
       if (failed_links && failed_links.length > 0) {
         toast.warning("Bulk Add Completed with Warnings", {
-          description: `${count} links added. Failed to add ${failed_links.length} links: ${failed_links.join(", ")}`,
+          description: `${count} links added. Failed to add ${failed_links.length} links: ${failed_links.join(
+            ", "
+          )}`,
         });
       } else {
         toast.success("Bulk Add Successful", {
@@ -130,7 +138,10 @@ export const Home = () => {
   }, [linksInput]);
 
   const handleWatchBulkLinks = useCallback(async () => {
-    const links = linksInput.split("\n").map((link) => link.trim()).filter(Boolean);
+    const links = linksInput
+      .split("\n")
+      .map((link) => link.trim())
+      .filter(Boolean);
     if (links.length === 0) {
       toast.info("No links provided to watch.");
       return;
@@ -197,7 +208,7 @@ export const Home = () => {
           loadMore();
         }
       },
-      { threshold: 1.0 },
+      { threshold: 1.0 }
     );
 
     const currentLoader = loaderRef.current;
@@ -218,7 +229,7 @@ export const Home = () => {
       addItem({ spotifyId: track.id, type: "track", name: track.name, artist: artistName });
       toast.info(`Adding ${track.name} to queue...`);
     },
-    [addItem],
+    [addItem]
   );
 
   const handleDownloadAlbum = useCallback(
@@ -227,53 +238,63 @@ export const Home = () => {
       addItem({ spotifyId: album.id, type: "album", name: album.name, artist: artistName });
       toast.info(`Adding ${album.name} to queue...`);
     },
-    [addItem],
+    [addItem]
   );
 
   const resultComponent = useMemo(() => {
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {displayedResults.map((item) => {
-          // Add safety checks for essential properties
-          if (!item || !item.id || !item.name || !item.model) {
-            return null;
-          }
+        {displayedResults
+          .map((item) => {
+            // Add safety checks for essential properties
+            if (!item || !item.id || !item.name || !item.model) {
+              return null;
+            }
 
-          let imageUrl;
-          let onDownload;
-          let subtitle;
+            let imageUrl;
+            let onDownload: (() => void) | undefined;
+            let subtitle: string | undefined;
 
-          if (item.model === "track") {
-            imageUrl = safelyGetProperty(item, ['album', 'images', '0', 'url'], undefined);
-            onDownload = () => handleDownloadTrack(item as TrackType);
-            const artists = safelyGetProperty(item, ['artists'], []);
-            subtitle = Array.isArray(artists) ? artists.map((a: any) => safelyGetProperty(a, ['name'], 'Unknown')).join(", ") : "Unknown Artist";
-          } else if (item.model === "album") {
-            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
-            onDownload = () => handleDownloadAlbum(item as AlbumType);
-            const artists = safelyGetProperty(item, ['artists'], []);
-            subtitle = Array.isArray(artists) ? artists.map((a: any) => safelyGetProperty(a, ['name'], 'Unknown')).join(", ") : "Unknown Artist";
-          } else if (item.model === "artist") {
-            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
-            subtitle = "Artist";
-          } else if (item.model === "playlist") {
-            imageUrl = safelyGetProperty(item, ['images', '0', 'url'], undefined);
-            const ownerName = safelyGetProperty(item, ['owner', 'display_name'], 'Unknown');
-            subtitle = `By ${ownerName}`;
-          }
+            if (item.model === "track") {
+              imageUrl = safelyGetProperty(item, ["album", "images", "0", "url"], undefined);
+              onDownload = () => handleDownloadTrack(item as TrackType);
+              const artists = safelyGetProperty(item, ["artists"], []);
+              subtitle = Array.isArray(artists)
+                ? artists
+                    .map((a: any) => safelyGetProperty(a, ["name"], "Unknown"))
+                    .join(", ")
+                : "Unknown Artist";
+            } else if (item.model === "album") {
+              imageUrl = safelyGetProperty(item, ["images", "0", "url"], undefined);
+              onDownload = () => handleDownloadAlbum(item as AlbumType);
+              const artists = safelyGetProperty(item, ["artists"], []);
+              subtitle = Array.isArray(artists)
+                ? artists
+                    .map((a: any) => safelyGetProperty(a, ["name"], "Unknown"))
+                    .join(", ")
+                : "Unknown Artist";
+            } else if (item.model === "artist") {
+              imageUrl = safelyGetProperty(item, ["images", "0", "url"], undefined);
+              subtitle = "Artist";
+            } else if (item.model === "playlist") {
+              imageUrl = safelyGetProperty(item, ["images", "0", "url"], undefined);
+              const ownerName = safelyGetProperty(item, ["owner", "display_name"], "Unknown");
+              subtitle = `By ${ownerName}`;
+            }
 
-          return (
-            <SearchResultCard
-              key={item.id}
-              id={item.id}
-              name={item.name}
-              type={item.model}
-              imageUrl={imageUrl}
-              subtitle={subtitle}
-              onDownload={onDownload}
-            />
-          );
-        }).filter(Boolean)} {/* Filter out null components */}
+            return (
+              <SearchResultCard
+                key={item.id}
+                id={item.id}
+                name={item.name}
+                type={item.model}
+                imageUrl={imageUrl}
+                subtitle={subtitle}
+                onDownload={onDownload}
+              />
+            );
+          })
+          .filter(Boolean)}
       </div>
     );
   }, [displayedResults, handleDownloadTrack, handleDownloadAlbum]);
@@ -284,6 +305,7 @@ export const Home = () => {
         <h1 className="text-2xl font-bold text-content-primary dark:text-content-primary-dark">Spotizerr</h1>
       </div>
 
+      {/* Tabs */}
       <div className="flex justify-center mb-4 md:mb-6 px-4 md:px-0 border-b border-gray-300 dark:border-gray-700">
         <button
           className={`flex-1 py-2 text-center transition-colors duration-200 ${
@@ -318,10 +340,42 @@ export const Home = () => {
                 placeholder="Search for a track, album, or artist"
                 className="flex-1 p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
               />
+
+              {/* Icon buttons for search type (larger screens) */}
+              <div className="hidden sm:flex gap-2 items-center">
+                {(["track", "album", "artist", "playlist"] as const).map((typeOption) => (
+                  <button
+                    key={typeOption}
+                    onClick={() => setSearchType(typeOption)}
+                    aria-label={`Search ${typeOption}`}
+                    className={`flex items-center gap-1 p-2 rounded-md text-sm font-medium transition-colors border ${
+                      searchType === typeOption
+                        ? "bg-green-600 text-white border-green-600"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    }`}
+                  >
+                    {
+                      {
+                        track: <Music size={16} />,
+                        album: <Disc size={16} />,
+                        artist: <User size={16} />,
+                        playlist: <ListMusic size={16} />,
+                      }[typeOption]
+                    }
+                    <span className="hidden md:inline">
+                      {typeOption.charAt(0).toUpperCase() + typeOption.slice(1)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Select for smaller screens */}
               <select
                 value={searchType}
-                onChange={(e) => setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")}
-                className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus"
+                onChange={(e) =>
+                  setSearchType(e.target.value as "track" | "album" | "artist" | "playlist")
+                }
+                className="p-2 border bg-input-background dark:bg-input-background-dark border-input-border dark:border-input-border-dark rounded-md focus:outline-none focus:ring-2 focus:ring-input-focus sm:hidden"
               >
                 <option value="track">Track</option>
                 <option value="album">Album</option>
@@ -330,17 +384,22 @@ export const Home = () => {
               </select>
             </div>
           </div>
-          <div className={`flex-1 px-4 md:px-0 pb-4 ${
-            // Only restrict overflow on mobile when there are results, otherwise allow normal behavior
-            displayedResults.length > 0 ? 'overflow-y-auto md:overflow-visible' : ''
-          }`}>
+
+          <div
+            className={`flex-1 px-4 md:px-0 pb-4 ${
+              // Only restrict overflow on mobile when there are results, otherwise allow normal behavior
+              displayedResults.length > 0 ? "overflow-y-auto md:overflow-visible" : ""
+            }`}
+          >
             {isLoading ? (
               <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading results...</p>
             ) : (
               <>
                 {resultComponent}
                 <div ref={loaderRef} />
-                {isLoadingMore && <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>}
+                {isLoadingMore && (
+                  <p className="text-center my-4 text-content-muted dark:text-content-muted-dark">Loading more results...</p>
+                )}
               </>
             )}
           </div>
