@@ -30,6 +30,24 @@ Location: project `.env`. Minimal reference for server admins.
 - FRONTEND_URL: Public UI base (e.g. `http://127.0.0.1:7171`)
 - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 - GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
+- Custom/Generic OAuth (set all to enable a custom provider):
+  - CUSTOM_SSO_CLIENT_ID / CUSTOM_SSO_CLIENT_SECRET
+  - CUSTOM_SSO_AUTHORIZATION_ENDPOINT
+  - CUSTOM_SSO_TOKEN_ENDPOINT
+  - CUSTOM_SSO_USERINFO_ENDPOINT
+  - CUSTOM_SSO_SCOPE: Comma-separated scopes (optional)
+  - CUSTOM_SSO_NAME: Internal provider name (optional, default `custom`)
+  - CUSTOM_SSO_DISPLAY_NAME: UI name (optional, default `Custom`)
+- Multiple Custom/Generic OAuth providers (up to 10):
+  - For provider index `i` (1..10), set:
+    - CUSTOM_SSO_CLIENT_ID_i / CUSTOM_SSO_CLIENT_SECRET_i
+    - CUSTOM_SSO_AUTHORIZATION_ENDPOINT_i
+    - CUSTOM_SSO_TOKEN_ENDPOINT_i
+    - CUSTOM_SSO_USERINFO_ENDPOINT_i
+    - CUSTOM_SSO_SCOPE_i (optional)
+    - CUSTOM_SSO_NAME_i (optional, default `custom{i}`)
+    - CUSTOM_SSO_DISPLAY_NAME_i (optional, default `Custom {i}`)
+  - Login URLs will be `/api/auth/sso/login/custom/i` and callback `/api/auth/sso/callback/custom/i`.
 
 ### Tips
 - If running behind a reverse proxy, set `FRONTEND_URL` and `SSO_BASE_REDIRECT_URI` to public URLs.
