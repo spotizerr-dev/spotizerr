@@ -5,8 +5,10 @@ from pathlib import Path
 from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
 from routes.utils.celery_queue_manager import get_existing_task_id
 from routes.utils.errors import DuplicateDownloadError
+from routes.utils.redis_rate_limiter import global_rate_limiter
 
 
+@global_rate_limiter.rate_limit_decorator
 def download_playlist(
     url,
     main,

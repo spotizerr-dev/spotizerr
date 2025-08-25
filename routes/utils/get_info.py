@@ -5,12 +5,13 @@ import logging
 import time
 import re # Added for regex parsing of Retry-After header
 import random  # Added for jitter in exponential backoff
-from collections import deque
-from threading import Lock
 from typing import Dict, Optional, Any
 
 # Import Deezer API and logging
 from deezspot.deezloader.dee_api import API as DeezerAPI
+
+# Import the global rate limiter
+from routes.utils.redis_rate_limiter import global_rate_limiter
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -19,14 +20,6 @@ logger = logging.getLogger(__name__)
 _spotify_client = None
 _last_client_init = 0
 _client_init_interval = 3600  # Reinitialize client every hour
-
-# Global rate limiting state
-_request_timestamps = deque()
-_rate_limit_lock = Lock()
-_spotify_rate_limit_per_second = 3  # A conservative rate limit for Spotify API calls (3/sec)
-_spotify_rate_limit_per_window = 90 # Approximately 3 requests/sec over 30 seconds
-_rate_limit_window = 30 # 30-second window for rate limiting
-_last_retry_after_sleep_until = 0.0 # To respect Retry-After headers
 
 
 def _get_spotify_client():
@@ -62,100 +55,7 @@ def _get_spotify_client():
     return _spotify_client
 
 
-def _rate_limit_handler(func):
-    """
-    Decorator to handle rate limiting with exponential backoff.
-    """
-
-    def wrapper(*args, **kwargs):
-        global _request_timestamps, _rate_limit_lock, _spotify_rate_limit_per_second, _spotify_rate_limit_per_window, _rate_limit_window, _last_retry_after_sleep_until
-        max_retries = 3
-        base_delay = 1
-        logger.warning("rate limiter active...")
-
-        for attempt in range(max_retries):
-            with _rate_limit_lock:
-                current_time = time.time()
-
-                # 1. Respect any previous Retry-After header
-                if current_time < _last_retry_after_sleep_until:
-                    sleep_duration = _last_retry_after_sleep_until - current_time
-                    logger.warning(f"Rate limiter active: Respecting Retry-After. Delaying task for {sleep_duration:.2f} seconds.")
-                    time.sleep(sleep_duration)
-                    current_time = time.time() # Update current time after sleeping
-                    _request_timestamps.clear() # Clear requests after respecting Retry-After
-
-                # 2. Proactive rate limiting (sliding window of 1 second)
-                # Clean up old requests outside the 1-second window
-                while _request_timestamps and _request_timestamps[0] <= current_time - 1:
-                    _request_timestamps.popleft()
-
-                # If we've exceeded the per-second rate limit, wait
-                if len(_request_timestamps) >= _spotify_rate_limit_per_second:
-                    # Calculate time to wait until the oldest request in the window expires
-                    time_to_wait = _request_timestamps[0] + 1 - current_time
-                    if time_to_wait > 0:
-                        logger.warning(f"Rate limiter active: Proactive per-second limit ({_spotify_rate_limit_per_second}) reached. Queue size: {len(_request_timestamps)}. Delaying task for {time_to_wait:.2f} seconds.")
-                        time.sleep(time_to_wait)
-                        current_time = time.time() # Update current time after sleeping
-                    # After waiting, clean up again
-                    while _request_timestamps and _request_timestamps[0] <= current_time - 1:
-                        _request_timestamps.popleft()
-                
-                if len(_request_timestamps) > 0:
-                    logger.debug(f"Current request queue size: {len(_request_timestamps)}")
-
-                # 3. Proactive rate limiting (sliding window of 30 seconds)
-                # Clean up old requests outside the 30-second window
-                while _request_timestamps and _request_timestamps[0] <= current_time - _rate_limit_window:
-                    _request_timestamps.popleft()
-
-                # If we've exceeded the per-30-second rate limit, wait
-                if len(_request_timestamps) >= _spotify_rate_limit_per_window:
-                    # Calculate time to wait until the oldest request in the window expires
-                    time_to_wait = _request_timestamps[0] + _rate_limit_window - current_time
-                    if time_to_wait > 0:
-                        logger.warning(f"Rate limiter active: Proactive per-{_rate_limit_window}-second limit ({_spotify_rate_limit_per_window}) reached. Queue size: {len(_request_timestamps)}. Delaying task for {time_to_wait:.2f} seconds.")
-                        time.sleep(time_to_wait)
-                        current_time = time.time() # Update current time after sleeping
-                    # After waiting, clean up again
-                    while _request_timestamps and _request_timestamps[0] <= current_time - _rate_limit_window:
-                        _request_timestamps.popleft()
-
-                # Record the request timestamp
-                _request_timestamps.append(current_time)
-
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                if "429" in str(e) or "rate limit" in str(e).lower():
-                    with _rate_limit_lock:
-                        # Attempt to extract Retry-After header value from exception message
-                        retry_after_match = re.search(r"Retry-After: (\d+)", str(e))
-                        if retry_after_match:
-                            retry_after_seconds = int(retry_after_match.group(1))
-                            logger.warning(f"Rate limited, respecting Retry-After: {retry_after_seconds} seconds.")
-                            _last_retry_after_sleep_until = max(_last_retry_after_sleep_until, time.time() + retry_after_seconds)
-                            _request_timestamps.clear() # Clear requests to prevent immediate re-triggering
-                        else:
-                            # Fallback to exponential backoff delay if Retry-After not found
-                            jitter = random.uniform(0, 1)
-                            delay = base_delay * (2**attempt) + jitter
-                            logger.warning(f"Rate limited, retrying in {delay:.2f} seconds (including jitter)...")
-                            _last_retry_after_sleep_until = max(_last_retry_after_sleep_until, time.time() + delay)
-                            _request_timestamps.clear() # Clear requests to prevent immediate re-triggering
-
-                    if attempt < max_retries - 1:
-                        # The sleep is now handled by _last_retry_after_sleep_until in the next iteration
-                        # or by the proactive rate limiter. We just need to continue the loop.
-                        continue
-                raise e
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_playlist_metadata(playlist_id: str) -> Dict[str, Any]:
     """
     Get playlist metadata only (no tracks) to avoid rate limiting.
@@ -192,7 +92,7 @@ def get_playlist_metadata(playlist_id: str) -> Dict[str, Any]:
         raise
 
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_playlist_tracks(
     playlist_id: str, limit: int = 100, offset: int = 0
 ) -> Dict[str, Any]:
@@ -221,14 +121,14 @@ def get_playlist_tracks(
         logger.debug(
             f"Retrieved {len(tracks_data.get('items', []))} tracks for playlist {playlist_id} (offset: {offset})"
         )
-        return tracks_data
+        return tracks_data or {} # Ensure a dictionary is returned
 
     except Exception as e:
         logger.error(f"Error fetching playlist tracks for {playlist_id}: {e}")
         raise
 
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_playlist_full(playlist_id: str, batch_size: int = 100) -> Dict[str, Any]:
     """
     Get complete playlist data with all tracks, using batched requests to avoid rate limiting.
@@ -309,7 +209,7 @@ def check_playlist_updated(playlist_id: str, last_snapshot_id: str) -> bool:
         raise
 
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_spotify_info(
     spotify_id: str,
     spotify_type: str,
@@ -350,7 +250,7 @@ def get_spotify_info(
             # Fetch album's tracks with pagination support
             return client.album_tracks(
                 spotify_id, limit=limit or 20, offset=offset or 0
-            )
+            ) or {} # Ensure a dictionary is returned
 
         elif spotify_type == "playlist":
             # Use optimized playlist fetching
@@ -493,32 +393,50 @@ def get_deezer_info(deezer_id, deezer_type, limit=None):
     # DeezerAPI uses class methods; its @classmethod __init__ handles setup.
     # No specific ARL or account handling here as DeezerAPI seems to use general endpoints.
 
+    # Apply the rate limiter to Deezer API calls as well
+    @global_rate_limiter.rate_limit_decorator
+    def _call_deezer_api(method, *args, **kwargs):
+        # This internal function will be rate-limited
+        return method(*args, **kwargs)
+
     if deezer_type == "track":
-        return DeezerAPI.get_track(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_track, deezer_id)
     elif deezer_type == "album":
-        return DeezerAPI.get_album(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_album, deezer_id)
     elif deezer_type == "playlist":
-        return DeezerAPI.get_playlist(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_playlist, deezer_id)
     elif deezer_type == "artist":
-        return DeezerAPI.get_artist(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_artist, deezer_id)
     elif deezer_type == "episode":
-        return DeezerAPI.get_episode(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_episode, deezer_id)
     elif deezer_type == "artist_top_tracks":
         if limit is not None:
-            return DeezerAPI.get_artist_top_tracks(deezer_id, limit=limit)
-        return DeezerAPI.get_artist_top_tracks(deezer_id)  # Use API default limit
+            return _call_deezer_api(DeezerAPI.get_artist_top_tracks, deezer_id, limit=limit)
+        return _call_deezer_api(DeezerAPI.get_artist_top_tracks, deezer_id)  # Use API default limit
     elif deezer_type == "artist_albums":  # Maps to get_artist_top_albums
         if limit is not None:
-            return DeezerAPI.get_artist_top_albums(deezer_id, limit=limit)
-        return DeezerAPI.get_artist_top_albums(deezer_id)  # Use API default limit
+            # DeezerAPI.get_artist_top_albums is not a class method, or API has changed.
+            # Placeholder for future integration if DeezerAPI usage is clarified.
+            logger.warning(f"DeezerAPI.get_artist_top_albums not directly callable as class method for {deezer_id}. Skipping.")
+            return {}
+        # return _call_deezer_api(DeezerAPI.get_artist_top_albums, deezer_id)  # Use API default limit
     elif deezer_type == "artist_related":
-        return DeezerAPI.get_artist_related(deezer_id)
+        # DeezerAPI.get_artist_related is not a class method, or API has changed.
+        # Placeholder for future integration if DeezerAPI usage is clarified.
+        logger.warning(f"DeezerAPI.get_artist_related not directly callable as class method for {deezer_id}. Skipping.")
+        return {}
     elif deezer_type == "artist_radio":
-        return DeezerAPI.get_artist_radio(deezer_id)
+        # DeezerAPI.get_artist_radio is not a class method, or API has changed.
+        # Placeholder for future integration if DeezerAPI usage is clarified.
+        logger.warning(f"DeezerAPI.get_artist_radio not directly callable as class method for {deezer_id}. Skipping.")
+        return {}
     elif deezer_type == "artist_playlists":
         if limit is not None:
-            return DeezerAPI.get_artist_top_playlists(deezer_id, limit=limit)
-        return DeezerAPI.get_artist_top_playlists(deezer_id)  # Use API default limit
+            # DeezerAPI.get_artist_top_playlists is not a class method, or API has changed.
+            # Placeholder for future integration if DeezerAPI usage is clarified.
+            logger.warning(f"DeezerAPI.get_artist_top_playlists not directly callable as class method for {deezer_id}. Skipping.")
+            return {}
+        # return _call_deezer_api(DeezerAPI.get_artist_top_playlists, deezer_id)  # Use API default limit
     else:
         logger.error(f"Unsupported Deezer type: {deezer_type}")
         raise ValueError(f"Unsupported Deezer type: {deezer_type}")

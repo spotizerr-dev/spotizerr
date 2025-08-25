@@ -7,8 +7,10 @@ from routes.utils.credentials import (
     _get_global_spotify_api_creds,
     get_spotify_blob_path,
 )
+from routes.utils.redis_rate_limiter import global_rate_limiter
 
 
+@global_rate_limiter.rate_limit_decorator
 def download_track(
     url,
     main,

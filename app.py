@@ -64,6 +64,7 @@ from routes.core.search import router as search_router
 from routes.core.history import router as history_router
 from routes.system.progress import router as prgs_router
 from routes.system.config import router as config_router
+from routes.system.rate_limit import router as rate_limit_router
 
 
 # Import Celery configuration and manager
@@ -330,6 +331,7 @@ def create_app():
     app.include_router(artist_router, prefix="/api/artist", tags=["artist"])
     app.include_router(prgs_router, prefix="/api/prgs", tags=["progress"])
     app.include_router(history_router, prefix="/api/history", tags=["history"])
+    app.include_router(rate_limit_router, prefix="/api/rate-limit", tags=["rate-limit"])
 
     # Add request logging middleware
     @app.middleware("http")

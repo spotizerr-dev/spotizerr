@@ -2,7 +2,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import logging
 from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
-from routes.utils.get_info import _rate_limit_handler
+from routes.utils.redis_rate_limiter import global_rate_limiter
 import time
 from typing import Optional, Any
 
@@ -47,7 +47,7 @@ def _get_spotify_client():
     
     return _spotify_client
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def search(query: str, search_type: str, limit: int = 3, main: Optional[str] = None) -> Any:
     logger.info(
         f"Search requested: query='{query}', type={search_type}, limit={limit}, main_account_name={main}"
