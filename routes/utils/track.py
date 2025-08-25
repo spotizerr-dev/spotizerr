@@ -1,4 +1,5 @@
 import traceback
+from typing import Optional
 from deezspot.spotloader import SpoLogin
 from deezspot.deezloader import DeeLogin
 from routes.utils.credentials import (
@@ -6,8 +7,10 @@ from routes.utils.credentials import (
     _get_global_spotify_api_creds,
     get_spotify_blob_path,
 )
+from routes.utils.redis_rate_limiter import global_rate_limiter
 
 
+@global_rate_limiter.rate_limit_decorator
 def download_track(
     url,
     main,
@@ -29,10 +32,12 @@ def download_track(
     recursive_quality=False,
     spotify_metadata=True,
     _is_celery_task_execution=False,  # Added for consistency, not currently used for duplicate check
-    real_time_multiplier=None,
-    pad_number_width=None,
+    real_time_multiplier: Optional[int] = None,
+    pad_number_width: Optional[int] = None,
 ):
     try:
+        _pad_number_width = int(pad_number_width) if pad_number_width is not None else 0
+        _real_time_multiplier = int(real_time_multiplier) if real_time_multiplier is not None else 0
         # Detect URL source (Spotify or Deezer) from URL
         is_spotify_url = "open.spotify.com" in url.lower()
         is_deezer_url = "deezer.com" in url.lower()
@@ -109,7 +114,7 @@ def download_track(
                         bitrate=bitrate,
                         artist_separator=artist_separator,
                         spotify_metadata=spotify_metadata,
-                        pad_number_width=pad_number_width,
+                        pad_number_width=_pad_number_width,
                     )
                     print(
                         f"DEBUG: track.py - Track download via Deezer (account: {fallback}) successful for Spotify URL."
@@ -169,8 +174,7 @@ def download_track(
                             convert_to=convert_to,
                             bitrate=bitrate,
                             artist_separator=artist_separator,
-                            spotify_metadata=spotify_metadata,
-                            pad_number_width=pad_number_width,
+                            pad_number_width=_pad_number_width,
                         )
                         print(
                             f"DEBUG: track.py - Spotify direct download (account: {main} for blob) successful."
@@ -227,8 +231,8 @@ def download_track(
                     convert_to=convert_to,
                     bitrate=bitrate,
                     artist_separator=artist_separator,
-                    real_time_multiplier=real_time_multiplier,
-                    pad_number_width=pad_number_width,
+                    real_time_multiplier=_real_time_multiplier,
+                    pad_number_width=_pad_number_width,
                 )
                 print(
                     f"DEBUG: track.py - Direct Spotify download (account: {main} for blob) successful."
@@ -268,7 +272,7 @@ def download_track(
                 convert_to=convert_to,
                 bitrate=bitrate,
                 artist_separator=artist_separator,
-                pad_number_width=pad_number_width,
+                pad_number_width=_pad_number_width,
             )
             print(
                 f"DEBUG: track.py - Direct Deezer download (account: {main}) successful."

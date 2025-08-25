@@ -5,6 +5,7 @@ import { QueueContext } from "@/contexts/queue-context";
 import { Queue } from "@/components/Queue";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { UserMenu } from "@/components/auth/UserMenu";
+import RateLimitDisplay from "@/components/RateLimitDisplay";
 import { useContext, useState, useEffect } from "react";
 import { getTheme, toggleTheme } from "@/lib/theme";
 import { useSettings } from "@/contexts/settings-context";
@@ -106,6 +107,7 @@ function AppLayout() {
             <Link to="/config" className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark">
               <img src="/settings.svg" alt="Settings" className="w-6 h-6 logo" />
             </Link>
+            <RateLimitDisplay />
             <button onClick={toggleVisibility} className="p-2 rounded-full hover:bg-icon-button-hover dark:hover:bg-icon-button-hover-dark relative">
               <img src="/queue.svg" alt="Queue" className="w-6 h-6 logo" />
               {(totalTasks ?? 0) > 0 && (

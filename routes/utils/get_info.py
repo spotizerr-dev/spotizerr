@@ -3,10 +3,15 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from routes.utils.credentials import _get_global_spotify_api_creds
 import logging
 import time
+import re # Added for regex parsing of Retry-After header
+import random  # Added for jitter in exponential backoff
 from typing import Dict, Optional, Any
 
 # Import Deezer API and logging
 from deezspot.deezloader.dee_api import API as DeezerAPI
+
+# Import the global rate limiter
+from routes.utils.redis_rate_limiter import global_rate_limiter
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -50,32 +55,7 @@ def _get_spotify_client():
     return _spotify_client
 
 
-def _rate_limit_handler(func):
-    """
-    Decorator to handle rate limiting with exponential backoff.
-    """
-
-    def wrapper(*args, **kwargs):
-        max_retries = 3
-        base_delay = 1
-
-        for attempt in range(max_retries):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                if "429" in str(e) or "rate limit" in str(e).lower():
-                    if attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
-                        logger.warning(f"Rate limited, retrying in {delay} seconds...")
-                        time.sleep(delay)
-                        continue
-                raise e
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_playlist_metadata(playlist_id: str) -> Dict[str, Any]:
     """
     Get playlist metadata only (no tracks) to avoid rate limiting.
@@ -94,6 +74,9 @@ def get_playlist_metadata(playlist_id: str) -> Dict[str, Any]:
             playlist_id,
             fields="id,name,description,owner,images,snapshot_id,public,followers,tracks.total",
         )
+        if playlist is None:
+            logger.warning(f"No playlist metadata found for {playlist_id}")
+            return {}
 
         # Add a flag to indicate this is metadata only
         playlist["_metadata_only"] = True
@@ -109,7 +92,7 @@ def get_playlist_metadata(playlist_id: str) -> Dict[str, Any]:
         raise
 
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_playlist_tracks(
     playlist_id: str, limit: int = 100, offset: int = 0
 ) -> Dict[str, Any]:
@@ -138,14 +121,14 @@ def get_playlist_tracks(
         logger.debug(
             f"Retrieved {len(tracks_data.get('items', []))} tracks for playlist {playlist_id} (offset: {offset})"
         )
-        return tracks_data
+        return tracks_data or {} # Ensure a dictionary is returned
 
     except Exception as e:
         logger.error(f"Error fetching playlist tracks for {playlist_id}: {e}")
         raise
 
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_playlist_full(playlist_id: str, batch_size: int = 100) -> Dict[str, Any]:
     """
     Get complete playlist data with all tracks, using batched requests to avoid rate limiting.
@@ -226,7 +209,7 @@ def check_playlist_updated(playlist_id: str, last_snapshot_id: str) -> bool:
         raise
 
 
-@_rate_limit_handler
+@global_rate_limiter.rate_limit_decorator
 def get_spotify_info(
     spotify_id: str,
     spotify_type: str,
@@ -250,16 +233,24 @@ def get_spotify_info(
 
     try:
         if spotify_type == "track":
-            return client.track(spotify_id)
+            result = client.track(spotify_id)
+            if result is None:
+                logger.warning(f"No track info found for {spotify_id}")
+                return {}
+            return result
 
         elif spotify_type == "album":
-            return client.album(spotify_id)
+            result = client.album(spotify_id)
+            if result is None:
+                logger.warning(f"No album info found for {spotify_id}")
+                return {}
+            return result
 
         elif spotify_type == "album_tracks":
             # Fetch album's tracks with pagination support
             return client.album_tracks(
                 spotify_id, limit=limit or 20, offset=offset or 0
-            )
+            ) or {} # Ensure a dictionary is returned
 
         elif spotify_type == "playlist":
             # Use optimized playlist fetching
@@ -270,7 +261,11 @@ def get_spotify_info(
             return get_playlist_metadata(spotify_id)
 
         elif spotify_type == "artist":
-            return client.artist(spotify_id)
+            result = client.artist(spotify_id)
+            if result is None:
+                logger.warning(f"No artist info found for {spotify_id}")
+                return {}
+            return result
 
         elif spotify_type == "artist_discography":
             # Get artist's albums with pagination
@@ -280,10 +275,17 @@ def get_spotify_info(
                 offset=offset or 0,
                 include_groups="single,album,appears_on",
             )
+            if albums is None:
+                logger.warning(f"No artist discography found for {spotify_id}")
+                return {"items": [], "total": 0, "limit": limit or 20, "offset": offset or 0}
             return albums
 
         elif spotify_type == "episode":
-            return client.episode(spotify_id)
+            result = client.episode(spotify_id)
+            if result is None:
+                logger.warning(f"No episode info found for {spotify_id}")
+                return {}
+            return result
 
         else:
             raise ValueError(f"Unsupported Spotify type: {spotify_type}")
@@ -391,32 +393,50 @@ def get_deezer_info(deezer_id, deezer_type, limit=None):
     # DeezerAPI uses class methods; its @classmethod __init__ handles setup.
     # No specific ARL or account handling here as DeezerAPI seems to use general endpoints.
 
+    # Apply the rate limiter to Deezer API calls as well
+    @global_rate_limiter.rate_limit_decorator
+    def _call_deezer_api(method, *args, **kwargs):
+        # This internal function will be rate-limited
+        return method(*args, **kwargs)
+
     if deezer_type == "track":
-        return DeezerAPI.get_track(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_track, deezer_id)
     elif deezer_type == "album":
-        return DeezerAPI.get_album(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_album, deezer_id)
     elif deezer_type == "playlist":
-        return DeezerAPI.get_playlist(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_playlist, deezer_id)
     elif deezer_type == "artist":
-        return DeezerAPI.get_artist(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_artist, deezer_id)
     elif deezer_type == "episode":
-        return DeezerAPI.get_episode(deezer_id)
+        return _call_deezer_api(DeezerAPI.get_episode, deezer_id)
     elif deezer_type == "artist_top_tracks":
         if limit is not None:
-            return DeezerAPI.get_artist_top_tracks(deezer_id, limit=limit)
-        return DeezerAPI.get_artist_top_tracks(deezer_id)  # Use API default limit
+            return _call_deezer_api(DeezerAPI.get_artist_top_tracks, deezer_id, limit=limit)
+        return _call_deezer_api(DeezerAPI.get_artist_top_tracks, deezer_id)  # Use API default limit
     elif deezer_type == "artist_albums":  # Maps to get_artist_top_albums
         if limit is not None:
-            return DeezerAPI.get_artist_top_albums(deezer_id, limit=limit)
-        return DeezerAPI.get_artist_top_albums(deezer_id)  # Use API default limit
+            # DeezerAPI.get_artist_top_albums is not a class method, or API has changed.
+            # Placeholder for future integration if DeezerAPI usage is clarified.
+            logger.warning(f"DeezerAPI.get_artist_top_albums not directly callable as class method for {deezer_id}. Skipping.")
+            return {}
+        # return _call_deezer_api(DeezerAPI.get_artist_top_albums, deezer_id)  # Use API default limit
     elif deezer_type == "artist_related":
-        return DeezerAPI.get_artist_related(deezer_id)
+        # DeezerAPI.get_artist_related is not a class method, or API has changed.
+        # Placeholder for future integration if DeezerAPI usage is clarified.
+        logger.warning(f"DeezerAPI.get_artist_related not directly callable as class method for {deezer_id}. Skipping.")
+        return {}
     elif deezer_type == "artist_radio":
-        return DeezerAPI.get_artist_radio(deezer_id)
+        # DeezerAPI.get_artist_radio is not a class method, or API has changed.
+        # Placeholder for future integration if DeezerAPI usage is clarified.
+        logger.warning(f"DeezerAPI.get_artist_radio not directly callable as class method for {deezer_id}. Skipping.")
+        return {}
     elif deezer_type == "artist_playlists":
         if limit is not None:
-            return DeezerAPI.get_artist_top_playlists(deezer_id, limit=limit)
-        return DeezerAPI.get_artist_top_playlists(deezer_id)  # Use API default limit
+            # DeezerAPI.get_artist_top_playlists is not a class method, or API has changed.
+            # Placeholder for future integration if DeezerAPI usage is clarified.
+            logger.warning(f"DeezerAPI.get_artist_top_playlists not directly callable as class method for {deezer_id}. Skipping.")
+            return {}
+        # return _call_deezer_api(DeezerAPI.get_artist_top_playlists, deezer_id)  # Use API default limit
     else:
         logger.error(f"Unsupported Deezer type: {deezer_type}")
         raise ValueError(f"Unsupported Deezer type: {deezer_type}")

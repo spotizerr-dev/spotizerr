@@ -2,7 +2,9 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import logging
 from routes.utils.credentials import get_credential, _get_global_spotify_api_creds
+from routes.utils.redis_rate_limiter import global_rate_limiter
 import time
+from typing import Optional, Any
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -11,6 +13,7 @@ logger = logging.getLogger(__name__)
 _spotify_client = None
 _last_client_init = 0
 _client_init_interval = 3600  # Reinitialize client every hour
+
 
 def _get_spotify_client():
     """
@@ -44,7 +47,8 @@ def _get_spotify_client():
     
     return _spotify_client
 
-def search(query: str, search_type: str, limit: int = 3, main: str = None) -> dict:
+@global_rate_limiter.rate_limit_decorator
+def search(query: str, search_type: str, limit: int = 3, main: Optional[str] = None) -> Any:
     logger.info(
         f"Search requested: query='{query}', type={search_type}, limit={limit}, main_account_name={main}"
         )
@@ -89,13 +93,16 @@ def search(query: str, search_type: str, limit: int = 3, main: str = None) -> di
         spotify_type = search_type_map.get(search_type.lower(), 'track')
         
         # Execute search using Spotipy
+        start_time = time.time()
         spotify_response = client.search(
             q=query,
             type=spotify_type,
             limit=limit
         )
+        end_time = time.time()
+        elapsed_time = end_time - start_time
         
-        logger.info(f"Search completed successfully for query: '{query}'")
+        logger.info(f"Search completed successfully for query: '{query}' in {elapsed_time:.2f} seconds")
         return spotify_response
     except Exception as e:
         logger.error(

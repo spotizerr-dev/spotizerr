@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 import logging
 import time
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -422,7 +423,7 @@ def get_watched_playlist(playlist_spotify_id: str):
 
 
 def update_playlist_snapshot(
-    playlist_spotify_id: str, snapshot_id: str, total_tracks: int
+    playlist_spotify_id: str, snapshot_id: Optional[str], total_tracks: int
 ):
     """Updates the snapshot_id and total_tracks for a watched playlist in playlists.db."""
     try:
@@ -607,7 +608,7 @@ def get_playlist_total_tracks_from_db(playlist_spotify_id: str) -> int:
 
 
 def add_tracks_to_playlist_db(
-    playlist_spotify_id: str, tracks_data: list, snapshot_id: str = None
+    playlist_spotify_id: str, tracks_data: list, snapshot_id: Optional[str] = None
 ):
     """
     Updates existing tracks in the playlist's DB table to mark them as currently present
@@ -873,8 +874,8 @@ def remove_specific_tracks_from_playlist_table(
 def add_single_track_to_playlist_db(
     playlist_spotify_id: str,
     track_item_for_db: dict,
-    snapshot_id: str = None,
-    task_id: str = None,
+    snapshot_id: Optional[str] = None,
+    task_id: Optional[str] = None,
 ):
     """
     Adds or updates a single track in the specified playlist's tracks table in playlists.db.
@@ -1302,7 +1303,7 @@ def get_artist_album_ids_from_db(artist_spotify_id: str):
 def add_or_update_album_for_artist(
     artist_spotify_id: str,
     album_data: dict,
-    task_id: str = None,
+    task_id: Optional[str] = None,
     is_download_complete: bool = False,
 ):
     """Adds or updates an album in the specified artist's albums table in artists.db.

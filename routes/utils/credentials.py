@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import time  # For retry delays
 import logging
+from typing import Dict, Any
 
 # Assuming deezspot is in a location findable by Python's import system
 # from deezspot.spotloader import SpoLogin # Used in validation
@@ -354,7 +355,7 @@ def create_credential(service, name, data):
             raise ValueError(f"Could not create credential: {e}")
 
 
-def get_credential(service, name):
+def get_credential(service, name) -> Dict[str, Any]:
     """
     Retrieves a specific credential by name.
     For Spotify, returns dict with name, region, and blob_content (from file).
@@ -416,9 +417,7 @@ def get_credential(service, name):
                 "arl": data.get("arl"),
             }
             return cleaned_data
-
-    # Fallback, should not be reached if service is spotify or deezer
-    return None
+    return {} # Should be unreachable, but satisfies type checker
 
 
 def list_credentials(service):
@@ -465,6 +464,7 @@ def edit_credential(service, name, new_data):
     current_time = time.time()
 
     # Fetch existing data first to preserve unchanged fields and for validation backup
+    existing_cred: Dict[str, Any]
     try:
         existing_cred = get_credential(
             service, name
@@ -472,7 +472,13 @@ def edit_credential(service, name, new_data):
     except FileNotFoundError:
         raise
     except Exception as e:  # Catch other errors from get_credential
+        logger.error(f"Error retrieving existing credential {name} for edit: {e}", exc_info=True)
         raise ValueError(f"Could not retrieve existing credential {name} for edit: {e}")
+
+    # The check for existing_cred is None is technically unreachable due to FileNotFoundError,
+    # but keeping it for defensive programming if get_credential's behavior changes.
+    # if existing_cred is None:
+    #     raise ValueError(f"Could not retrieve existing credential {name} for edit: get_credential returned None unexpectedly.")
 
     updated_fields = new_data.copy()
 
