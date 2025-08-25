@@ -349,7 +349,7 @@ def get_task_status(task_id):
     """Get all task status updates from Redis"""
     try:
         status_list = redis_client.lrange(f"task:{task_id}:status", 0, -1)
-        return [json.loads(s.decode("utf-8")) for s in status_list]
+        return [json.loads(s.decode("utf-8")) for s in status_list] # type: ignore
     except Exception as e:
         logger.error(f"Error getting task status: {e}")
         return []
@@ -363,7 +363,7 @@ def get_last_task_status(task_id):
         if not status_list:
             return None
 
-        return json.loads(status_list[0].decode("utf-8"))
+        return json.loads(status_list[0].decode("utf-8")) # type: ignore
     except Exception as e:
         logger.error(f"Error getting last task status: {e}")
         return None
@@ -383,7 +383,7 @@ def get_task_info(task_id):
     try:
         task_info = redis_client.get(f"task:{task_id}:info")
         if task_info:
-            return json.loads(task_info.decode("utf-8"))
+            return json.loads(task_info.decode("utf-8")) # type: ignore
         return {}
     except Exception as e:
         logger.error(f"Error getting task info: {e}")
@@ -1253,6 +1253,9 @@ class ProgressTrackingTask(Task):
 @task_prerun.connect
 def task_prerun_handler(task_id=None, task=None, *args, **kwargs):
     """Signal handler when a task begins running"""
+    if task_id is None:
+        logger.error("task_prerun_handler received None for task_id. Skipping.")
+        return
     try:
         # Skip verbose logging for SSE tasks
         if task and hasattr(task, "name") and task.name in ["trigger_sse_update_task"]:
@@ -1284,6 +1287,9 @@ def task_postrun_handler(
     task_id=None, task=None, retval=None, state=None, *args, **kwargs
 ):
     """Signal handler when a task finishes"""
+    if task_id is None:
+        logger.error("task_postrun_handler received None for task_id. Skipping.")
+        return
     try:
         # Skip verbose logging for SSE tasks
         if task and hasattr(task, "name") and task.name in ["trigger_sse_update_task"]:
@@ -1977,7 +1983,7 @@ def cleanup_stale_errors():
         current_time = time.time()
         stale_threshold = 60  # 1 minute
 
-        for key_bytes in task_keys:
+        for key_bytes in task_keys: # type: ignore
             task_id = key_bytes.decode("utf-8").split(":")[1]
             last_status = get_last_task_status(task_id)
 

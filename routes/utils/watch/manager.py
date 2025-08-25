@@ -4,7 +4,7 @@ import logging
 import json
 import re
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 
 from routes.utils.watch.db import (
     get_watched_playlists,
@@ -240,7 +240,9 @@ def _apply_playlist_placeholders(
         return base_dir_fmt, base_track_fmt
 
 
-def has_playlist_changed(playlist_spotify_id: str, current_snapshot_id: str) -> bool:
+def has_playlist_changed(
+    playlist_spotify_id: str, current_snapshot_id: Optional[str]
+) -> bool:
     """
     Check if a playlist has changed by comparing snapshot_id.
     This is much more efficient than fetching all tracks.
@@ -274,7 +276,7 @@ def has_playlist_changed(playlist_spotify_id: str, current_snapshot_id: str) -> 
 
 
 def needs_track_sync(
-    playlist_spotify_id: str, current_snapshot_id: str, api_total_tracks: int
+    playlist_spotify_id: str, current_snapshot_id: Optional[str], api_total_tracks: int
 ) -> tuple[bool, list[str]]:
     """
     Check if tracks need to be synchronized by comparing snapshot_ids and total counts.
@@ -403,7 +405,7 @@ def find_tracks_in_playlist(
     return found_tracks, not_found_tracks
 
 
-def check_watched_playlists(specific_playlist_id: str = None):
+def check_watched_playlists(specific_playlist_id: Optional[str] = None):
     """Checks watched playlists for new tracks and queues downloads.
     If specific_playlist_id is provided, only that playlist is checked.
     Processes at most one batch per run (offset advanced between runs) to avoid rate limits.
@@ -679,7 +681,7 @@ def check_watched_playlists(specific_playlist_id: str = None):
     logger.info("Playlist Watch Manager: Finished checking all watched playlists.")
 
 
-def check_watched_artists(specific_artist_id: str = None):
+def check_watched_artists(specific_artist_id: Optional[str] = None):
     """Checks watched artists for new albums and queues downloads. Processes one page per run to avoid rate limits."""
     logger.info(
         f"Artist Watch Manager: Starting check. Specific artist: {specific_artist_id or 'All'}"
