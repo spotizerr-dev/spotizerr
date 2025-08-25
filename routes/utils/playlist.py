@@ -40,6 +40,18 @@ def download_playlist(
                 "Download for this URL is already in progress.",
                 existing_task=existing_task,
             )
+
+    # Ensure pad_number_width is an integer if provided, otherwise default to 0
+    if pad_number_width is None:
+        pad_number_width = 0
+    elif not isinstance(pad_number_width, (int, str)):
+        pass # Keep existing logic for other types
+
+    # Ensure real_time_multiplier is an integer if provided, otherwise default to 1
+    if real_time_multiplier is None:
+        real_time_multiplier = 1
+    elif not isinstance(real_time_multiplier, int):
+        pass # Keep existing logic for other types
     try:
         # Detect URL source (Spotify or Deezer) from URL
         is_spotify_url = "open.spotify.com" in url.lower()
