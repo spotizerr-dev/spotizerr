@@ -35,31 +35,32 @@ Open Configuration in the web UI. Tabs:
 - **Save Album Cover:** Whether to save the cover as a separate `cover.jpg` file or not.
 - **Use Spotify Metadata in Deezer Fallback:** Whether to use Spotify metadata when downloading from Deezer or not. It generally is better to leave this enabled, since it has no added API cost and Spotify's metadata tends to be better.
 
-# Accounts (admin)
+# Accounts
   - **Spotify:** use `spotizerr-auth` to add credentials.
-  - Deezer ARL (optional):
-    - Chrome/Edge: DevTools → Application → Cookies → https://www.deezer.com → copy `arl`
-    - Firefox: DevTools → Storage → Cookies → https://www.deezer.com → copy `arl`
-    - Paste ARL in Accounts
-  - Select main account when multiple exist
-- Watch (admin)
-  - Enable/disable watch system
-  - Set check intervals
-  - Manually trigger checks (artists/playlists)
-- Server (admin)
+  - **Deezer ARL (optional but recommended):**
+    - Chrome/Edge: DevTools → Application → Cookies → https://www.deezer.com → copy `arl`.
+    - Firefox: DevTools → Storage → Cookies → https://www.deezer.com → copy `arl`.
+    - Paste ARL in Accounts.
+  - Select main account when multiple exist.
+
+# Watch
+  - Enable/disable watch system.
+  - Set check intervals.
+  - Set check chunk size.
+  - Set album groups to consider for watched artists.
+
+
+# Server
   - System info and advanced settings
-- Profile (all users when auth is enabled)
+
+# Profile
   - Change password, view role and email
 
-Quality formats (reference):
+# Quality formats (reference)
 - Spotify: OGG 96k/160k/320k (320k requires Premium)
 - Deezer: MP3 128k/320k (320k may require Premium), FLAC (Premium)
 - Conversion: MP3/FLAC/AAC/OGG/OPUS/WAV/ALAC with custom bitrate
 
-Fallback system:
-- Configure primary and fallback services
-- Automatically switches if primary fails (useful for geo/account limits)
-
-Notes:
+# Notes
 - Explicit content filter applies in pages (e.g., hides explicit tracks on album/playlist views)
 - Watch system must be enabled before adding items
