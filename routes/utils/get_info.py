@@ -3,6 +3,10 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from routes.utils.credentials import _get_global_spotify_api_creds
 import logging
 import time
+import re # Added for regex parsing of Retry-After header
+import random  # Added for jitter in exponential backoff
+from collections import deque
+from threading import Lock
 from typing import Dict, Optional, Any
 
 # Import Deezer API and logging
@@ -15,6 +19,14 @@ logger = logging.getLogger(__name__)
 _spotify_client = None
 _last_client_init = 0
 _client_init_interval = 3600  # Reinitialize client every hour
+
+# Global rate limiting state
+_request_timestamps = deque()
+_rate_limit_lock = Lock()
+_spotify_rate_limit_per_second = 3  # A conservative rate limit for Spotify API calls (3/sec)
+_spotify_rate_limit_per_window = 90 # Approximately 3 requests/sec over 30 seconds
+_rate_limit_window = 30 # 30-second window for rate limiting
+_last_retry_after_sleep_until = 0.0 # To respect Retry-After headers
 
 
 def _get_spotify_client():
@@ -56,18 +68,86 @@ def _rate_limit_handler(func):
     """
 
     def wrapper(*args, **kwargs):
+        global _request_timestamps, _rate_limit_lock, _spotify_rate_limit_per_second, _spotify_rate_limit_per_window, _rate_limit_window, _last_retry_after_sleep_until
         max_retries = 3
         base_delay = 1
+        logger.warning("rate limiter active...")
 
         for attempt in range(max_retries):
+            with _rate_limit_lock:
+                current_time = time.time()
+
+                # 1. Respect any previous Retry-After header
+                if current_time < _last_retry_after_sleep_until:
+                    sleep_duration = _last_retry_after_sleep_until - current_time
+                    logger.warning(f"Rate limiter active: Respecting Retry-After. Delaying task for {sleep_duration:.2f} seconds.")
+                    time.sleep(sleep_duration)
+                    current_time = time.time() # Update current time after sleeping
+                    _request_timestamps.clear() # Clear requests after respecting Retry-After
+
+                # 2. Proactive rate limiting (sliding window of 1 second)
+                # Clean up old requests outside the 1-second window
+                while _request_timestamps and _request_timestamps[0] <= current_time - 1:
+                    _request_timestamps.popleft()
+
+                # If we've exceeded the per-second rate limit, wait
+                if len(_request_timestamps) >= _spotify_rate_limit_per_second:
+                    # Calculate time to wait until the oldest request in the window expires
+                    time_to_wait = _request_timestamps[0] + 1 - current_time
+                    if time_to_wait > 0:
+                        logger.warning(f"Rate limiter active: Proactive per-second limit ({_spotify_rate_limit_per_second}) reached. Queue size: {len(_request_timestamps)}. Delaying task for {time_to_wait:.2f} seconds.")
+                        time.sleep(time_to_wait)
+                        current_time = time.time() # Update current time after sleeping
+                    # After waiting, clean up again
+                    while _request_timestamps and _request_timestamps[0] <= current_time - 1:
+                        _request_timestamps.popleft()
+                
+                if len(_request_timestamps) > 0:
+                    logger.debug(f"Current request queue size: {len(_request_timestamps)}")
+
+                # 3. Proactive rate limiting (sliding window of 30 seconds)
+                # Clean up old requests outside the 30-second window
+                while _request_timestamps and _request_timestamps[0] <= current_time - _rate_limit_window:
+                    _request_timestamps.popleft()
+
+                # If we've exceeded the per-30-second rate limit, wait
+                if len(_request_timestamps) >= _spotify_rate_limit_per_window:
+                    # Calculate time to wait until the oldest request in the window expires
+                    time_to_wait = _request_timestamps[0] + _rate_limit_window - current_time
+                    if time_to_wait > 0:
+                        logger.warning(f"Rate limiter active: Proactive per-{_rate_limit_window}-second limit ({_spotify_rate_limit_per_window}) reached. Queue size: {len(_request_timestamps)}. Delaying task for {time_to_wait:.2f} seconds.")
+                        time.sleep(time_to_wait)
+                        current_time = time.time() # Update current time after sleeping
+                    # After waiting, clean up again
+                    while _request_timestamps and _request_timestamps[0] <= current_time - _rate_limit_window:
+                        _request_timestamps.popleft()
+
+                # Record the request timestamp
+                _request_timestamps.append(current_time)
+
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 if "429" in str(e) or "rate limit" in str(e).lower():
+                    with _rate_limit_lock:
+                        # Attempt to extract Retry-After header value from exception message
+                        retry_after_match = re.search(r"Retry-After: (\d+)", str(e))
+                        if retry_after_match:
+                            retry_after_seconds = int(retry_after_match.group(1))
+                            logger.warning(f"Rate limited, respecting Retry-After: {retry_after_seconds} seconds.")
+                            _last_retry_after_sleep_until = max(_last_retry_after_sleep_until, time.time() + retry_after_seconds)
+                            _request_timestamps.clear() # Clear requests to prevent immediate re-triggering
+                        else:
+                            # Fallback to exponential backoff delay if Retry-After not found
+                            jitter = random.uniform(0, 1)
+                            delay = base_delay * (2**attempt) + jitter
+                            logger.warning(f"Rate limited, retrying in {delay:.2f} seconds (including jitter)...")
+                            _last_retry_after_sleep_until = max(_last_retry_after_sleep_until, time.time() + delay)
+                            _request_timestamps.clear() # Clear requests to prevent immediate re-triggering
+
                     if attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
-                        logger.warning(f"Rate limited, retrying in {delay} seconds...")
-                        time.sleep(delay)
+                        # The sleep is now handled by _last_retry_after_sleep_until in the next iteration
+                        # or by the proactive rate limiter. We just need to continue the loop.
                         continue
                 raise e
         return func(*args, **kwargs)
@@ -94,6 +174,9 @@ def get_playlist_metadata(playlist_id: str) -> Dict[str, Any]:
             playlist_id,
             fields="id,name,description,owner,images,snapshot_id,public,followers,tracks.total",
         )
+        if playlist is None:
+            logger.warning(f"No playlist metadata found for {playlist_id}")
+            return {}
 
         # Add a flag to indicate this is metadata only
         playlist["_metadata_only"] = True
@@ -250,10 +333,18 @@ def get_spotify_info(
 
     try:
         if spotify_type == "track":
-            return client.track(spotify_id)
+            result = client.track(spotify_id)
+            if result is None:
+                logger.warning(f"No track info found for {spotify_id}")
+                return {}
+            return result
 
         elif spotify_type == "album":
-            return client.album(spotify_id)
+            result = client.album(spotify_id)
+            if result is None:
+                logger.warning(f"No album info found for {spotify_id}")
+                return {}
+            return result
 
         elif spotify_type == "album_tracks":
             # Fetch album's tracks with pagination support
@@ -270,7 +361,11 @@ def get_spotify_info(
             return get_playlist_metadata(spotify_id)
 
         elif spotify_type == "artist":
-            return client.artist(spotify_id)
+            result = client.artist(spotify_id)
+            if result is None:
+                logger.warning(f"No artist info found for {spotify_id}")
+                return {}
+            return result
 
         elif spotify_type == "artist_discography":
             # Get artist's albums with pagination
@@ -280,10 +375,17 @@ def get_spotify_info(
                 offset=offset or 0,
                 include_groups="single,album,appears_on",
             )
+            if albums is None:
+                logger.warning(f"No artist discography found for {spotify_id}")
+                return {"items": [], "total": 0, "limit": limit or 20, "offset": offset or 0}
             return albums
 
         elif spotify_type == "episode":
-            return client.episode(spotify_id)
+            result = client.episode(spotify_id)
+            if result is None:
+                logger.warning(f"No episode info found for {spotify_id}")
+                return {}
+            return result
 
         else:
             raise ValueError(f"Unsupported Spotify type: {spotify_type}")
