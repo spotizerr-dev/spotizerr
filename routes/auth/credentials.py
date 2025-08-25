@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 import json
 import logging
+from typing import Dict, Union, Any
 from routes.utils.credentials import (
     get_credential,
     list_credentials,
@@ -41,7 +42,7 @@ def _set_active_account_if_empty(service: str, name: str):
 
 @router.get("/spotify_api_config")
 @router.put("/spotify_api_config")
-async def handle_spotify_api_config(request: Request, current_user: User = Depends(require_admin_from_state)):
+async def handle_spotify_api_config(request: Request, current_user: User = Depends(require_admin_from_state)) -> Dict[str, Union[str, None]]:
     """Handles GET and PUT requests for the global Spotify API client_id and client_secret."""
     try:
         if request.method == "GET":
@@ -63,6 +64,8 @@ async def handle_spotify_api_config(request: Request, current_user: User = Depen
                     status_code=400,
                     detail={"error": "Request body must contain 'client_id' and 'client_secret'"}
                 )
+        else:
+            raise HTTPException(status_code=405, detail={"error": "Method Not Allowed"})
 
             client_id = data["client_id"]
             client_secret = data["client_secret"]
@@ -86,6 +89,7 @@ async def handle_spotify_api_config(request: Request, current_user: User = Depen
     except Exception as e:
         logger.error(f"Error in /spotify_api_config: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": f"An unexpected error occurred: {str(e)}"})
+    return {"client_id": None, "client_secret": None} # Should be unreachable, but satisfies type checker
 
 
 @router.get("/{service}")
