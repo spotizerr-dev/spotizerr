@@ -141,15 +141,13 @@ def setup_logging():
         "uvicorn",          # General Uvicorn logger
         "uvicorn.access",   # Uvicorn access logs
         "uvicorn.error",    # Uvicorn error logs
+        "deezspot"          # Deezspot logs
     ]:
         logger = logging.getLogger(logger_name)
         logger.setLevel(log_level)
         # For uvicorn.access, we explicitly set propagate to False to prevent duplicate logging
         # if access_log=False is used in uvicorn.run, and to ensure our middleware handles it.
         logger.propagate = False if logger_name == "uvicorn.access" else True
-
-    # Configure deezspot logger using its provided function
-    deezspot.set_log_level(logging.DEBUG)
 
     logging.info("Logging system initialized")
 
